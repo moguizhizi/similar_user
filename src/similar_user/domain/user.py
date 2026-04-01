@@ -1,0 +1,2 @@
+"""User node structure."""
+
