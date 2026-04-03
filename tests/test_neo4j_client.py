@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from config.settings import load_neo4j_settings
+from scripts.debug_query import main, run_debug_query
 from src.similar_user.data_access.neo4j_client import Neo4jClient
 
 
@@ -78,6 +80,44 @@ class Neo4jClientTest(unittest.TestCase):
         client = Neo4jClient.from_config("config/neo4j.yaml")
 
         self.assertTrue(client.health_check())
+
+
+class DebugQueryScriptTest(unittest.TestCase):
+    @patch("scripts.debug_query.Neo4jClient.from_config")
+    def test_run_debug_query_returns_query_result(
+        self,
+        mock_from_config: Mock,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"ok": 1, "message": "neo4j connected"}]
+        mock_from_config.return_value.__enter__.return_value = mock_client
+
+        result = run_debug_query()
+
+        self.assertEqual(result, [{"ok": 1, "message": "neo4j connected"}])
+        mock_client.run_query.assert_called_once_with(
+            "RETURN 1 AS ok, 'neo4j connected' AS message"
+        )
+
+    @patch("scripts.debug_query.run_debug_query")
+    @patch("builtins.print")
+    def test_main_prints_json_on_success(
+        self,
+        mock_print: Mock,
+        mock_run_debug_query: Mock,
+    ) -> None:
+        mock_run_debug_query.return_value = [{"ok": 1, "message": "neo4j connected"}]
+
+        exit_code = main()
+
+        self.assertEqual(exit_code, 0)
+        mock_print.assert_called_once_with(
+            json.dumps(
+                [{"ok": 1, "message": "neo4j connected"}],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
 
 
 if __name__ == "__main__":
