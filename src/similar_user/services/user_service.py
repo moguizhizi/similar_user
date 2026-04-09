@@ -35,7 +35,7 @@ class UserService:
 
         ordered_dates = self.get_patient_ordered_training_dates(patient_id)
         if not ordered_dates:
-            LOGGER.info(
+            LOGGER.warning(
                 "No training dates found for patient pattern path flow: patient_id=%s",
                 patient_id,
             )
@@ -49,7 +49,7 @@ class UserService:
                 self.kg_repository.query_config_path
             ).training_date_split
             if len(ordered_dates) < split_settings.min_training_dates:
-                LOGGER.info(
+                LOGGER.warning(
                     "Training dates do not meet minimum split requirement: patient_id=%s, training_date_count=%s, min_training_dates=%s",
                     patient_id,
                     len(ordered_dates),
@@ -75,7 +75,7 @@ class UserService:
         g_count = int(active_statistics.get("gCount", 0))
 
         if total_paths <= 0:
-            LOGGER.info(
+            LOGGER.warning(
                 "No available paths after statistics evaluation: patient_id=%s, active_statistics=%s",
                 patient_id,
                 active_statistics,
@@ -105,7 +105,7 @@ class UserService:
         )
 
         if recommendation.limit <= 0:
-            LOGGER.info(
+            LOGGER.warning(
                 "Recommendation limit is non-positive: patient_id=%s, limit_recommendation=%s",
                 patient_id,
                 limit_recommendation,
