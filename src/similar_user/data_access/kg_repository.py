@@ -8,6 +8,7 @@ from pathlib import Path
 from config.settings import GraphPathLimitSettings, load_query_settings
 
 from .cypher_queries import (
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
     P_E_I_G_I_E_P_PATH_STATISTICS_QUERY,
@@ -46,6 +47,20 @@ class KgRepository:
 
         return self.client.run_query(
             query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
+            parameters={"patient_id": normalized_patient_id},
+        )
+
+    def get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics(
+        self,
+        patient_id: str,
+    ) -> list[dict[str, int]]:
+        """Return fixed-pattern statistics constrained by TaskInstanceSet training dates."""
+        normalized_patient_id = patient_id.strip()
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
             parameters={"patient_id": normalized_patient_id},
         )
 

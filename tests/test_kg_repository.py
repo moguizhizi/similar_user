@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
     P_E_I_G_I_E_P_PATH_STATISTICS_QUERY,
@@ -55,6 +56,28 @@ class KgRepositoryTest(unittest.TestCase):
             parameters={"patient_id": "30010096"},
         )
 
+    def test_get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"totalPaths": 8, "gCount": 2, "p2Count": 3}
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics(
+            " 30010096 "
+        )
+
+        self.assertEqual(
+            result,
+            [{"totalPaths": 8, "gCount": 2, "p2Count": 3}],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
+            parameters={"patient_id": "30010096"},
+        )
+
     def test_get_patient_task_set_task_game_task_set_patient_pattern_statistics_rejects_blank_patient_id(
         self,
     ) -> None:
@@ -62,6 +85,16 @@ class KgRepositoryTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
             repository.get_patient_task_set_task_game_task_set_patient_pattern_statistics(
+                "   "
+            )
+
+    def test_get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_rejects_blank_patient_id(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics(
                 "   "
             )
 
