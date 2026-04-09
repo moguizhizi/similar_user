@@ -39,6 +39,7 @@ class UserServiceTest(unittest.TestCase):
         self,
     ) -> None:
         mock_repository = Mock()
+        mock_repository.query_config_path = "config/query.yaml"
         mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
             {"orderedDatesa": ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]}
         ]
@@ -77,6 +78,7 @@ class UserServiceTest(unittest.TestCase):
 
     def test_get_patient_pattern_paths_returns_paths_with_recommendation(self) -> None:
         mock_repository = Mock()
+        mock_repository.query_config_path = "config/query.yaml"
         mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
             {"orderedDatesa": ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]}
         ]
@@ -137,13 +139,34 @@ class UserServiceTest(unittest.TestCase):
             "30010096"
         )
 
+    def test_get_patient_pattern_paths_returns_early_when_training_dates_are_below_configured_minimum(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.query_config_path = "config/query.yaml"
+        mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
+            {"orderedDatesa": ["2022-01-01", "2022-01-13", "2022-01-21", "2022-01-30"]}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_pattern_paths("30010096")
+
+        self.assertEqual(result["ordered_training_dates"], ["2022-01-01", "2022-01-13", "2022-01-21", "2022-01-30"])
+        self.assertEqual(result["statistics"], None)
+        self.assertEqual(result["limit_recommendation"], None)
+        self.assertEqual(result["paths"], [])
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.assert_not_called()
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.assert_not_called()
+
     def test_select_training_date_split_point_uses_approximately_four_to_one_ratio(
         self,
     ) -> None:
         service = UserService(kg_repository=Mock())
 
         result = service._select_training_date_split_point(
-            ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]
+            ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"],
+            4,
+            1,
         )
 
         self.assertEqual(result, "2022-01-13")

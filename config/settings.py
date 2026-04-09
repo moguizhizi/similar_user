@@ -36,10 +36,20 @@ class GraphPathLimitSettings:
 
 
 @dataclass(frozen=True)
+class TrainingDateSplitSettings:
+    """Configuration for splitting ordered training dates into two segments."""
+
+    min_training_dates: int = 5
+    before_ratio: int = 4
+    after_ratio: int = 1
+
+
+@dataclass(frozen=True)
 class QuerySettings:
     """Query-related tuning settings."""
 
     graph_path_limit: GraphPathLimitSettings
+    training_date_split: TrainingDateSplitSettings
 
 
 def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
@@ -77,6 +87,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     data = load_yaml_config(config_path)
 
     graph_path_limit_data = data.get("graph_path_limit") or {}
+    training_date_split_data = data.get("training_date_split") or {}
     bands_data = graph_path_limit_data.get("bands") or []
 
     bands: list[QueryLimitBandSettings] = []
@@ -101,11 +112,30 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     if not bands:
         raise ValueError("graph_path_limit must define at least one band.")
 
+    min_training_dates = training_date_split_data.get("min_training_dates", 5)
+    before_ratio = training_date_split_data.get("before_ratio", 4)
+    after_ratio = training_date_split_data.get("after_ratio", 1)
+
+    for field_name, value in (
+        ("min_training_dates", min_training_dates),
+        ("before_ratio", before_ratio),
+        ("after_ratio", after_ratio),
+    ):
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError(
+                f"training_date_split {field_name} must be a positive integer."
+            )
+
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
             bands=tuple(bands),
             max_limit_source=str(
                 graph_path_limit_data.get("max_limit_source", "total_paths")
             ),
+        ),
+        training_date_split=TrainingDateSplitSettings(
+            min_training_dates=min_training_dates,
+            before_ratio=before_ratio,
+            after_ratio=after_ratio,
         ),
     )
