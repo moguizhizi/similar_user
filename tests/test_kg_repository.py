@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
     P_E_I_G_I_E_P_PATH_STATISTICS_QUERY,
 )
@@ -26,9 +27,9 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertEqual(
             settings.graph_path_limit.bands,
             (
-                QueryLimitBandSettings(max_g_count=49, per_g=5),
-                QueryLimitBandSettings(max_g_count=199, per_g=3),
-                QueryLimitBandSettings(max_g_count=None, per_g=2),
+                QueryLimitBandSettings(max_g_count=49, per_g=10),
+                QueryLimitBandSettings(max_g_count=199, per_g=6),
+                QueryLimitBandSettings(max_g_count=None, per_g=4),
             ),
         )
 
@@ -64,19 +65,68 @@ class KgRepositoryTest(unittest.TestCase):
                 "   "
             )
 
+    def test_get_patient_task_set_task_game_task_set_patient_randomized_paths(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"path": ["mocked-path"]}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_task_set_task_game_task_set_patient_randomized_paths(
+            " 30010096 ",
+            per_g=3,
+            limit=100,
+        )
+
+        self.assertEqual(result, [{"path": ["mocked-path"]}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "per_g": 3,
+                "limit": 100,
+            },
+        )
+
+    def test_get_patient_task_set_task_game_task_set_patient_randomized_paths_rejects_invalid_parameters(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_task_set_task_game_task_set_patient_randomized_paths(
+                "   ",
+                per_g=3,
+                limit=100,
+            )
+
+        with self.assertRaisesRegex(ValueError, "per_g must be a positive integer."):
+            repository.get_patient_task_set_task_game_task_set_patient_randomized_paths(
+                "30010096",
+                per_g=0,
+                limit=100,
+            )
+
+        with self.assertRaisesRegex(ValueError, "limit must be a positive integer."):
+            repository.get_patient_task_set_task_game_task_set_patient_randomized_paths(
+                "30010096",
+                per_g=3,
+                limit=0,
+            )
+
     def test_recommend_graph_path_limit_uses_query_yaml(self) -> None:
         repository = KgRepository(client=Mock())
 
         result = repository.recommend_graph_path_limit(total_paths=500, g_count=20)
 
-        self.assertEqual(result, GraphPathLimitRecommendation(per_g=5, limit=100))
+        self.assertEqual(result, GraphPathLimitRecommendation(per_g=10, limit=200))
 
     def test_recommend_graph_path_limit_caps_by_total_paths(self) -> None:
         repository = KgRepository(client=Mock())
 
         result = repository.recommend_graph_path_limit(total_paths=120, g_count=300)
 
-        self.assertEqual(result, GraphPathLimitRecommendation(per_g=2, limit=120))
+        self.assertEqual(result, GraphPathLimitRecommendation(per_g=4, limit=120))
 
     def test_recommend_graph_path_limit_rejects_negative_inputs(self) -> None:
         repository = KgRepository(client=Mock())

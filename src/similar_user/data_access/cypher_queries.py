@@ -18,6 +18,31 @@ RETURN
     count(DISTINCT p2) AS p2Count
 """.strip()
 
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+--(i2:TaskInstance)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE p2 <> p
+
+WITH g, p2, path, rand() AS r
+ORDER BY r
+
+WITH g, p2, collect(path)[0] AS path
+
+WITH g, collect(path)[0..$per_g] AS paths
+
+UNWIND paths AS path
+
+RETURN path
+LIMIT $limit
+""".strip()
+
 P_E_I_G_I_E_P_PATH_STATISTICS_QUERY = """
 UNWIND $limits AS lim
 
