@@ -1,0 +1,8 @@
+graph_path_limit:
+  bands:
+    - max_g_count: 49
+      per_g: 10
+    - max_g_count: 199
+      per_g: 6
+    - per_g: 4
+  max_limit_source: "total_paths"
