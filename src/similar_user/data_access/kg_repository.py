@@ -8,6 +8,9 @@ from pathlib import Path
 from config.settings import GraphPathLimitSettings, load_query_settings
 
 from .cypher_queries import (
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
     PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
@@ -77,6 +80,66 @@ class KgRepository:
         return self.client.run_query(
             query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
             parameters={"patient_id": normalized_patient_id},
+        )
+
+    def get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date(
+        self,
+        patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, int]]:
+        """Return dated fixed-pattern statistics constrained up to an end date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, int]]:
+        """Return dated fixed-pattern statistics constrained from a start date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+            },
+        )
+
+    def get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, int]]:
+        """Return dated fixed-pattern statistics constrained to a date range."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+                "end_date": normalized_end_date,
+            },
         )
 
     def get_patient_task_set_task_game_task_set_patient_randomized_paths(
@@ -152,6 +215,18 @@ class KgRepository:
             normalized_limits.append(limit)
 
         return normalized_limits
+
+    @staticmethod
+    def _normalize_required_string(value: str, field_name: str) -> str:
+        """Validate and normalize a required string parameter."""
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be a non-empty string.")
+
+        normalized_value = value.strip()
+        if not normalized_value:
+            raise ValueError(f"{field_name} must be a non-empty string.")
+
+        return normalized_value
 
     @staticmethod
     def _recommend_graph_path_limit(
