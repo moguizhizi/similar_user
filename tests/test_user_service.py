@@ -91,7 +91,17 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.recommend_graph_path_limit.return_value.per_g = 5
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
         mock_repository.get_patient_task_set_task_game_task_set_patient_randomized_paths.return_value = [
-            {"path": ["mocked-path"]}
+            {
+                "row": {
+                    "p": {"id": "30010096"},
+                    "s1": {"id": "40_20220516"},
+                    "i1": {"id": "40_20220516_42_464CAOTKJK2BX3"},
+                    "g": {"id": "42"},
+                    "i2": {"id": "20113562_20211214_42_KUVB2LIK9KX60Y"},
+                    "s2": {"id": "20113562_20211214"},
+                    "p2": {"id": "20113562"},
+                }
+            }
         ]
         service = UserService(kg_repository=mock_repository)
 
@@ -109,7 +119,22 @@ class UserServiceTest(unittest.TestCase):
             },
         )
         self.assertEqual(result["limit_recommendation"], {"per_g": 5, "limit": 10})
-        self.assertEqual(result["paths"], [{"path": ["mocked-path"]}])
+        self.assertEqual(
+            result["paths"],
+            [
+                {
+                    "row": {
+                        "p": {"id": "30010096"},
+                        "s1": {"id": "40_20220516"},
+                        "i1": {"id": "40_20220516_42_464CAOTKJK2BX3"},
+                        "g": {"id": "42"},
+                        "i2": {"id": "20113562_20211214_42_KUVB2LIK9KX60Y"},
+                        "s2": {"id": "20113562_20211214"},
+                        "p2": {"id": "20113562"},
+                    }
+                }
+            ],
+        )
         mock_repository.recommend_graph_path_limit.assert_called_once_with(
             total_paths=20,
             g_count=5,

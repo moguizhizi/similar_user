@@ -147,7 +147,7 @@ class KgRepository:
         per_g: int,
         limit: int,
     ) -> list[dict[str, object]]:
-        """Return randomized fixed-pattern paths with per-game and global limits."""
+        """Return randomized fixed-pattern rows with named nodes and limits applied."""
         normalized_patient_id = patient_id.strip()
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")

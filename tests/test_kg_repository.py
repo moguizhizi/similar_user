@@ -238,7 +238,19 @@ class KgRepositoryTest(unittest.TestCase):
         self,
     ) -> None:
         mock_client = Mock()
-        mock_client.run_query.return_value = [{"path": ["mocked-path"]}]
+        mock_client.run_query.return_value = [
+            {
+                "row": {
+                    "p": {"id": "30010096"},
+                    "s1": {"id": "40_20220516"},
+                    "i1": {"id": "40_20220516_42_464CAOTKJK2BX3"},
+                    "g": {"id": "42"},
+                    "i2": {"id": "20113562_20211214_42_KUVB2LIK9KX60Y"},
+                    "s2": {"id": "20113562_20211214"},
+                    "p2": {"id": "20113562"},
+                }
+            }
+        ]
         repository = KgRepository(client=mock_client)
 
         result = repository.get_patient_task_set_task_game_task_set_patient_randomized_paths(
@@ -247,7 +259,22 @@ class KgRepositoryTest(unittest.TestCase):
             limit=100,
         )
 
-        self.assertEqual(result, [{"path": ["mocked-path"]}])
+        self.assertEqual(
+            result,
+            [
+                {
+                    "row": {
+                        "p": {"id": "30010096"},
+                        "s1": {"id": "40_20220516"},
+                        "i1": {"id": "40_20220516_42_464CAOTKJK2BX3"},
+                        "g": {"id": "42"},
+                        "i2": {"id": "20113562_20211214_42_KUVB2LIK9KX60Y"},
+                        "s2": {"id": "20113562_20211214"},
+                        "p2": {"id": "20113562"},
+                    }
+                }
+            ],
+        )
         mock_client.run_query.assert_called_once_with(
             query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
             parameters={
