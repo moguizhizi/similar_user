@@ -43,25 +43,42 @@ class UserService:
         }
 
         if use_dated_statistics:
-            statistics_records = (
-                self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics(
-                    patient_id
+            split_date = self._select_training_date_split_point(ordered_dates)
+            statistics_by_end_date_records = (
+                self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date(
+                    patient_id,
+                    split_date,
                 )
             )
+            statistics_by_start_date_records = (
+                self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date(
+                    patient_id,
+                    split_date,
+                )
+            )
+            statistics_by_end_date = self._extract_statistics(
+                statistics_by_end_date_records
+            )
+            statistics_by_start_date = self._extract_statistics(
+                statistics_by_start_date_records
+            )
+            statistics = {
+                "split_training_date": split_date,
+                "before_split": statistics_by_end_date,
+                "after_split": statistics_by_start_date,
+            }
+            active_statistics = statistics_by_end_date
         else:
             statistics_records = (
                 self.kg_repository.get_patient_task_set_task_game_task_set_patient_pattern_statistics(
                     patient_id
                 )
             )
+            statistics = self._extract_statistics(statistics_records)
+            active_statistics = statistics
 
-        statistics = statistics_records[0] if statistics_records else {
-            "totalPaths": 0,
-            "gCount": 0,
-            "p2Count": 0,
-        }
-        total_paths = int(statistics.get("totalPaths", 0))
-        g_count = int(statistics.get("gCount", 0))
+        total_paths = int(active_statistics.get("totalPaths", 0))
+        g_count = int(active_statistics.get("gCount", 0))
 
         if total_paths <= 0:
             return {
@@ -114,3 +131,25 @@ class UserService:
             return []
 
         return [str(value) for value in ordered_dates]
+
+    @staticmethod
+    def _extract_statistics(records: list[dict[str, Any]]) -> dict[str, int]:
+        """Return a normalized statistics mapping from repository results."""
+        if not records:
+            return {
+                "totalPaths": 0,
+                "gCount": 0,
+                "p2Count": 0,
+            }
+
+        return records[0]
+
+    @staticmethod
+    def _select_training_date_split_point(ordered_dates: list[str]) -> str:
+        """Select a split point so earlier vs later dates are approximately 4:1."""
+        if not ordered_dates:
+            raise ValueError("ordered_dates must contain at least one date.")
+
+        split_index = ((len(ordered_dates) * 4) + 4) // 5 - 1
+        split_index = max(0, min(split_index, len(ordered_dates) - 1))
+        return ordered_dates[split_index]

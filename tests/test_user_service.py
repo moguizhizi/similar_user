@@ -37,29 +37,50 @@ class UserServiceTest(unittest.TestCase):
     ) -> None:
         mock_repository = Mock()
         mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
-            {"orderedDatesa": ["2022-01-01", "2022-01-13"]}
+            {"orderedDatesa": ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]}
         ]
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics.return_value = [
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.return_value = [
+            {"totalPaths": 10, "gCount": 3, "p2Count": 4}
+        ]
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.return_value = [
             {"totalPaths": 0, "gCount": 0, "p2Count": 0}
         ]
         service = UserService(kg_repository=mock_repository)
 
         result = service.get_patient_pattern_paths("30010096")
 
-        self.assertEqual(result["ordered_training_dates"], ["2022-01-01", "2022-01-13"])
-        self.assertEqual(result["statistics"], {"totalPaths": 0, "gCount": 0, "p2Count": 0})
+        self.assertEqual(
+            result["ordered_training_dates"],
+            ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"],
+        )
+        self.assertEqual(
+            result["statistics"],
+            {
+                "split_training_date": "2022-01-13",
+                "before_split": {"totalPaths": 10, "gCount": 3, "p2Count": 4},
+                "after_split": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
+            },
+        )
         self.assertIsNone(result["limit_recommendation"])
         self.assertEqual(result["paths"], [])
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics.assert_called_once_with(
-            "30010096"
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.assert_called_once_with(
+            "30010096",
+            "2022-01-13",
+        )
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.assert_called_once_with(
+            "30010096",
+            "2022-01-13",
         )
 
     def test_get_patient_pattern_paths_returns_paths_with_recommendation(self) -> None:
         mock_repository = Mock()
         mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
-            {"orderedDatesa": ["2022-01-01", "2022-01-13"]}
+            {"orderedDatesa": ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]}
         ]
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics.return_value = [
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.return_value = [
+            {"totalPaths": 20, "gCount": 5, "p2Count": 6}
+        ]
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.return_value = [
             {"totalPaths": 12, "gCount": 3, "p2Count": 4}
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 5
@@ -72,9 +93,16 @@ class UserServiceTest(unittest.TestCase):
         result = service.get_patient_pattern_paths("30010096")
 
         self.assertEqual(result["first_training_date"], "2022-01-01")
-        self.assertEqual(result["last_training_date"], "2022-01-13")
-        self.assertEqual(result["training_date_count"], 2)
-        self.assertEqual(result["statistics"], {"totalPaths": 12, "gCount": 3, "p2Count": 4})
+        self.assertEqual(result["last_training_date"], "2022-01-17")
+        self.assertEqual(result["training_date_count"], 5)
+        self.assertEqual(
+            result["statistics"],
+            {
+                "split_training_date": "2022-01-13",
+                "before_split": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
+                "after_split": {"totalPaths": 12, "gCount": 3, "p2Count": 4},
+            },
+        )
         self.assertEqual(result["limit_recommendation"], {"per_g": 5, "limit": 10})
         self.assertEqual(result["paths"], [{"path": ["mocked-path"]}])
         mock_repository.recommend_graph_path_limit.assert_called_once_with(
@@ -105,6 +133,17 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.get_patient_task_set_task_game_task_set_patient_pattern_statistics.assert_called_once_with(
             "30010096"
         )
+
+    def test_select_training_date_split_point_uses_approximately_four_to_one_ratio(
+        self,
+    ) -> None:
+        service = UserService(kg_repository=Mock())
+
+        result = service._select_training_date_split_point(
+            ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]
+        )
+
+        self.assertEqual(result, "2022-01-13")
 
     def test_get_patient_ordered_training_dates_returns_dates_only(self) -> None:
         mock_repository = Mock()
