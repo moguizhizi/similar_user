@@ -1,0 +1,78 @@
+"""Run the patient pattern path flow against a configured Neo4j instance."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+for candidate in (PROJECT_ROOT, SRC_ROOT):
+    candidate_str = str(candidate)
+    if candidate_str not in sys.path:
+        sys.path.insert(0, candidate_str)
+
+from similar_user.data_access.kg_repository import KgRepository
+from similar_user.data_access.neo4j_client import Neo4jClient
+from similar_user.services.user_service import UserService
+
+
+DEFAULT_CONFIG_PATH = Path("config/neo4j.yaml")
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the patient path flow."""
+    parser = argparse.ArgumentParser(
+        description="Run the patient fixed-pattern path flow."
+    )
+    parser.add_argument("patient_id", help="Patient identifier used in Neo4j queries.")
+    parser.add_argument(
+        "--config",
+        default=str(DEFAULT_CONFIG_PATH),
+        help="Path to the Neo4j YAML config file.",
+    )
+    parser.add_argument(
+        "--undated",
+        action="store_true",
+        help="Use undated statistics instead of the dated split flow.",
+    )
+    return parser.parse_args()
+
+
+def run_patient_pattern_path_flow(
+    patient_id: str,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
+    *,
+    use_dated_statistics: bool = True,
+) -> dict[str, object]:
+    """Connect to Neo4j and run the patient pattern path orchestration."""
+    with Neo4jClient.from_config(config_path) as client:
+        repository = KgRepository(client=client)
+        service = UserService(kg_repository=repository)
+        return service.get_patient_pattern_paths(
+            patient_id,
+            use_dated_statistics=use_dated_statistics,
+        )
+
+
+def main() -> int:
+    """Run the patient pattern path flow and print the JSON result."""
+    args = parse_args()
+    try:
+        result = run_patient_pattern_path_flow(
+            args.patient_id,
+            config_path=args.config,
+            use_dated_statistics=not args.undated,
+        )
+    except Exception as exc:
+        print(f"Patient pattern path flow failed: {exc}", file=sys.stderr)
+        return 1
+
+    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
