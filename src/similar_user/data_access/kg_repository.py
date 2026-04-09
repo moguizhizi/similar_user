@@ -8,6 +8,7 @@ from pathlib import Path
 from config.settings import GraphPathLimitSettings, load_query_settings
 
 from .cypher_queries import (
+    PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
@@ -35,6 +36,20 @@ class KgRepository:
     client: Neo4jClient
     default_limits: list[int] = field(default_factory=lambda: DEFAULT_PATH_LIMITS.copy())
     query_config_path: Path = DEFAULT_QUERY_CONFIG_PATH
+
+    def get_patient_task_instance_set_ordered_training_dates(
+        self,
+        patient_id: str,
+    ) -> list[dict[str, object]]:
+        """Return a patient and its TaskInstanceSet training dates in ascending order."""
+        normalized_patient_id = patient_id.strip()
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
+            parameters={"patient_id": normalized_patient_id},
+        )
 
     def get_patient_task_set_task_game_task_set_patient_pattern_statistics(
         self,
