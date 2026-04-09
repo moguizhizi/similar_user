@@ -9,6 +9,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from config.settings import load_neo4j_settings
+from scripts.debug_patient_pattern_paths import main as patient_path_main
+from scripts.debug_patient_pattern_paths import run_patient_pattern_path_flow
 from scripts.debug_query import main, run_debug_query
 from src.similar_user.data_access.neo4j_client import Neo4jClient
 
@@ -116,6 +118,67 @@ class DebugQueryScriptTest(unittest.TestCase):
                 [{"ok": 1, "message": "neo4j connected"}],
                 ensure_ascii=False,
                 indent=2,
+            )
+        )
+
+
+class DebugPatientPatternPathsScriptTest(unittest.TestCase):
+    @patch("scripts.debug_patient_pattern_paths.Neo4jClient.from_config")
+    def test_run_patient_pattern_path_flow_returns_service_result(
+        self,
+        mock_from_config: Mock,
+    ) -> None:
+        mock_client = Mock()
+        mock_from_config.return_value.__enter__.return_value = mock_client
+        mock_repository = Mock()
+        mock_service = Mock()
+        mock_service.get_patient_pattern_paths.return_value = {
+            "patient_id": "30010096",
+            "paths": [],
+        }
+
+        with patch(
+            "scripts.debug_patient_pattern_paths.KgRepository",
+            return_value=mock_repository,
+        ) as mock_repository_cls, patch(
+            "scripts.debug_patient_pattern_paths.UserService",
+            return_value=mock_service,
+        ) as mock_service_cls:
+            result = run_patient_pattern_path_flow("30010096")
+
+        self.assertEqual(result, {"patient_id": "30010096", "paths": []})
+        mock_repository_cls.assert_called_once_with(client=mock_client)
+        mock_service_cls.assert_called_once_with(kg_repository=mock_repository)
+        mock_service.get_patient_pattern_paths.assert_called_once_with(
+            "30010096",
+            use_dated_statistics=True,
+        )
+
+    @patch("scripts.debug_patient_pattern_paths.run_patient_pattern_path_flow")
+    @patch("scripts.debug_patient_pattern_paths.parse_args")
+    @patch("builtins.print")
+    def test_main_prints_json_on_success(
+        self,
+        mock_print: Mock,
+        mock_parse_args: Mock,
+        mock_run_flow: Mock,
+    ) -> None:
+        mock_parse_args.return_value = Mock(
+            patient_id="30010096",
+            config="config/neo4j.yaml",
+            undated=False,
+        )
+        mock_run_flow.return_value = {"patient_id": "30010096", "paths": []}
+
+        exit_code = patient_path_main()
+
+        self.assertEqual(exit_code, 0)
+        mock_print.assert_called_once_with(
+            json.dumps(
+                {"patient_id": "30010096", "paths": []},
+                ensure_ascii=False,
+                indent=2,
+                default=str,
             )
         )
 

@@ -40,10 +40,10 @@ class UserServiceTest(unittest.TestCase):
             {"orderedDatesa": ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]}
         ]
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.return_value = [
-            {"totalPaths": 10, "gCount": 3, "p2Count": 4}
+            {"totalPaths": 0, "gCount": 0, "p2Count": 0}
         ]
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.return_value = [
-            {"totalPaths": 0, "gCount": 0, "p2Count": 0}
+            {"totalPaths": 10, "gCount": 3, "p2Count": 4}
         ]
         service = UserService(kg_repository=mock_repository)
 
@@ -57,8 +57,8 @@ class UserServiceTest(unittest.TestCase):
             result["statistics"],
             {
                 "split_training_date": "2022-01-13",
-                "before_split": {"totalPaths": 10, "gCount": 3, "p2Count": 4},
-                "after_split": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
+                "before_split": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
+                "after_split": {"totalPaths": 10, "gCount": 3, "p2Count": 4},
             },
         )
         self.assertIsNone(result["limit_recommendation"])
@@ -106,8 +106,8 @@ class UserServiceTest(unittest.TestCase):
         self.assertEqual(result["limit_recommendation"], {"per_g": 5, "limit": 10})
         self.assertEqual(result["paths"], [{"path": ["mocked-path"]}])
         mock_repository.recommend_graph_path_limit.assert_called_once_with(
-            total_paths=12,
-            g_count=3,
+            total_paths=20,
+            g_count=5,
         )
         mock_repository.get_patient_task_set_task_game_task_set_patient_randomized_paths.assert_called_once_with(
             patient_id="30010096",
