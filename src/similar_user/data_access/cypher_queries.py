@@ -134,15 +134,23 @@ MATCH path =
 
 WHERE p2 <> p
 
-WITH g, p2, path, rand() AS r
+WITH p, s1, i1, g, i2, s2, p2, path, rand() AS r
 ORDER BY r
 
-WITH g, p2, collect(path)[0] AS path
+WITH g, p2, collect({
+    p: p,
+    s1: s1,
+    i1: i1,
+    g: g,
+    i2: i2,
+    s2: s2,
+    p2: p2
+})[0] AS row
 
-WITH g, collect(path)[0..$per_g] AS paths
+WITH g, collect(row)[0..$per_g] AS rows
 
-UNWIND paths AS path
+UNWIND rows AS row
 
-RETURN path
+RETURN row
 LIMIT $limit
 """.strip()

@@ -1,2 +1,18 @@
 """Knowledge graph schema declarations."""
 
+from __future__ import annotations
+
+from enum import Enum
+
+
+class PathPattern(str, Enum):
+    """Supported fixed path pattern identifiers."""
+
+    PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT = (
+        "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"
+    )
+
+
+PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT = (
+    PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT.value
+)

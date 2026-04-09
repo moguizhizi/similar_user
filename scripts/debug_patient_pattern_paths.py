@@ -69,7 +69,6 @@ def run_patient_pattern_path_flow(
             result.get("training_date_count"),
             len(result.get("paths", [])),
         )
-        LOGGER.debug("Patient pattern path flow result: %s", result)
         return result
 
 
