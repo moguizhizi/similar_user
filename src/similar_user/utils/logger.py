@@ -42,6 +42,11 @@ def setup_logging() -> None:
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
+    # Keep third-party Neo4j driver logs quiet even when project DEBUG logging is enabled.
+    logging.getLogger("neo4j").setLevel(logging.WARNING)
+    logging.getLogger("neo4j.pool").setLevel(logging.WARNING)
+    logging.getLogger("neo4j.io").setLevel(logging.WARNING)
+
 
 def get_logger(name: str) -> logging.Logger:
     """Return a module-level logger and ensure default logging is configured."""
