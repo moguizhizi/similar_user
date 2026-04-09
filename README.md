@@ -56,3 +56,81 @@ similar_user/
 - `src/similar_user/utils/`：通用工具
 - `tests/`：针对性测试
 - `scripts/`：临时调试脚本
+
+## 特定模式路径主流程
+
+下面这段流程用于说明：当程序需要获取某个患者在固定模式下的路径时，可以如何利用患者训练日期、统计查询和路径查询进行编排。
+
+```text
+开始
+  |
+  v
+输入 patient_id
+  |
+  v
+调用 get_patient_ordered_training_dates(patient_id)
+  |
+  v
+是否拿到训练日期?
+  | \
+  |  \ 否
+  |   v
+  |  返回空结果
+  |
+  v 是
+构建训练日期上下文
+  - ordered_training_dates
+  - first_training_date
+  - last_training_date
+  - training_date_count
+  |
+  v
+选择统计口径
+  - 无条件统计
+  - 或带训练日期约束统计
+  |
+  v
+调用统计查询
+  |
+  v
+拿到 total_paths / g_count / p2_count
+  |
+  v
+total_paths == 0 ?
+  | \
+  |  \ 是
+  |   v
+  |  返回仅含上下文的空结果
+  |
+  v 否
+调用 recommend_graph_path_limit(total_paths, g_count)
+  |
+  v
+拿到 per_g / limit
+  |
+  v
+limit <= 0 ?
+  | \
+  |  \ 是
+  |   v
+  |  返回仅含统计和上下文的空结果
+  |
+  v 否
+调用路径查询
+  - get_patient_task_set_task_game_task_set_patient_randomized_paths(...)
+  - 如果后续有 dated 版路径查询，这里切换到 dated 版
+  |
+  v
+拿到 paths
+  |
+  v
+组装结果
+  - patient_id
+  - ordered_training_dates
+  - statistics
+  - limit_recommendation
+  - paths
+  |
+  v
+返回结果
+```
