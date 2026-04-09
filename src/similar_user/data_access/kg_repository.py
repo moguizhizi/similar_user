@@ -8,6 +8,7 @@ from pathlib import Path
 from config.settings import GraphPathLimitSettings, load_query_settings
 
 from .cypher_queries import (
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
     P_E_I_G_I_E_P_PATH_STATISTICS_QUERY,
 )
@@ -46,6 +47,30 @@ class KgRepository:
         return self.client.run_query(
             query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
             parameters={"patient_id": normalized_patient_id},
+        )
+
+    def get_patient_task_set_task_game_task_set_patient_randomized_paths(
+        self,
+        patient_id: str,
+        per_g: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return randomized fixed-pattern paths with per-game and global limits."""
+        normalized_patient_id = patient_id.strip()
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+        if not isinstance(per_g, int) or isinstance(per_g, bool) or per_g <= 0:
+            raise ValueError("per_g must be a positive integer.")
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+            raise ValueError("limit must be a positive integer.")
+
+        return self.client.run_query(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "per_g": per_g,
+                "limit": limit,
+            },
         )
 
     def recommend_graph_path_limit(
