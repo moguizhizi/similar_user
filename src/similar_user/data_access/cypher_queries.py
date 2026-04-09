@@ -1,5 +1,17 @@
 """Central place for Cypher query definitions."""
 
+PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY = """
+MATCH (p:Patient {id: $patient_id})--(s:TaskInstanceSet)
+WHERE s.`训练日期` IS NOT NULL
+
+WITH p, s
+ORDER BY date(s.`训练日期`)
+
+RETURN
+    p,
+    collect(s.`训练日期`) AS orderedDatesa
+""".strip()
+
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY = """
 MATCH path =
 (p:Patient {id: $patient_id})

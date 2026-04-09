@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
+    PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
@@ -33,6 +34,37 @@ class KgRepositoryTest(unittest.TestCase):
                 QueryLimitBandSettings(max_g_count=None, per_g=4),
             ),
         )
+
+    def test_get_patient_task_instance_set_ordered_training_dates(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "p": {"id": "30010096"},
+                "orderedDatesa": ["2022-01-01", "2022-01-13"],
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_task_instance_set_ordered_training_dates(
+            " 30010096 "
+        )
+
+        self.assertEqual(
+            result,
+            [{"p": {"id": "30010096"}, "orderedDatesa": ["2022-01-01", "2022-01-13"]}],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
+            parameters={"patient_id": "30010096"},
+        )
+
+    def test_get_patient_task_instance_set_ordered_training_dates_rejects_blank_patient_id(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_task_instance_set_ordered_training_dates("   ")
 
     def test_get_patient_task_set_task_game_task_set_patient_pattern_statistics(
         self,
