@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from src.similar_user.services.user_service import UserService
 
 
 class UserServiceTest(unittest.TestCase):
+    @patch("src.similar_user.services.user_service.LOGGER")
     def test_get_patient_pattern_paths_returns_empty_payload_when_no_training_dates(
         self,
+        mock_logger: Mock,
     ) -> None:
         mock_repository = Mock()
         mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = []
@@ -31,6 +33,7 @@ class UserServiceTest(unittest.TestCase):
                 "paths": [],
             },
         )
+        mock_logger.info.assert_called()
 
     def test_get_patient_pattern_paths_returns_statistics_only_when_no_paths(
         self,

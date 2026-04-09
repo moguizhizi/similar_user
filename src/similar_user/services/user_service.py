@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..data_access.kg_repository import KgRepository
+from ..utils.logger import get_logger
+
+
+LOGGER = get_logger(__name__)
 
 
 @dataclass
@@ -21,8 +25,17 @@ class UserService:
         use_dated_statistics: bool = True,
     ) -> dict[str, Any]:
         """Run the end-to-end fixed-pattern path flow for a patient."""
+        LOGGER.info(
+            "Starting patient pattern path flow in service: patient_id=%s, use_dated_statistics=%s",
+            patient_id,
+            use_dated_statistics,
+        )
         ordered_dates = self.get_patient_ordered_training_dates(patient_id)
         if not ordered_dates:
+            LOGGER.info(
+                "No training dates found for patient pattern path flow: patient_id=%s",
+                patient_id,
+            )
             return {
                 "patient_id": patient_id,
                 "ordered_training_dates": [],
@@ -41,9 +54,21 @@ class UserService:
             "last_training_date": ordered_dates[-1],
             "training_date_count": len(ordered_dates),
         }
+        LOGGER.info(
+            "Loaded ordered training dates: patient_id=%s, training_date_count=%s, first_training_date=%s, last_training_date=%s",
+            patient_id,
+            len(ordered_dates),
+            ordered_dates[0],
+            ordered_dates[-1],
+        )
 
         if use_dated_statistics:
             split_date = self._select_training_date_split_point(ordered_dates)
+            LOGGER.info(
+                "Selected training date split point: patient_id=%s, split_training_date=%s",
+                patient_id,
+                split_date,
+            )
             statistics_by_end_date_records = (
                 self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date(
                     patient_id,
@@ -67,6 +92,12 @@ class UserService:
                 "before_split": statistics_by_end_date,
                 "after_split": statistics_by_start_date,
             }
+            LOGGER.info(
+                "Loaded dated statistics: patient_id=%s, before_split=%s, after_split=%s",
+                patient_id,
+                statistics_by_end_date,
+                statistics_by_start_date,
+            )
             active_statistics = statistics_by_end_date
         else:
             statistics_records = (
@@ -75,12 +106,22 @@ class UserService:
                 )
             )
             statistics = self._extract_statistics(statistics_records)
+            LOGGER.info(
+                "Loaded undated statistics: patient_id=%s, statistics=%s",
+                patient_id,
+                statistics,
+            )
             active_statistics = statistics
 
         total_paths = int(active_statistics.get("totalPaths", 0))
         g_count = int(active_statistics.get("gCount", 0))
 
         if total_paths <= 0:
+            LOGGER.info(
+                "No available paths after statistics evaluation: patient_id=%s, active_statistics=%s",
+                patient_id,
+                active_statistics,
+            )
             return {
                 **training_context,
                 "statistics": statistics,
@@ -96,8 +137,19 @@ class UserService:
             "per_g": recommendation.per_g,
             "limit": recommendation.limit,
         }
+        LOGGER.info(
+            "Calculated path limit recommendation: patient_id=%s, per_g=%s, limit=%s",
+            patient_id,
+            recommendation.per_g,
+            recommendation.limit,
+        )
 
         if recommendation.limit <= 0:
+            LOGGER.info(
+                "Recommendation limit is non-positive: patient_id=%s, limit_recommendation=%s",
+                patient_id,
+                limit_recommendation,
+            )
             return {
                 **training_context,
                 "statistics": statistics,
@@ -109,6 +161,17 @@ class UserService:
             patient_id=patient_id,
             per_g=recommendation.per_g,
             limit=recommendation.limit,
+        )
+        LOGGER.info(
+            "Loaded randomized paths: patient_id=%s, path_count=%s",
+            patient_id,
+            len(paths),
+        )
+        LOGGER.debug(
+            "Patient pattern path flow result in service: patient_id=%s, statistics=%s, limit_recommendation=%s",
+            patient_id,
+            statistics,
+            limit_recommendation,
         )
 
         return {

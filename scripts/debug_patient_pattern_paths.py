@@ -17,9 +17,11 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
 from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.services.user_service import UserService
+from similar_user.utils.logger import get_logger
 
 
 DEFAULT_CONFIG_PATH = Path("config/neo4j.yaml")
+LOGGER = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,13 +50,27 @@ def run_patient_pattern_path_flow(
     use_dated_statistics: bool = True,
 ) -> dict[str, object]:
     """Connect to Neo4j and run the patient pattern path orchestration."""
+    LOGGER.info(
+        "Starting patient pattern path flow: patient_id=%s, use_dated_statistics=%s, config_path=%s",
+        patient_id,
+        use_dated_statistics,
+        config_path,
+    )
     with Neo4jClient.from_config(config_path) as client:
         repository = KgRepository(client=client)
         service = UserService(kg_repository=repository)
-        return service.get_patient_pattern_paths(
+        result = service.get_patient_pattern_paths(
             patient_id,
             use_dated_statistics=use_dated_statistics,
         )
+        LOGGER.info(
+            "Completed patient pattern path flow: patient_id=%s, training_date_count=%s, path_count=%s",
+            patient_id,
+            result.get("training_date_count"),
+            len(result.get("paths", [])),
+        )
+        LOGGER.debug("Patient pattern path flow result: %s", result)
+        return result
 
 
 def main() -> int:
@@ -67,6 +83,11 @@ def main() -> int:
             use_dated_statistics=not args.undated,
         )
     except Exception as exc:
+        LOGGER.exception(
+            "Patient pattern path flow failed: patient_id=%s, config_path=%s",
+            args.patient_id,
+            args.config,
+        )
         print(f"Patient pattern path flow failed: {exc}", file=sys.stderr)
         return 1
 

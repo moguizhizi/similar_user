@@ -123,10 +123,12 @@ class DebugQueryScriptTest(unittest.TestCase):
 
 
 class DebugPatientPatternPathsScriptTest(unittest.TestCase):
+    @patch("scripts.debug_patient_pattern_paths.LOGGER")
     @patch("scripts.debug_patient_pattern_paths.Neo4jClient.from_config")
     def test_run_patient_pattern_path_flow_returns_service_result(
         self,
         mock_from_config: Mock,
+        mock_logger: Mock,
     ) -> None:
         mock_client = Mock()
         mock_from_config.return_value.__enter__.return_value = mock_client
@@ -153,6 +155,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
             "30010096",
             use_dated_statistics=True,
         )
+        mock_logger.info.assert_called()
 
     @patch("scripts.debug_patient_pattern_paths.run_patient_pattern_path_flow")
     @patch("scripts.debug_patient_pattern_paths.parse_args")
