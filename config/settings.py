@@ -45,11 +45,19 @@ class TrainingDateSplitSettings:
 
 
 @dataclass(frozen=True)
+class PatternPathStorageSettings:
+    """Configuration for offline pattern path result storage."""
+
+    output_dir: str = "data/pattern_paths"
+
+
+@dataclass(frozen=True)
 class QuerySettings:
     """Query-related tuning settings."""
 
     graph_path_limit: GraphPathLimitSettings
     training_date_split: TrainingDateSplitSettings
+    pattern_path_storage: PatternPathStorageSettings
 
 
 def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
@@ -88,6 +96,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
 
     graph_path_limit_data = data.get("graph_path_limit") or {}
     training_date_split_data = data.get("training_date_split") or {}
+    pattern_path_storage_data = data.get("pattern_path_storage") or {}
     bands_data = graph_path_limit_data.get("bands") or []
 
     bands: list[QueryLimitBandSettings] = []
@@ -126,6 +135,10 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
                 f"training_date_split {field_name} must be a positive integer."
             )
 
+    output_dir = pattern_path_storage_data.get("output_dir", "data/pattern_paths")
+    if not isinstance(output_dir, str) or not output_dir.strip():
+        raise ValueError("pattern_path_storage output_dir must be a non-empty string.")
+
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
             bands=tuple(bands),
@@ -138,4 +151,5 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             before_ratio=before_ratio,
             after_ratio=after_ratio,
         ),
+        pattern_path_storage=PatternPathStorageSettings(output_dir=output_dir.strip()),
     )

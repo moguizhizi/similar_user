@@ -36,6 +36,7 @@ class KgRepositoryTest(unittest.TestCase):
                 QueryLimitBandSettings(max_g_count=None, per_g=4),
             ),
         )
+        self.assertEqual(settings.pattern_path_storage.output_dir, "data/pattern_paths")
 
     def test_get_patient_task_instance_set_ordered_training_dates(self) -> None:
         mock_client = Mock()
