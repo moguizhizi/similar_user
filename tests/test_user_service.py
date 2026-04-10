@@ -73,8 +73,9 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.return_value = [
             {"totalPaths": 0, "gCount": 0, "p2Count": 0}
         ]
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.return_value = [
-            {"totalPaths": 10, "gCount": 3, "p2Count": 4}
+        mock_repository.get_patient_training_date_games_by_start_date.return_value = [
+            {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
+            {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 4
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
@@ -92,7 +93,10 @@ class UserServiceTest(unittest.TestCase):
             {
                 "split_training_date": "2022-01-13",
                 "before_split": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
-                "after_split": {"totalPaths": 10, "gCount": 3, "p2Count": 4},
+                "validation_set": [
+                    {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
+                    {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
+                ],
             },
         )
         self.assertEqual(
@@ -107,7 +111,7 @@ class UserServiceTest(unittest.TestCase):
             "30010096",
             "2022-01-13",
         )
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.assert_called_once_with(
+        mock_repository.get_patient_training_date_games_by_start_date.assert_called_once_with(
             "30010096",
             "2022-01-13",
         )
@@ -121,8 +125,9 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.return_value = [
             {"totalPaths": 20, "gCount": 5, "p2Count": 6}
         ]
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.return_value = [
-            {"totalPaths": 12, "gCount": 3, "p2Count": 4}
+        mock_repository.get_patient_training_date_games_by_start_date.return_value = [
+            {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
+            {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 5
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
@@ -155,7 +160,10 @@ class UserServiceTest(unittest.TestCase):
             {
                 "split_training_date": "2022-01-13",
                 "before_split": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
-                "after_split": {"totalPaths": 12, "gCount": 3, "p2Count": 4},
+                "validation_set": [
+                    {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
+                    {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
+                ],
             },
         )
         self.assertEqual(result["limit_recommendation"], {"per_g": 5, "limit": 10})
@@ -208,7 +216,7 @@ class UserServiceTest(unittest.TestCase):
         self.assertEqual(result["limit_recommendation"], None)
         self.assertEqual(result["paths"], [])
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.assert_not_called()
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.assert_not_called()
+        mock_repository.get_patient_training_date_games_by_start_date.assert_not_called()
 
     def test_select_training_date_split_point_uses_approximately_four_to_one_ratio(
         self,

@@ -173,7 +173,7 @@ class UserService:
         before_ratio: int,
         after_ratio: int,
     ) -> tuple[dict[str, Any], dict[str, int], str]:
-        """Load split statistics using a 4:1 training date split point."""
+        """Load pre-split statistics and post-split validation data."""
         split_date = self._select_training_date_split_point(
             ordered_dates,
             before_ratio,
@@ -194,28 +194,23 @@ class UserService:
                 split_date,
             )
         )
-        statistics_by_start_date_records = (
-            self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date(
+        validation_set = self.kg_repository.get_patient_training_date_games_by_start_date(
                 patient_id,
                 split_date,
-            )
         )
 
         statistics_by_end_date = self._extract_statistics(statistics_by_end_date_records)
-        statistics_by_start_date = self._extract_statistics(
-            statistics_by_start_date_records
-        )
         statistics = {
             "split_training_date": split_date,
             "before_split": statistics_by_end_date,
-            "after_split": statistics_by_start_date,
+            "validation_set": validation_set,
         }
 
         LOGGER.info(
-            "Loaded dated statistics: patient_id=%s, before_split=%s, after_split=%s",
+            "Loaded dated statistics: patient_id=%s, before_split=%s, validation_set_size=%s",
             patient_id,
             statistics_by_end_date,
-            statistics_by_start_date,
+            len(validation_set),
         )
 
         return statistics, statistics_by_end_date, split_date
