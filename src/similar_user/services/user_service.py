@@ -114,9 +114,9 @@ class UserService:
                 paths=[],
             )
 
-        paths = self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_start_date(
+        paths = self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_end_date(
             patient_id=patient_id,
-            start_date=split_date,
+            end_date=split_date,
             per_g=recommendation.per_g,
             limit=recommendation.limit,
         )
