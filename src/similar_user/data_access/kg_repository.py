@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -169,15 +170,18 @@ class KgRepository:
         self,
         total_paths: int,
         g_count: int,
+        p2_count: int,
     ) -> GraphPathLimitRecommendation:
         """Derive a Cypher limit from fixed-pattern graph statistics."""
         if total_paths < 0:
             raise ValueError("total_paths must be a non-negative integer.")
         if g_count < 0:
             raise ValueError("g_count must be a non-negative integer.")
+        if p2_count < 0:
+            raise ValueError("p2_count must be a non-negative integer.")
 
         settings = load_query_settings(self.query_config_path).graph_path_limit
-        return self._recommend_graph_path_limit(total_paths, g_count, settings)
+        return self._recommend_graph_path_limit(total_paths, g_count, p2_count, settings)
 
     @staticmethod
     def _normalize_required_string(value: str, field_name: str) -> str:
@@ -195,17 +199,23 @@ class KgRepository:
     def _recommend_graph_path_limit(
         total_paths: int,
         g_count: int,
+        p2_count: int,
         settings: GraphPathLimitSettings,
     ) -> GraphPathLimitRecommendation:
         """Apply configured threshold bands to derive the final Cypher limit."""
         if settings.max_limit_source != "total_paths":
             raise ValueError("Unsupported max_limit_source for graph_path_limit.")
 
-        per_g = settings.bands[-1].per_g
-        for band in settings.bands:
-            if band.max_g_count is None or g_count <= band.max_g_count:
-                per_g = band.per_g
-                break
+        if settings.per_g_strategy == "band":
+            per_g = settings.bands[-1].per_g
+            for band in settings.bands:
+                if band.max_g_count is None or g_count <= band.max_g_count:
+                    per_g = band.per_g
+                    break
+        elif settings.per_g_strategy == "p2_div_g":
+            per_g = 1 if g_count == 0 else max(1, math.ceil(p2_count / g_count))
+        else:
+            raise ValueError("Unsupported per_g_strategy for graph_path_limit.")
 
         limit = min(g_count * per_g, total_paths)
         return GraphPathLimitRecommendation(per_g=per_g, limit=limit)

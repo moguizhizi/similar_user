@@ -24,14 +24,11 @@ class UserService:
     def get_patient_pattern_paths(
         self,
         patient_id: str,
-        *,
-        use_dated_statistics: bool = True,
     ) -> dict[str, Any]:
         """Run the end-to-end fixed-pattern path flow for a patient."""
         LOGGER.info(
-            "Starting patient pattern path flow in service: patient_id=%s, use_dated_statistics=%s",
+            "Starting patient pattern path flow in service: patient_id=%s",
             patient_id,
-            use_dated_statistics,
         )
 
         ordered_dates = self.get_patient_ordered_training_dates(patient_id)
@@ -45,35 +42,33 @@ class UserService:
         training_context = self._build_training_context(patient_id, ordered_dates)
         self._log_training_context(training_context)
 
-        if use_dated_statistics:
-            split_settings = load_query_settings(
-                self.kg_repository.query_config_path
-            ).training_date_split
-            if len(ordered_dates) < split_settings.min_training_dates:
-                LOGGER.warning(
-                    "Training dates do not meet minimum split requirement: patient_id=%s, training_date_count=%s, min_training_dates=%s",
-                    patient_id,
-                    len(ordered_dates),
-                    split_settings.min_training_dates,
-                )
-                return self._build_pattern_result(
-                    training_context=training_context,
-                    statistics=None,
-                    limit_recommendation=None,
-                    paths=[],
-                )
-
-            statistics, active_statistics = self._load_dated_statistics(
+        split_settings = load_query_settings(
+            self.kg_repository.query_config_path
+        ).training_date_split
+        if len(ordered_dates) < split_settings.min_training_dates:
+            LOGGER.warning(
+                "Training dates do not meet minimum split requirement: patient_id=%s, training_date_count=%s, min_training_dates=%s",
                 patient_id,
-                ordered_dates,
-                split_settings.before_ratio,
-                split_settings.after_ratio,
+                len(ordered_dates),
+                split_settings.min_training_dates,
             )
-        else:
-            statistics, active_statistics = self._load_undated_statistics(patient_id)
+            return self._build_pattern_result(
+                training_context=training_context,
+                statistics=None,
+                limit_recommendation=None,
+                paths=[],
+            )
+
+        statistics, active_statistics = self._load_dated_statistics(
+            patient_id,
+            ordered_dates,
+            split_settings.before_ratio,
+            split_settings.after_ratio,
+        )
 
         total_paths = int(active_statistics.get("totalPaths", 0))
         g_count = int(active_statistics.get("gCount", 0))
+        p2_count = int(active_statistics.get("p2Count", 0))
 
         if total_paths <= 0:
             LOGGER.warning(
@@ -91,6 +86,7 @@ class UserService:
         recommendation = self.kg_repository.recommend_graph_path_limit(
             total_paths=total_paths,
             g_count=g_count,
+            p2_count=p2_count,
         )
 
         limit_recommendation = {
@@ -211,26 +207,6 @@ class UserService:
         )
 
         return statistics, statistics_by_end_date
-
-    def _load_undated_statistics(
-        self,
-        patient_id: str,
-    ) -> tuple[dict[str, int], dict[str, int]]:
-        """Load undated fixed-pattern statistics."""
-        statistics_records = (
-            self.kg_repository.get_patient_task_set_task_game_task_set_patient_pattern_statistics(
-                patient_id
-            )
-        )
-        statistics = self._extract_statistics(statistics_records)
-
-        LOGGER.info(
-            "Loaded undated statistics: patient_id=%s, statistics=%s",
-            patient_id,
-            statistics,
-        )
-
-        return statistics, statistics
 
     @staticmethod
     def _build_training_context(

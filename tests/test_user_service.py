@@ -150,30 +150,12 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.recommend_graph_path_limit.assert_called_once_with(
             total_paths=20,
             g_count=5,
+            p2_count=6,
         )
         mock_repository.get_patient_task_set_task_game_task_set_patient_randomized_paths.assert_called_once_with(
             patient_id="30010096",
             per_g=5,
             limit=10,
-        )
-
-    def test_get_patient_pattern_paths_can_use_undated_statistics(self) -> None:
-        mock_repository = Mock()
-        mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
-            {"orderedDatesa": ["2022-01-01"]}
-        ]
-        mock_repository.get_patient_task_set_task_game_task_set_patient_pattern_statistics.return_value = [
-            {"totalPaths": 5, "gCount": 1, "p2Count": 1}
-        ]
-        mock_repository.recommend_graph_path_limit.return_value.per_g = 4
-        mock_repository.recommend_graph_path_limit.return_value.limit = 4
-        mock_repository.get_patient_task_set_task_game_task_set_patient_randomized_paths.return_value = []
-        service = UserService(kg_repository=mock_repository)
-
-        service.get_patient_pattern_paths("30010096", use_dated_statistics=False)
-
-        mock_repository.get_patient_task_set_task_game_task_set_patient_pattern_statistics.assert_called_once_with(
-            "30010096"
         )
 
     def test_get_patient_pattern_paths_returns_early_when_training_dates_are_below_configured_minimum(

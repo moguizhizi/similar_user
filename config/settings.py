@@ -32,6 +32,7 @@ class GraphPathLimitSettings:
     """Configuration for deriving graph traversal query limits."""
 
     bands: tuple[QueryLimitBandSettings, ...]
+    per_g_strategy: str = "band"
     max_limit_source: str = "total_paths"
 
 
@@ -142,6 +143,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
             bands=tuple(bands),
+            per_g_strategy=str(graph_path_limit_data.get("per_g_strategy", "band")),
             max_limit_source=str(
                 graph_path_limit_data.get("max_limit_source", "total_paths")
             ),

@@ -92,6 +92,8 @@ def main() -> int:
         )
         print(f"Patient pattern path flow failed: {exc}", file=sys.stderr)
         return 1
+    
+    exit(0)
 
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     return 0
