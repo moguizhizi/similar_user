@@ -9,6 +9,7 @@ from pathlib import Path
 from config.settings import GraphPathLimitSettings, load_query_settings
 
 from .cypher_queries import (
+    PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
@@ -42,6 +43,25 @@ class KgRepository:
     client: Neo4jClient
     default_limits: list[int] = field(default_factory=lambda: DEFAULT_PATH_LIMITS.copy())
     query_config_path: Path = DEFAULT_QUERY_CONFIG_PATH
+
+    def get_patient_training_date_games_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return games grouped by patient training date from a start date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+            },
+        )
 
     def get_patient_task_instance_set_ordered_training_dates(
         self,

@@ -21,6 +21,17 @@ class UserService:
 
     kg_repository: KgRepository
 
+    def get_patient_training_date_games_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return training-date grouped games from the given start date."""
+        return self.kg_repository.get_patient_training_date_games_by_start_date(
+            patient_id,
+            start_date,
+        )
+
     def get_patient_pattern_paths(
         self,
         patient_id: str,
