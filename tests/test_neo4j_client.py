@@ -165,10 +165,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         )
         mock_repository_cls.assert_called_once_with(client=mock_client)
         mock_service_cls.assert_called_once_with(kg_repository=mock_repository)
-        mock_service.get_patient_pattern_paths.assert_called_once_with(
-            "30010096",
-            use_dated_statistics=True,
-        )
+        mock_service.get_patient_pattern_paths.assert_called_once_with("30010096")
         mock_append_pattern_result.assert_called_once_with(
             {"patient_id": "30010096", "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT", "paths": []},
             "config/query.yaml",
