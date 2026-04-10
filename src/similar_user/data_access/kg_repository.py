@@ -9,6 +9,7 @@ from pathlib import Path
 from config.settings import GraphPathLimitSettings, load_query_settings
 
 from .cypher_queries import (
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
@@ -161,6 +162,33 @@ class KgRepository:
             query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
+                "per_g": per_g,
+                "limit": limit,
+            },
+        )
+
+    def get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+        per_g: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return randomized fixed-pattern rows constrained from a start date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+        if not isinstance(per_g, int) or isinstance(per_g, bool) or per_g <= 0:
+            raise ValueError("per_g must be a positive integer.")
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+            raise ValueError("limit must be a positive integer.")
+
+        return self.client.run_query(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
                 "per_g": per_g,
                 "limit": limit,
             },
