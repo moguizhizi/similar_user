@@ -12,6 +12,29 @@ from src.similar_user.services.user_service import UserService
 
 
 class UserServiceTest(unittest.TestCase):
+    def test_get_patient_training_date_games_by_start_date_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_training_date_games_by_start_date.return_value = [
+            {"trainingDate": "2022-01-13", "games": [{"id": "42"}]}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_training_date_games_by_start_date(
+            "30010096",
+            "2022-01-01",
+        )
+
+        self.assertEqual(
+            result,
+            [{"trainingDate": "2022-01-13", "games": [{"id": "42"}]}],
+        )
+        mock_repository.get_patient_training_date_games_by_start_date.assert_called_once_with(
+            "30010096",
+            "2022-01-01",
+        )
+
     @patch("src.similar_user.services.user_service.LOGGER")
     def test_get_patient_pattern_paths_returns_empty_payload_when_no_training_dates(
         self,
