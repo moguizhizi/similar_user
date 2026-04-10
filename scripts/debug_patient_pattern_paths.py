@@ -18,6 +18,7 @@ from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
+from similar_user.utils.pattern_storage import append_pattern_result
 
 
 DEFAULT_CONFIG_PATH = Path("config/neo4j.yaml")
@@ -63,11 +64,13 @@ def run_patient_pattern_path_flow(
             patient_id,
             use_dated_statistics=use_dated_statistics,
         )
+        output_path = append_pattern_result(result, repository.query_config_path)
         LOGGER.info(
-            "Completed patient pattern path flow: patient_id=%s, training_date_count=%s, path_count=%s",
+            "Completed patient pattern path flow: patient_id=%s, training_date_count=%s, path_count=%s, output_path=%s",
             patient_id,
             result.get("training_date_count"),
             len(result.get("paths", [])),
+            output_path,
         )
         return result
 

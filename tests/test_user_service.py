@@ -5,6 +5,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock, patch
 
+from src.similar_user.domain.graph_schema import (
+    PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+)
 from src.similar_user.services.user_service import UserService
 
 
@@ -24,6 +27,7 @@ class UserServiceTest(unittest.TestCase):
             result,
             {
                 "patient_id": "30010096",
+                "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
                 "ordered_training_dates": [],
                 "first_training_date": None,
                 "last_training_date": None,
@@ -64,6 +68,10 @@ class UserServiceTest(unittest.TestCase):
                 "before_split": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
                 "after_split": {"totalPaths": 10, "gCount": 3, "p2Count": 4},
             },
+        )
+        self.assertEqual(
+            result["pattern"],
+            PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         )
         self.assertIsNone(result["limit_recommendation"])
         self.assertEqual(result["paths"], [])
@@ -110,6 +118,10 @@ class UserServiceTest(unittest.TestCase):
         self.assertEqual(result["first_training_date"], "2022-01-01")
         self.assertEqual(result["last_training_date"], "2022-01-17")
         self.assertEqual(result["training_date_count"], 5)
+        self.assertEqual(
+            result["pattern"],
+            PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+        )
         self.assertEqual(
             result["statistics"],
             {
@@ -177,6 +189,10 @@ class UserServiceTest(unittest.TestCase):
         result = service.get_patient_pattern_paths("30010096")
 
         self.assertEqual(result["ordered_training_dates"], ["2022-01-01", "2022-01-13", "2022-01-21", "2022-01-30"])
+        self.assertEqual(
+            result["pattern"],
+            PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+        )
         self.assertEqual(result["statistics"], None)
         self.assertEqual(result["limit_recommendation"], None)
         self.assertEqual(result["paths"], [])

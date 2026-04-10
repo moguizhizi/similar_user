@@ -124,20 +124,27 @@ class DebugQueryScriptTest(unittest.TestCase):
 
 class DebugPatientPatternPathsScriptTest(unittest.TestCase):
     @patch("scripts.debug_patient_pattern_paths.LOGGER")
+    @patch("scripts.debug_patient_pattern_paths.append_pattern_result")
     @patch("scripts.debug_patient_pattern_paths.Neo4jClient.from_config")
     def test_run_patient_pattern_path_flow_returns_service_result(
         self,
         mock_from_config: Mock,
+        mock_append_pattern_result: Mock,
         mock_logger: Mock,
     ) -> None:
         mock_client = Mock()
         mock_from_config.return_value.__enter__.return_value = mock_client
         mock_repository = Mock()
+        mock_repository.query_config_path = "config/query.yaml"
         mock_service = Mock()
         mock_service.get_patient_pattern_paths.return_value = {
             "patient_id": "30010096",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "paths": [],
         }
+        mock_append_pattern_result.return_value = Path(
+            "data/pattern_paths/PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT.jsonl"
+        )
 
         with patch(
             "scripts.debug_patient_pattern_paths.KgRepository",
@@ -148,12 +155,23 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         ) as mock_service_cls:
             result = run_patient_pattern_path_flow("30010096")
 
-        self.assertEqual(result, {"patient_id": "30010096", "paths": []})
+        self.assertEqual(
+            result,
+            {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "paths": [],
+            },
+        )
         mock_repository_cls.assert_called_once_with(client=mock_client)
         mock_service_cls.assert_called_once_with(kg_repository=mock_repository)
         mock_service.get_patient_pattern_paths.assert_called_once_with(
             "30010096",
             use_dated_statistics=True,
+        )
+        mock_append_pattern_result.assert_called_once_with(
+            {"patient_id": "30010096", "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT", "paths": []},
+            "config/query.yaml",
         )
         mock_logger.info.assert_called()
 
@@ -171,14 +189,22 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
             config="config/neo4j.yaml",
             undated=False,
         )
-        mock_run_flow.return_value = {"patient_id": "30010096", "paths": []}
+        mock_run_flow.return_value = {
+            "patient_id": "30010096",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "paths": [],
+        }
 
         exit_code = patient_path_main()
 
         self.assertEqual(exit_code, 0)
         mock_print.assert_called_once_with(
             json.dumps(
-                {"patient_id": "30010096", "paths": []},
+                {
+                    "patient_id": "30010096",
+                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                    "paths": [],
+                },
                 ensure_ascii=False,
                 indent=2,
                 default=str,

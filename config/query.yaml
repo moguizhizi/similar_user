@@ -10,3 +10,5 @@ training_date_split:
   min_training_dates: 5
   before_ratio: 4
   after_ratio: 1
+pattern_path_storage:
+  output_dir: "data/pattern_paths"
