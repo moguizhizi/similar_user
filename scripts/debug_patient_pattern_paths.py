@@ -60,10 +60,12 @@ def run_patient_pattern_path_flow(
     with Neo4jClient.from_config(config_path) as client:
         repository = KgRepository(client=client)
         service = UserService(kg_repository=repository)
-        result = service.get_patient_pattern_paths(
-            patient_id,
-            use_dated_statistics=use_dated_statistics,
-        )
+        if not use_dated_statistics:
+            LOGGER.warning(
+                "Undated statistics mode is no longer supported; falling back to the dated split flow: patient_id=%s",
+                patient_id,
+            )
+        result = service.get_patient_pattern_paths(patient_id)
         output_path = append_pattern_result(result, repository.query_config_path)
         LOGGER.info(
             "Completed patient pattern path flow: patient_id=%s, training_date_count=%s, path_count=%s, output_path=%s",
@@ -92,8 +94,6 @@ def main() -> int:
         )
         print(f"Patient pattern path flow failed: {exc}", file=sys.stderr)
         return 1
-    
-    exit(0)
 
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     return 0
