@@ -1,4 +1,5 @@
 graph_path_limit:
+  per_g_strategy: "band"
   bands:
     - max_g_count: 49
       per_g: 10

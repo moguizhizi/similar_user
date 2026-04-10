@@ -57,6 +57,27 @@ similar_user/
 - `tests/`：针对性测试
 - `scripts/`：临时调试脚本
 
+## Query 配置说明
+
+`config/query.yaml` 中的 `graph_path_limit.per_g_strategy` 当前支持以下取值：
+
+- `band`：按 `gCount` 命中 `bands` 配置中的区间，直接使用对应的 `per_g`
+- `p2_div_g`：按 `ceil(p2Count / gCount)` 计算 `per_g`
+
+一个示例配置如下：
+
+```yaml
+graph_path_limit:
+  per_g_strategy: "band"
+  bands:
+    - max_g_count: 49
+      per_g: 10
+    - max_g_count: 199
+      per_g: 6
+    - per_g: 4
+  max_limit_source: "total_paths"
+```
+
 ## 特定模式路径主流程
 
 下面这段流程用于说明：当程序需要获取某个患者在固定模式下的路径时，可以如何利用患者训练日期、统计查询和路径查询进行编排。
@@ -85,12 +106,7 @@ similar_user/
   - training_date_count
   |
   v
-选择统计口径
-  - 无条件统计
-  - 或带训练日期约束统计
-  |
-  v
-调用统计查询
+按训练日期切分并调用统计查询
   |
   v
 拿到 total_paths / g_count / p2_count
@@ -103,7 +119,7 @@ total_paths == 0 ?
   |  返回仅含上下文的空结果
   |
   v 否
-调用 recommend_graph_path_limit(total_paths, g_count)
+调用 recommend_graph_path_limit(total_paths, g_count, p2_count)
   |
   v
 拿到 per_g / limit
