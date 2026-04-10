@@ -93,7 +93,7 @@ class UserServiceTest(unittest.TestCase):
             {
                 "split_training_date": "2022-01-13",
                 "before_split": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
-                "validation_set": [
+                "post_split_games": [
                     {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
                     {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
                 ],
@@ -160,7 +160,7 @@ class UserServiceTest(unittest.TestCase):
             {
                 "split_training_date": "2022-01-13",
                 "before_split": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
-                "validation_set": [
+                "post_split_games": [
                     {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
                     {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
                 ],
