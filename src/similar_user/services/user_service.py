@@ -59,7 +59,7 @@ class UserService:
                 paths=[],
             )
 
-        statistics, active_statistics = self._load_dated_statistics(
+        statistics, active_statistics, split_date = self._load_dated_statistics(
             patient_id,
             ordered_dates,
             split_settings.before_ratio,
@@ -114,8 +114,9 @@ class UserService:
                 paths=[],
             )
 
-        paths = self.kg_repository.get_patient_task_set_task_game_task_set_patient_randomized_paths(
+        paths = self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_start_date(
             patient_id=patient_id,
+            start_date=split_date,
             per_g=recommendation.per_g,
             limit=recommendation.limit,
         )
@@ -160,7 +161,7 @@ class UserService:
         ordered_dates: list[str],
         before_ratio: int,
         after_ratio: int,
-    ) -> tuple[dict[str, Any], dict[str, int]]:
+    ) -> tuple[dict[str, Any], dict[str, int], str]:
         """Load split statistics using a 4:1 training date split point."""
         split_date = self._select_training_date_split_point(
             ordered_dates,
@@ -206,7 +207,7 @@ class UserService:
             statistics_by_start_date,
         )
 
-        return statistics, statistics_by_end_date
+        return statistics, statistics_by_start_date, split_date
 
     @staticmethod
     def _build_training_context(

@@ -133,8 +133,7 @@ limit <= 0 ?
   |
   v 否
 调用路径查询
-  - get_patient_task_set_task_game_task_set_patient_randomized_paths(...)
-  - 如果后续有 dated 版路径查询，这里切换到 dated 版
+  - get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_start_date(...)
   |
   v
 拿到 paths

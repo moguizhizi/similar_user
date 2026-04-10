@@ -53,6 +53,9 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date.return_value = [
             {"totalPaths": 10, "gCount": 3, "p2Count": 4}
         ]
+        mock_repository.recommend_graph_path_limit.return_value.per_g = 4
+        mock_repository.recommend_graph_path_limit.return_value.limit = 10
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_start_date.return_value = []
         service = UserService(kg_repository=mock_repository)
 
         result = service.get_patient_pattern_paths("30010096")
@@ -73,8 +76,19 @@ class UserServiceTest(unittest.TestCase):
             result["pattern"],
             PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         )
-        self.assertIsNone(result["limit_recommendation"])
+        self.assertEqual(result["limit_recommendation"], {"per_g": 4, "limit": 10})
         self.assertEqual(result["paths"], [])
+        mock_repository.recommend_graph_path_limit.assert_called_once_with(
+            total_paths=10,
+            g_count=3,
+            p2_count=4,
+        )
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_start_date.assert_called_once_with(
+            patient_id="30010096",
+            start_date="2022-01-13",
+            per_g=4,
+            limit=10,
+        )
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.assert_called_once_with(
             "30010096",
             "2022-01-13",
@@ -98,7 +112,7 @@ class UserServiceTest(unittest.TestCase):
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 5
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
-        mock_repository.get_patient_task_set_task_game_task_set_patient_randomized_paths.return_value = [
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_start_date.return_value = [
             {
                 "row": {
                     "p": {"id": "30010096"},
@@ -148,12 +162,13 @@ class UserServiceTest(unittest.TestCase):
             ],
         )
         mock_repository.recommend_graph_path_limit.assert_called_once_with(
-            total_paths=20,
-            g_count=5,
-            p2_count=6,
+            total_paths=12,
+            g_count=3,
+            p2_count=4,
         )
-        mock_repository.get_patient_task_set_task_game_task_set_patient_randomized_paths.assert_called_once_with(
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_start_date.assert_called_once_with(
             patient_id="30010096",
+            start_date="2022-01-13",
             per_g=5,
             limit=10,
         )
