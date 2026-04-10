@@ -207,7 +207,7 @@ class UserService:
             statistics_by_start_date,
         )
 
-        return statistics, statistics_by_start_date, split_date
+        return statistics, statistics_by_end_date, split_date
 
     @staticmethod
     def _build_training_context(
