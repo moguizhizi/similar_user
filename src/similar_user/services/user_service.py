@@ -7,6 +7,7 @@ from typing import Any
 
 from config.settings import load_query_settings
 
+from ..domain.graph_schema import PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT
 from ..data_access.kg_repository import KgRepository
 from ..utils.logger import get_logger
 
@@ -80,12 +81,12 @@ class UserService:
                 patient_id,
                 active_statistics,
             )
-            return {
-                **training_context,
-                "statistics": statistics,
-                "limit_recommendation": None,
-                "paths": [],
-            }
+            return self._build_pattern_result(
+                training_context=training_context,
+                statistics=statistics,
+                limit_recommendation=None,
+                paths=[],
+            )
 
         recommendation = self.kg_repository.recommend_graph_path_limit(
             total_paths=total_paths,
@@ -110,12 +111,12 @@ class UserService:
                 patient_id,
                 limit_recommendation,
             )
-            return {
-                **training_context,
-                "statistics": statistics,
-                "limit_recommendation": limit_recommendation,
-                "paths": [],
-            }
+            return self._build_pattern_result(
+                training_context=training_context,
+                statistics=statistics,
+                limit_recommendation=limit_recommendation,
+                paths=[],
+            )
 
         paths = self.kg_repository.get_patient_task_set_task_game_task_set_patient_randomized_paths(
             patient_id=patient_id,
@@ -250,6 +251,7 @@ class UserService:
         """Build the empty result payload for patients without training dates."""
         return {
             "patient_id": patient_id,
+            "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             "ordered_training_dates": [],
             "first_training_date": None,
             "last_training_date": None,
@@ -270,6 +272,7 @@ class UserService:
         """Build the standard patient pattern path result payload."""
         return {
             **training_context,
+            "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             "statistics": statistics,
             "limit_recommendation": limit_recommendation,
             "paths": paths,
