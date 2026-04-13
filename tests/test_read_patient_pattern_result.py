@@ -9,8 +9,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from scripts.read_patient_pattern_result import main, read_patient_pattern_result
+from similar_user.domain import GameNode
 from similar_user.utils.pattern_storage import (
-    StoredGameSummary,
     StoredPatternResult,
     StoredPatternStatistics,
     StoredTrainingDateGames,
@@ -184,7 +184,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
         )
         self.assertIsInstance(
             statistics.post_split_games[0].games[0],
-            StoredGameSummary,
+            GameNode,
         )
         self.assertEqual(
             statistics.post_split_games[0].training_date,

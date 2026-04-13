@@ -2,7 +2,6 @@
 
 from .pattern_storage import (
     PatternResultStore,
-    StoredGameSummary,
     StoredPatternResult,
     StoredPatternStatistics,
     StoredTrainingDateGames,
@@ -13,7 +12,6 @@ from .pattern_storage import (
 
 __all__ = [
     "PatternResultStore",
-    "StoredGameSummary",
     "StoredPatternResult",
     "StoredPatternStatistics",
     "StoredTrainingDateGames",
