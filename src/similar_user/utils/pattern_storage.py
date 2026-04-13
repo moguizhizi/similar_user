@@ -16,6 +16,95 @@ from ..domain.path_models import (
 
 
 @dataclass(frozen=True)
+class StoredGameSummary:
+    """A lightweight game summary nested under post-split statistics."""
+
+    id: str
+    name: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> StoredGameSummary:
+        """Build a game summary from raw JSON content."""
+        return cls(
+            id=_normalize_required_string(data.get("id"), "games.id"),
+            name=_optional_string(data.get("name")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the JSON-serializable mapping for one game summary."""
+        return {
+            "name": self.name,
+            "id": self.id,
+        }
+
+
+@dataclass(frozen=True)
+class StoredTrainingDateGames:
+    """Post-split games grouped by one training date."""
+
+    training_date: str
+    games: list[StoredGameSummary] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> StoredTrainingDateGames:
+        """Build one training-date group from raw JSON content."""
+        games = data.get("games", [])
+        return cls(
+            training_date=_normalize_required_string(
+                data.get("trainingDate"),
+                "post_split_games.trainingDate",
+            ),
+            games=[
+                StoredGameSummary.from_dict(game)
+                for game in games
+                if isinstance(game, dict)
+            ],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the JSON-serializable mapping for one training-date group."""
+        return {
+            "trainingDate": self.training_date,
+            "games": [game.to_dict() for game in self.games],
+        }
+
+
+@dataclass(frozen=True)
+class StoredPatternStatistics:
+    """Typed view of saved statistics, including post-split game groups."""
+
+    split_training_date: str
+    before_split: dict[str, Any]
+    post_split_games: list[StoredTrainingDateGames] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> StoredPatternStatistics:
+        """Build statistics from raw JSON content."""
+        post_split_games = data.get("post_split_games", [])
+        before_split = data.get("before_split")
+        return cls(
+            split_training_date=_normalize_required_string(
+                data.get("split_training_date"),
+                "statistics.split_training_date",
+            ),
+            before_split=before_split if isinstance(before_split, dict) else {},
+            post_split_games=[
+                StoredTrainingDateGames.from_dict(group)
+                for group in post_split_games
+                if isinstance(group, dict)
+            ],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the JSON-serializable mapping for saved statistics."""
+        return {
+            "split_training_date": self.split_training_date,
+            "before_split": self.before_split,
+            "post_split_games": [group.to_dict() for group in self.post_split_games],
+        }
+
+
+@dataclass(frozen=True)
 class StoredPatternResult:
     """Typed view of one saved patient pattern result."""
 
@@ -25,7 +114,7 @@ class StoredPatternResult:
     first_training_date: str | None = None
     last_training_date: str | None = None
     training_date_count: int = 0
-    statistics: dict[str, Any] | None = None
+    statistics: StoredPatternStatistics | None = None
     limit_recommendation: dict[str, Any] | None = None
     paths: list[dict[str, Any]] = field(default_factory=list)
 
@@ -54,9 +143,11 @@ class StoredPatternResult:
                 else None
             ),
             training_date_count=int(data.get("training_date_count", 0) or 0),
-            statistics=data.get("statistics")
-            if isinstance(data.get("statistics"), dict) or data.get("statistics") is None
-            else None,
+            statistics=(
+                StoredPatternStatistics.from_dict(data["statistics"])
+                if isinstance(data.get("statistics"), dict)
+                else None
+            ),
             limit_recommendation=data.get("limit_recommendation")
             if isinstance(data.get("limit_recommendation"), dict)
             or data.get("limit_recommendation") is None
@@ -73,7 +164,7 @@ class StoredPatternResult:
             "first_training_date": self.first_training_date,
             "last_training_date": self.last_training_date,
             "training_date_count": self.training_date_count,
-            "statistics": self.statistics,
+            "statistics": self.statistics.to_dict() if self.statistics is not None else None,
             "limit_recommendation": self.limit_recommendation,
             "paths": self.paths,
         }
@@ -185,3 +276,12 @@ def _normalize_required_string(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string.")
     return value.strip()
+
+
+def _optional_string(value: object) -> str | None:
+    """Normalize an optional string value."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return str(value)
+    return value
