@@ -8,6 +8,7 @@ from pathlib import Path
 
 from src.similar_user.utils.pattern_storage import (
     PatternResultStore,
+    StoredPatternResult,
     get_patient_pattern_result_output_path,
     get_pattern_result_output_dir,
     save_pattern_result,
@@ -111,13 +112,27 @@ class PatternStorageTest(unittest.TestCase):
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 "paths": [{"g": 2}],
             }
+            expected_loaded_result = {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "ordered_training_dates": [],
+                "first_training_date": None,
+                "last_training_date": None,
+                "training_date_count": 0,
+                "statistics": None,
+                "limit_recommendation": None,
+                "paths": [{"g": 2}],
+            }
 
             output_path = save_pattern_result(first_result, config_path)
             save_pattern_result(second_result, config_path)
             store = PatternResultStore(config_path)
 
             self.assertTrue(output_path.exists())
-            self.assertEqual(store.load(second_result["pattern"], "30010096"), second_result)
+            loaded_result = store.load(second_result["pattern"], "30010096")
+
+            self.assertIsInstance(loaded_result, StoredPatternResult)
+            self.assertEqual(loaded_result.to_dict(), expected_loaded_result)
 
     def test_iter_pattern_results_reads_multiple_patient_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -154,8 +169,9 @@ class PatternStorageTest(unittest.TestCase):
             records = list(store.iter_pattern_results(pattern))
 
         self.assertEqual(len(records), 2)
+        self.assertTrue(all(isinstance(record, StoredPatternResult) for record in records))
         self.assertEqual(
-            {record["patient_id"] for record in records},
+            {record.patient_id for record in records},
             {"30010096", "19000001"},
         )
 
