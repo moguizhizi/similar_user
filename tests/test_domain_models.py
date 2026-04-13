@@ -71,6 +71,47 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(path.p.id, "40")
         self.assertEqual(path.g.name, "打怪物")
         self.assertEqual(path.i1.状态, "完成")
+        self.assertIsNone(path.g.艺术风格)
+
+    def test_game_node_can_load_extended_properties_from_dict(self) -> None:
+        path = PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+            {
+                "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+                "row": {
+                    "p": {"id": "40"},
+                    "s1": {"id": "40_20220401"},
+                    "i1": {"id": "40_20220401_8_x"},
+                    "g": {
+                        "id": "348",
+                        "name": "真假句辨别",
+                        "<elementId>": "4:11f7608e-a38a-4667-8632-459abd9062e0:12810",
+                        "<id>": 12810,
+                        "UI边框样式": "木纹",
+                        "主要颜色": "棕_白_黄",
+                        "同屏spine数量上限": 0.0,
+                        "规则理解难度": 1,
+                        "难度星级": "4",
+                        "题目是否语音播放": "是",
+                        "艺术风格": "卡通",
+                        "背景环境": "教室",
+                    },
+                    "i2": {"id": "20102799_20230123_8_y"},
+                    "s2": {"id": "20102799_20230123"},
+                    "p2": {"id": "20102799"},
+                },
+            }
+        )
+
+        self.assertEqual(path.g.id, "348")
+        self.assertEqual(path.g.name, "真假句辨别")
+        self.assertEqual(path.g.UI边框样式, "木纹")
+        self.assertEqual(path.g.主要颜色, "棕_白_黄")
+        self.assertEqual(path.g.背景环境, "教室")
+        self.assertEqual(path.g.艺术风格, "卡通")
+        self.assertEqual(path.g.题目是否语音播放, "是")
+        self.assertEqual(path.g.同屏spine数量上限, 0.0)
+        self.assertEqual(path.g.规则理解难度, 1)
+        self.assertEqual(path.g.难度星级, 4)
 
 
 if __name__ == "__main__":
