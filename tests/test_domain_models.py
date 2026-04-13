@@ -113,6 +113,23 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(path.g.规则理解难度, 1)
         self.assertEqual(path.g.难度星级, 4)
 
+    def test_game_node_from_dict_can_be_used_directly(self) -> None:
+        game = GameNode.from_dict(
+            {
+                "id": "348",
+                "name": "真假句辨别",
+                "艺术风格": "卡通",
+                "背景环境": "教室",
+                "难度星级": "4",
+            }
+        )
+
+        self.assertEqual(game.id, "348")
+        self.assertEqual(game.name, "真假句辨别")
+        self.assertEqual(game.艺术风格, "卡通")
+        self.assertEqual(game.背景环境, "教室")
+        self.assertEqual(game.难度星级, 4)
+
 
 if __name__ == "__main__":
     unittest.main()

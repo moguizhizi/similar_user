@@ -10,32 +10,10 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from config.settings import load_query_settings
+from ..domain.item import GameNode
 from ..domain.path_models import (
     PatientTasksetTaskGameTaskTasksetPatientPath,
 )
-
-
-@dataclass(frozen=True)
-class StoredGameSummary:
-    """A lightweight game summary nested under post-split statistics."""
-
-    id: str
-    name: str | None = None
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> StoredGameSummary:
-        """Build a game summary from raw JSON content."""
-        return cls(
-            id=_normalize_required_string(data.get("id"), "games.id"),
-            name=_optional_string(data.get("name")),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return the JSON-serializable mapping for one game summary."""
-        return {
-            "name": self.name,
-            "id": self.id,
-        }
 
 
 @dataclass(frozen=True)
@@ -43,7 +21,7 @@ class StoredTrainingDateGames:
     """Post-split games grouped by one training date."""
 
     training_date: str
-    games: list[StoredGameSummary] = field(default_factory=list)
+    games: list[GameNode] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StoredTrainingDateGames:
@@ -55,7 +33,7 @@ class StoredTrainingDateGames:
                 "post_split_games.trainingDate",
             ),
             games=[
-                StoredGameSummary.from_dict(game)
+                GameNode.from_dict(game)
                 for game in games
                 if isinstance(game, dict)
             ],
@@ -65,7 +43,7 @@ class StoredTrainingDateGames:
         """Return the JSON-serializable mapping for one training-date group."""
         return {
             "trainingDate": self.training_date,
-            "games": [game.to_dict() for game in self.games],
+            "games": [_game_node_to_dict(game) for game in self.games],
         }
 
 
@@ -289,3 +267,12 @@ def _optional_string(value: object) -> str | None:
     if not isinstance(value, str):
         return str(value)
     return value
+
+
+def _game_node_to_dict(game: GameNode) -> dict[str, Any]:
+    """Convert a game node to a JSON-serializable mapping without dropping known fields."""
+    return {
+        field_name: field_value
+        for field_name, field_value in game.__dict__.items()
+        if field_value is not None
+    }
