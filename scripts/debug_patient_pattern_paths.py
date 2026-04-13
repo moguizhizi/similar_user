@@ -81,7 +81,7 @@ def main() -> int:
     """Run the patient pattern path flow and print the JSON result."""
     args = parse_args()
     try:
-        result = run_patient_pattern_path_flow(
+        run_patient_pattern_path_flow(
             args.patient_id,
             config_path=args.config,
             use_dated_statistics=not args.undated,
