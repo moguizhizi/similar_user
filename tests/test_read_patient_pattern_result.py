@@ -109,6 +109,40 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             json.dumps(expected_result, ensure_ascii=False, indent=2, default=str)
         )
 
+    def test_stored_pattern_result_can_convert_paths_to_domain_objects(self) -> None:
+        result = StoredPatternResult.from_dict(
+            {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "ordered_training_dates": [],
+                "first_training_date": None,
+                "last_training_date": None,
+                "training_date_count": 0,
+                "statistics": None,
+                "limit_recommendation": None,
+                "paths": [
+                    {
+                        "row": {
+                            "p": {"id": "30010096", "name": "患者_30010096"},
+                            "s1": {"id": "30010096_20220113", "训练日期": "2022-01-13"},
+                            "i1": {"id": "30010096_20220113_42_x"},
+                            "g": {"id": "42", "name": "打怪物"},
+                            "i2": {"id": "20113562_20211214_42_y"},
+                            "s2": {"id": "20113562_20211214", "训练日期": "2021-12-14"},
+                            "p2": {"id": "20113562", "name": "患者_20113562"},
+                        }
+                    }
+                ],
+            }
+        )
+
+        domain_paths = result.to_domain_paths()
+
+        self.assertEqual(len(domain_paths), 1)
+        self.assertEqual(domain_paths[0].p.id, "30010096")
+        self.assertEqual(domain_paths[0].g.name, "打怪物")
+        self.assertEqual(domain_paths[0].s2.训练日期, "2021-12-14")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from .graph_schema import PathPattern
 from .item import GameNode, TaskInstanceNode, TaskInstanceSetNode
@@ -22,6 +23,27 @@ class PatientTasksetTaskGameTaskTasksetPatientPath:
     s2: TaskInstanceSetNode
     p2: PatientNode
 
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+    ) -> PatientTasksetTaskGameTaskTasksetPatientPath:
+        """Build a typed path from a stored path row."""
+        row = data.get("row") if isinstance(data.get("row"), dict) else data
+        if not isinstance(row, dict):
+            raise ValueError("path data must contain a mapping row.")
+
+        return cls(
+            pattern=_coerce_path_pattern(data.get("pattern")),
+            p=_build_patient_node(row.get("p"), "p"),
+            s1=_build_task_instance_set_node(row.get("s1"), "s1"),
+            i1=_build_task_instance_node(row.get("i1"), "i1"),
+            g=_build_game_node(row.get("g"), "g"),
+            i2=_build_task_instance_node(row.get("i2"), "i2"),
+            s2=_build_task_instance_set_node(row.get("s2"), "s2"),
+            p2=_build_patient_node(row.get("p2"), "p2"),
+        )
+
 
 @dataclass(frozen=True)
 class PatternPathResult:
@@ -30,3 +52,84 @@ class PatternPathResult:
     patient_id: str
     pattern: PathPattern
     paths: list[PatientTasksetTaskGameTaskTasksetPatientPath]
+
+
+def _coerce_path_pattern(value: object) -> PathPattern:
+    """Normalize a raw pattern value to the supported enum."""
+    if isinstance(value, PathPattern):
+        return value
+    if isinstance(value, str) and value.strip():
+        return PathPattern(value.strip())
+    raise ValueError("pattern must be a non-empty supported path pattern string.")
+
+
+def _build_patient_node(value: object, field_name: str) -> PatientNode:
+    """Build a patient node from raw JSON content."""
+    data = _require_mapping(value, field_name)
+    return PatientNode(
+        id=_require_string(data.get("id"), f"{field_name}.id"),
+        name=_optional_string(data.get("name")),
+        性别=_optional_string(data.get("性别")),
+    )
+
+
+def _build_task_instance_set_node(
+    value: object,
+    field_name: str,
+) -> TaskInstanceSetNode:
+    """Build a task-instance-set node from raw JSON content."""
+    data = _require_mapping(value, field_name)
+    return TaskInstanceSetNode(
+        id=_require_string(data.get("id"), f"{field_name}.id"),
+        name=_optional_string(data.get("name")),
+        训练日期=_optional_string(data.get("训练日期")),
+        执行年龄=_optional_string(data.get("执行年龄")),
+        执行学历=_optional_string(data.get("执行学历")),
+    )
+
+
+def _build_task_instance_node(value: object, field_name: str) -> TaskInstanceNode:
+    """Build a task-instance node from raw JSON content."""
+    data = _require_mapping(value, field_name)
+    return TaskInstanceNode(
+        id=_require_string(data.get("id"), f"{field_name}.id"),
+        name=_optional_string(data.get("name")),
+        得分=_optional_string(data.get("得分")),
+        常模分=_optional_string(data.get("常模分")),
+        结果=_optional_string(data.get("结果")),
+        活跃=_optional_string(data.get("活跃")),
+        任务类型=_optional_string(data.get("任务类型")),
+        状态=_optional_string(data.get("状态")),
+    )
+
+
+def _build_game_node(value: object, field_name: str) -> GameNode:
+    """Build a game node from raw JSON content."""
+    data = _require_mapping(value, field_name)
+    return GameNode(
+        id=_require_string(data.get("id"), f"{field_name}.id"),
+        name=_optional_string(data.get("name")),
+    )
+
+
+def _require_mapping(value: object, field_name: str) -> dict[str, Any]:
+    """Validate that the given value is a mapping."""
+    if not isinstance(value, dict):
+        raise ValueError(f"{field_name} must be a mapping.")
+    return value
+
+
+def _require_string(value: object, field_name: str) -> str:
+    """Validate and normalize a required string value."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string.")
+    return value.strip()
+
+
+def _optional_string(value: object) -> str | None:
+    """Normalize an optional string value."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return str(value)
+    return value
