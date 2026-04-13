@@ -146,7 +146,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
         self.assertEqual(domain_paths[0].g.name, "打怪物")
         self.assertEqual(domain_paths[0].s2.训练日期, "2021-12-14")
 
-    def test_stored_pattern_result_wraps_statistics_post_split_games_as_classes(self) -> None:
+    def test_stored_pattern_result_can_convert_statistics_to_typed_object(self) -> None:
         result = StoredPatternResult.from_dict(
             {
                 "patient_id": "30010096",
@@ -173,22 +173,25 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             }
         )
 
-        self.assertIsInstance(result.statistics, StoredPatternStatistics)
-        assert result.statistics is not None
+        self.assertIsInstance(result.statistics, dict)
+        statistics = result.to_stored_statistics()
+
+        self.assertIsInstance(statistics, StoredPatternStatistics)
+        assert statistics is not None
         self.assertIsInstance(
-            result.statistics.post_split_games[0],
+            statistics.post_split_games[0],
             StoredTrainingDateGames,
         )
         self.assertIsInstance(
-            result.statistics.post_split_games[0].games[0],
+            statistics.post_split_games[0].games[0],
             StoredGameSummary,
         )
         self.assertEqual(
-            result.statistics.post_split_games[0].training_date,
+            statistics.post_split_games[0].training_date,
             "2022-05-22",
         )
         self.assertEqual(
-            result.statistics.post_split_games[0].games[0].name,
+            statistics.post_split_games[0].games[0].name,
             "数字筛选•进阶",
         )
         self.assertEqual(
