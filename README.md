@@ -143,6 +143,9 @@ limit <= 0 ?
   - patient_id
   - ordered_training_dates
   - statistics
+    - split_training_date
+    - before_split
+    - post_split_games
   - limit_recommendation
   - paths
   |
@@ -174,6 +177,20 @@ data/
 {
   "patient_id": "40",
   "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+  "ordered_training_dates": ["2022-04-01", "2022-04-08", "2022-04-15", "2022-04-22", "2022-04-29"],
+  "statistics": {
+    "split_training_date": "2022-04-22",
+    "before_split": {
+      "totalPaths": 20,
+      "gCount": 5,
+      "p2Count": 6
+    },
+    "post_split_games": [
+      {"trainingDate": "2022-04-22", "games": [{"id": "8", "name": "打怪物"}]},
+      {"trainingDate": "2022-04-29", "games": [{"id": "15", "name": "拼图"}]}
+    ]
+  },
+  "limit_recommendation": {"per_g": 5, "limit": 10},
   "paths": [
     {
       "p": {"id": "40", "name": "患者_40", "性别": "女"},
@@ -187,6 +204,8 @@ data/
   ]
 }
 ```
+
+其中 `statistics.post_split_games` 表示从切分点开始收集到的后半段游戏数据，用于表达切分后的观察窗口；它不是严格不重叠意义上的“验证集”。
 
 这样设计的原因是：
 
