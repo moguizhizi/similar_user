@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -18,7 +17,7 @@ from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
-from similar_user.utils.pattern_storage import append_pattern_result
+from similar_user.utils.pattern_storage import save_pattern_result
 
 
 DEFAULT_CONFIG_PATH = Path("config/neo4j.yaml")
@@ -66,7 +65,7 @@ def run_patient_pattern_path_flow(
                 patient_id,
             )
         result = service.get_patient_pattern_paths(patient_id)
-        output_path = append_pattern_result(result, repository.query_config_path)
+        output_path = save_pattern_result(result, repository.query_config_path)
         LOGGER.info(
             "Completed patient pattern path flow: patient_id=%s, training_date_count=%s, path_count=%s, output_path=%s",
             patient_id,
@@ -78,7 +77,7 @@ def run_patient_pattern_path_flow(
 
 
 def main() -> int:
-    """Run the patient pattern path flow and print the JSON result."""
+    """Run the patient pattern path flow and persist the JSON result."""
     args = parse_args()
     try:
         run_patient_pattern_path_flow(
@@ -94,7 +93,7 @@ def main() -> int:
         )
         print(f"Patient pattern path flow failed: {exc}", file=sys.stderr)
         return 1
-    
+
     return 0
 
 
