@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from config.settings import load_query_settings
+from ..domain.path_models import (
+    PatientTasksetTaskGameTaskTasksetPatientPath,
+)
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,18 @@ class StoredPatternResult:
             "limit_recommendation": self.limit_recommendation,
             "paths": self.paths,
         }
+
+    def to_domain_paths(self) -> list[PatientTasksetTaskGameTaskTasksetPatientPath]:
+        """Convert stored raw path rows to typed domain path objects."""
+        return [
+            PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+                {
+                    **path,
+                    "pattern": self.pattern,
+                }
+            )
+            for path in self.paths
+        ]
 
 
 def get_pattern_result_output_dir(query_config_path: str | Path, pattern: str) -> Path:
