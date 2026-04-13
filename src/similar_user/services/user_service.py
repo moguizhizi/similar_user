@@ -139,9 +139,9 @@ class UserService:
         )
 
         LOGGER.debug(
-            "Patient pattern path flow result in service: patient_id=%s, statistics=%s, limit_recommendation=%s",
+            "Patient pattern path flow result in service: patient_id=%s, statistics_summary=%s, limit_recommendation=%s",
             patient_id,
-            statistics,
+            self._summarize_statistics_for_logging(statistics),
             limit_recommendation,
         )
 
@@ -283,6 +283,24 @@ class UserService:
             }
 
         return records[0]
+
+    @staticmethod
+    def _summarize_statistics_for_logging(
+        statistics: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """Return a log-safe statistics summary without dumping game-level details."""
+        if statistics is None:
+            return None
+
+        post_split_games = statistics.get("post_split_games")
+        post_split_games_size = (
+            len(post_split_games) if isinstance(post_split_games, list) else None
+        )
+        return {
+            "split_training_date": statistics.get("split_training_date"),
+            "before_split": statistics.get("before_split"),
+            "post_split_games_size": post_split_games_size,
+        }
 
     @staticmethod
     def _select_training_date_split_point(

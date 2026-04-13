@@ -1,5 +1,15 @@
 """Shared utilities."""
 
-from .pattern_storage import append_pattern_result, get_pattern_result_output_path
+from .pattern_storage import (
+    PatternResultStore,
+    get_patient_pattern_result_output_path,
+    get_pattern_result_output_dir,
+    save_pattern_result,
+)
 
-__all__ = ["append_pattern_result", "get_pattern_result_output_path"]
+__all__ = [
+    "PatternResultStore",
+    "get_patient_pattern_result_output_path",
+    "get_pattern_result_output_dir",
+    "save_pattern_result",
+]

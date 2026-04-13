@@ -124,12 +124,12 @@ class DebugQueryScriptTest(unittest.TestCase):
 
 class DebugPatientPatternPathsScriptTest(unittest.TestCase):
     @patch("scripts.debug_patient_pattern_paths.LOGGER")
-    @patch("scripts.debug_patient_pattern_paths.append_pattern_result")
+    @patch("scripts.debug_patient_pattern_paths.save_pattern_result")
     @patch("scripts.debug_patient_pattern_paths.Neo4jClient.from_config")
     def test_run_patient_pattern_path_flow_returns_service_result(
         self,
         mock_from_config: Mock,
-        mock_append_pattern_result: Mock,
+        mock_save_pattern_result: Mock,
         mock_logger: Mock,
     ) -> None:
         mock_client = Mock()
@@ -142,8 +142,8 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "paths": [],
         }
-        mock_append_pattern_result.return_value = Path(
-            "data/pattern_paths/PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT.jsonl"
+        mock_save_pattern_result.return_value = Path(
+            "data/pattern_paths/PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT/30/30010096.json"
         )
 
         with patch(
@@ -166,7 +166,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         mock_repository_cls.assert_called_once_with(client=mock_client)
         mock_service_cls.assert_called_once_with(kg_repository=mock_repository)
         mock_service.get_patient_pattern_paths.assert_called_once_with("30010096")
-        mock_append_pattern_result.assert_called_once_with(
+        mock_save_pattern_result.assert_called_once_with(
             {"patient_id": "30010096", "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT", "paths": []},
             "config/query.yaml",
         )
@@ -175,7 +175,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
     @patch("scripts.debug_patient_pattern_paths.run_patient_pattern_path_flow")
     @patch("scripts.debug_patient_pattern_paths.parse_args")
     @patch("builtins.print")
-    def test_main_prints_json_on_success(
+    def test_main_returns_zero_on_success_without_printing_result(
         self,
         mock_print: Mock,
         mock_parse_args: Mock,
@@ -195,18 +195,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         exit_code = patient_path_main()
 
         self.assertEqual(exit_code, 0)
-        mock_print.assert_called_once_with(
-            json.dumps(
-                {
-                    "patient_id": "30010096",
-                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                    "paths": [],
-                },
-                ensure_ascii=False,
-                indent=2,
-                default=str,
-            )
-        )
+        mock_print.assert_not_called()
 
 
 if __name__ == "__main__":
