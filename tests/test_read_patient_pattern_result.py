@@ -10,7 +10,10 @@ from unittest.mock import Mock, patch
 
 from scripts.read_patient_pattern_result import main, read_patient_pattern_result
 from similar_user.utils.pattern_storage import (
+    StoredGameSummary,
     StoredPatternResult,
+    StoredPatternStatistics,
+    StoredTrainingDateGames,
     save_pattern_result,
 )
 
@@ -142,6 +145,56 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
         self.assertEqual(domain_paths[0].p.id, "30010096")
         self.assertEqual(domain_paths[0].g.name, "打怪物")
         self.assertEqual(domain_paths[0].s2.训练日期, "2021-12-14")
+
+    def test_stored_pattern_result_wraps_statistics_post_split_games_as_classes(self) -> None:
+        result = StoredPatternResult.from_dict(
+            {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "ordered_training_dates": ["2022-05-01", "2022-05-22"],
+                "first_training_date": "2022-05-01",
+                "last_training_date": "2022-05-22",
+                "training_date_count": 2,
+                "statistics": {
+                    "split_training_date": "2022-05-22",
+                    "before_split": {"totalPaths": 10, "gCount": 4, "p2Count": 3},
+                    "post_split_games": [
+                        {
+                            "trainingDate": "2022-05-22",
+                            "games": [
+                                {"name": "数字筛选•进阶", "id": "41"},
+                                {"name": "大浪淘沙", "id": "48"},
+                            ],
+                        }
+                    ],
+                },
+                "limit_recommendation": None,
+                "paths": [],
+            }
+        )
+
+        self.assertIsInstance(result.statistics, StoredPatternStatistics)
+        assert result.statistics is not None
+        self.assertIsInstance(
+            result.statistics.post_split_games[0],
+            StoredTrainingDateGames,
+        )
+        self.assertIsInstance(
+            result.statistics.post_split_games[0].games[0],
+            StoredGameSummary,
+        )
+        self.assertEqual(
+            result.statistics.post_split_games[0].training_date,
+            "2022-05-22",
+        )
+        self.assertEqual(
+            result.statistics.post_split_games[0].games[0].name,
+            "数字筛选•进阶",
+        )
+        self.assertEqual(
+            result.to_dict()["statistics"]["post_split_games"][0]["games"][1]["id"],
+            "48",
+        )
 
 
 if __name__ == "__main__":
