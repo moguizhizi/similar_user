@@ -114,7 +114,7 @@ class StoredPatternResult:
     first_training_date: str | None = None
     last_training_date: str | None = None
     training_date_count: int = 0
-    statistics: StoredPatternStatistics | None = None
+    statistics: dict[str, Any] | None = None
     limit_recommendation: dict[str, Any] | None = None
     paths: list[dict[str, Any]] = field(default_factory=list)
 
@@ -143,11 +143,9 @@ class StoredPatternResult:
                 else None
             ),
             training_date_count=int(data.get("training_date_count", 0) or 0),
-            statistics=(
-                StoredPatternStatistics.from_dict(data["statistics"])
-                if isinstance(data.get("statistics"), dict)
-                else None
-            ),
+            statistics=data.get("statistics")
+            if isinstance(data.get("statistics"), dict) or data.get("statistics") is None
+            else None,
             limit_recommendation=data.get("limit_recommendation")
             if isinstance(data.get("limit_recommendation"), dict)
             or data.get("limit_recommendation") is None
@@ -164,7 +162,7 @@ class StoredPatternResult:
             "first_training_date": self.first_training_date,
             "last_training_date": self.last_training_date,
             "training_date_count": self.training_date_count,
-            "statistics": self.statistics.to_dict() if self.statistics is not None else None,
+            "statistics": self.statistics,
             "limit_recommendation": self.limit_recommendation,
             "paths": self.paths,
         }
@@ -180,6 +178,12 @@ class StoredPatternResult:
             )
             for path in self.paths
         ]
+
+    def to_stored_statistics(self) -> StoredPatternStatistics | None:
+        """Convert stored raw statistics to a typed statistics object."""
+        if self.statistics is None:
+            return None
+        return StoredPatternStatistics.from_dict(self.statistics)
 
 
 def get_pattern_result_output_dir(query_config_path: str | Path, pattern: str) -> Path:
