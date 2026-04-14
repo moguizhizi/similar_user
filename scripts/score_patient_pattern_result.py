@@ -46,6 +46,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Only score one path at the given zero-based index.",
     )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+        help="Return the top-k scored paths ordered by total_score descending.",
+    )
     return parser.parse_args()
 
 
@@ -55,10 +61,14 @@ def score_patient_pattern_result(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     query_config_path: str | Path = DEFAULT_QUERY_CONFIG_PATH,
     path_index: int | None = None,
+    top_k: int | None = None,
 ) -> dict[str, object]:
     """Load a saved patient result and score its domain paths."""
     stored_result = PatternResultStore(query_config_path).load(pattern, patient_id)
     domain_paths = stored_result.to_domain_paths()
+
+    if top_k is not None and top_k <= 0:
+        raise ValueError(f"top_k must be greater than 0, got {top_k}.")
 
     if path_index is not None:
         if path_index < 0 or path_index >= len(domain_paths):
@@ -78,6 +88,14 @@ def score_patient_pattern_result(
         }
         for index, path in selected
     ]
+    if path_index is None:
+        scored_paths.sort(
+            key=lambda item: float(item["score"]["total_score"]),  # type: ignore[index]
+            reverse=True,
+        )
+        if top_k is not None:
+            scored_paths = scored_paths[:top_k]
+
     return {
         "patient_id": stored_result.patient_id,
         "pattern": stored_result.pattern,
@@ -96,6 +114,7 @@ def main() -> int:
             pattern=args.pattern,
             query_config_path=args.query_config,
             path_index=args.path_index,
+            top_k=args.top_k,
         )
     except Exception as exc:
         print(f"Score patient pattern result failed: {exc}", file=sys.stderr)

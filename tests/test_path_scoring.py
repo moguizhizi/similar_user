@@ -299,6 +299,83 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scored["scored_path_count"], 1)
         self.assertGreater(scored["scores"][0]["score"]["total_score"], 90)
 
+    def test_score_patient_pattern_result_returns_top_k_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "query.yaml"
+            output_dir = Path(temp_dir) / "pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "training_date_split:",
+                        "  min_training_dates: 5",
+                        "  before_ratio: 4",
+                        "  after_ratio: 1",
+                        "pattern_path_storage:",
+                        f'  output_dir: "{output_dir}"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "ordered_training_dates": [],
+                "first_training_date": None,
+                "last_training_date": None,
+                "training_date_count": 0,
+                "statistics": None,
+                "limit_recommendation": None,
+                "paths": [
+                    {
+                        "row": {
+                            "p": {"id": "30010096"},
+                            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+                            "i1": {"id": "30010096_20220522_348_a", "任务类型": "专属", "结果": "完成"},
+                            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+                            "i2": {
+                                "id": "20113562_20211214_348_a",
+                                "结果": "完成",
+                                "活跃": "是",
+                                "任务类型": "专属",
+                            },
+                            "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "本科"},
+                            "p2": {"id": "20113562"},
+                        }
+                    },
+                    {
+                        "row": {
+                            "p": {"id": "30010096"},
+                            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+                            "i1": {"id": "30010096_20220522_348_b", "任务类型": "专属", "结果": "完成"},
+                            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+                            "i2": {
+                                "id": "20113563_20211214_348_b",
+                                "结果": "未完成",
+                                "活跃": "否",
+                                "任务类型": "自由",
+                            },
+                            "s2": {"id": "20113563_20211214", "执行年龄": "88", "执行学历": "小学"},
+                            "p2": {"id": "20113563"},
+                        }
+                    },
+                ],
+            }
+            save_pattern_result(result, config_path)
+
+            scored = score_patient_pattern_result(
+                "30010096",
+                pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                query_config_path=config_path,
+                top_k=1,
+            )
+
+        self.assertEqual(scored["path_count"], 2)
+        self.assertEqual(scored["scored_path_count"], 1)
+        self.assertEqual(scored["scores"][0]["path_index"], 0)
+
     @patch("scripts.score_patient_pattern_result.parse_args")
     @patch("builtins.print")
     def test_main_prints_scored_result(
@@ -366,6 +443,7 @@ class PathScoringTest(unittest.TestCase):
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 query_config=str(config_path),
                 path_index=None,
+                top_k=None,
             )
 
             exit_code = main()
