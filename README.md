@@ -10,27 +10,55 @@
 similar_user/
 ├── config/
 │   ├── neo4j.yaml              # Neo4j 连接配置
+│   ├── query.yaml              # 固定模式路径查询与离线存储配置
 │   ├── similarity.yaml         # 相似度相关配置占位
 │   └── settings.py             # YAML 配置加载入口
+├── data/
+│   └── pattern_paths/          # 固定模式路径离线结果存储
+├── logs/
+│   └── similar_user.log        # 默认日志文件
 ├── scripts/
+│   ├── debug_patient_pattern_paths.py  # 调试固定模式路径查询
 │   ├── debug_query.py          # 直接连接 Neo4j 并执行验证查询
-│   └── run_api.py              # 启动本地 HTTP 调试服务
+│   ├── read_patient_pattern_result.py  # 读取本地离线保存的路径结果
+│   ├── run_api.py              # 启动本地 HTTP 调试服务
+│   └── score_patient_pattern_result.py # 对离线保存的路径结果打分
 ├── src/similar_user/
 │   ├── api/
 │   │   ├── app.py              # 最小 HTTP 服务，提供 /health/neo4j 和 /query
-│   │   ├── routes/             # 业务路由占位
-│   │   └── schemas.py          # 请求与响应结构占位
+│   │   ├── routes/
+│   │   │   └── user_routes.py  # 用户查询路由
+│   │   └── schemas.py          # 请求与响应结构
 │   ├── data_access/
-│   │   ├── neo4j_client.py     # Neo4j 驱动封装
-│   │   ├── cypher_queries.py   # Cypher 查询定义占位
-│   │   └── kg_repository.py    # 图谱读取仓储接口占位
-│   ├── domain/                 # 用户、物品、图谱结构等领域模型
+│   │   ├── cypher_queries.py   # Cypher 查询定义
+│   │   ├── kg_repository.py    # 图谱读取仓储
+│   │   └── neo4j_client.py     # Neo4j 驱动封装
+│   ├── domain/
+│   │   ├── graph_schema.py     # 固定路径模式定义
+│   │   ├── item.py             # TaskInstanceSet / TaskInstance / Game 节点模型
+│   │   ├── path_models.py      # 固定模式路径领域对象
+│   │   └── user.py             # 患者领域模型
 │   ├── pipelines/              # 构图、同步、相似度计算等批处理入口
-│   ├── services/               # 业务服务层
-│   └── utils/                  # 日志、指标、辅助函数
+│   ├── services/
+│   │   ├── path_scoring.py     # 固定模式路径规则打分
+│   │   ├── user_service.py     # 用户查询服务
+│   │   └── similarity/         # 相似度服务实现
+│   └── utils/
+│       ├── logger.py           # 日志工具
+│       ├── metrics.py          # 指标工具
+│       ├── helpers.py          # 辅助函数
+│       └── pattern_storage.py  # 固定模式路径离线存取
 ├── tests/
-│   ├── test_neo4j_client.py    # Neo4j 客户端和调试脚本测试
-│   └── test_api_app.py         # HTTP 健康检查与查询接口测试
+│   ├── test_api_app.py         # HTTP 健康检查与查询接口测试
+│   ├── test_domain_models.py   # 领域模型测试
+│   ├── test_kg_repository.py   # 图谱仓储测试
+│   ├── test_logger.py          # 日志工具测试
+│   ├── test_neo4j_client.py    # Neo4j 客户端测试
+│   ├── test_path_scoring.py    # 路径打分测试
+│   ├── test_pattern_storage.py # 离线存储测试
+│   ├── test_read_patient_pattern_result.py # 离线读取脚本测试
+│   └── test_user_service.py    # 用户服务测试
+├── pyproject.toml              # 项目依赖与 pytest 配置
 └── README.md
 ```
 
@@ -47,15 +75,17 @@ similar_user/
 
 ## 目录说明
 
-- `config/`：配置文件与配置加载
-- `src/similar_user/data_access/`：Neo4j 访问与仓储接口
-- `src/similar_user/domain/`：领域数据结构
-- `src/similar_user/services/`：核心业务逻辑
+- `config/`：Neo4j、查询和相似度配置
+- `data/pattern_paths/`：固定模式路径的离线 JSONL 数据
+- `logs/`：运行日志输出
+- `src/similar_user/data_access/`：Neo4j 访问与仓储封装
+- `src/similar_user/domain/`：图谱节点、路径模式和领域模型
+- `src/similar_user/services/`：用户服务、相似度服务和路径打分逻辑
 - `src/similar_user/pipelines/`：批处理或同步任务入口
-- `src/similar_user/api/`：服务化接口
-- `src/similar_user/utils/`：通用工具
+- `src/similar_user/api/`：HTTP 服务入口、路由与数据结构
+- `src/similar_user/utils/`：日志、指标、辅助函数和离线存储工具
 - `tests/`：针对性测试
-- `scripts/`：临时调试脚本
+- `scripts/`：本地调试、离线读取和路径打分脚本
 
 ## Query 配置说明
 
