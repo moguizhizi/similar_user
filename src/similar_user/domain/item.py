@@ -3,7 +3,68 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, TypeAlias
+
+
+EducationValue: TypeAlias = Literal[
+    "专科",
+    "中专",
+    "保密",
+    "初中",
+    "初中1年级",
+    "初中2年级",
+    "初中3年级",
+    "博士",
+    "博士后",
+    "大专",
+    "小学",
+    "小学1年级",
+    "小学2年级",
+    "小学3年级",
+    "小学4年级",
+    "小学5年级",
+    "小学6年级",
+    "幼儿园",
+    "未上过学",
+    "本科",
+    "研究生",
+    "高中",
+    "高中以后",
+]
+
+TASK_INSTANCE_SET_EDUCATION_VALUES: tuple[EducationValue, ...] = (
+    "专科",
+    "中专",
+    "保密",
+    "初中",
+    "初中1年级",
+    "初中2年级",
+    "初中3年级",
+    "博士",
+    "博士后",
+    "大专",
+    "小学",
+    "小学1年级",
+    "小学2年级",
+    "小学3年级",
+    "小学4年级",
+    "小学5年级",
+    "小学6年级",
+    "幼儿园",
+    "未上过学",
+    "本科",
+    "研究生",
+    "高中",
+    "高中以后",
+)
+
+TaskResultValue: TypeAlias = Literal["完成", "未完成"]
+
+TASK_INSTANCE_RESULT_VALUES: tuple[TaskResultValue, ...] = ("完成", "未完成")
+
+TaskActivityValue: TypeAlias = Literal["是", "否"]
+
+TASK_INSTANCE_ACTIVITY_VALUES: tuple[TaskActivityValue, ...] = ("是", "否")
 
 
 @dataclass(frozen=True)
@@ -14,7 +75,8 @@ class TaskInstanceSetNode:
     name: str | None = None
     训练日期: str | None = None
     执行年龄: str | None = None
-    执行学历: str | None = None
+    # 基于当前库中 TaskInstanceSet.执行学历 的实际取值收紧字段类型。
+    执行学历: EducationValue | None = None
 
 
 @dataclass(frozen=True)
@@ -25,8 +87,10 @@ class TaskInstanceNode:
     name: str | None = None
     得分: str | None = None
     常模分: str | None = None
-    结果: str | None = None
-    活跃: str | None = None
+    # 基于当前路径评分逻辑收紧为固定结果取值。
+    结果: TaskResultValue | None = None
+    # 基于当前业务约束收紧为固定活跃取值。
+    活跃: TaskActivityValue | None = None
     任务类型: str | None = None
     状态: str | None = None
 

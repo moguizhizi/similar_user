@@ -6,6 +6,9 @@ import unittest
 
 from src.similar_user.domain import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    TASK_INSTANCE_ACTIVITY_VALUES,
+    TASK_INSTANCE_RESULT_VALUES,
+    TASK_INSTANCE_SET_EDUCATION_VALUES,
     GameNode,
     PathPattern,
     PatientNode,
@@ -46,6 +49,69 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(result.pattern, PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT)
         self.assertEqual(result.paths[0].g.name, "打怪物")
 
+    def test_task_instance_set_education_values_are_bound_to_domain_field(self) -> None:
+        self.assertIn("高中以后", TASK_INSTANCE_SET_EDUCATION_VALUES)
+        self.assertIn("保密", TASK_INSTANCE_SET_EDUCATION_VALUES)
+
+        path = PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+            {
+                "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+                "row": {
+                    "p": {"id": "40"},
+                    "s1": {"id": "40_20220401", "执行学历": "高中以后"},
+                    "i1": {"id": "40_20220401_8_x"},
+                    "g": {"id": "8"},
+                    "i2": {"id": "20102799_20230123_8_y"},
+                    "s2": {"id": "20102799_20230123", "执行学历": "专科"},
+                    "p2": {"id": "20102799"},
+                },
+            }
+        )
+
+        self.assertEqual(path.s1.执行学历, "高中以后")
+        self.assertEqual(path.s2.执行学历, "专科")
+
+    def test_task_instance_result_values_are_bound_to_domain_field(self) -> None:
+        self.assertEqual(TASK_INSTANCE_RESULT_VALUES, ("完成", "未完成"))
+
+        path = PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+            {
+                "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+                "row": {
+                    "p": {"id": "40"},
+                    "s1": {"id": "40_20220401"},
+                    "i1": {"id": "40_20220401_8_x", "结果": "完成"},
+                    "g": {"id": "8"},
+                    "i2": {"id": "20102799_20230123_8_y", "结果": "未完成"},
+                    "s2": {"id": "20102799_20230123"},
+                    "p2": {"id": "20102799"},
+                },
+            }
+        )
+
+        self.assertEqual(path.i1.结果, "完成")
+        self.assertEqual(path.i2.结果, "未完成")
+
+    def test_task_instance_activity_values_are_bound_to_domain_field(self) -> None:
+        self.assertEqual(TASK_INSTANCE_ACTIVITY_VALUES, ("是", "否"))
+
+        path = PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+            {
+                "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+                "row": {
+                    "p": {"id": "40"},
+                    "s1": {"id": "40_20220401"},
+                    "i1": {"id": "40_20220401_8_x", "结果": "完成"},
+                    "g": {"id": "8"},
+                    "i2": {"id": "20102799_20230123_8_y", "结果": "未完成", "活跃": "是"},
+                    "s2": {"id": "20102799_20230123"},
+                    "p2": {"id": "20102799"},
+                },
+            }
+        )
+
+        self.assertEqual(path.i2.活跃, "是")
+
     def test_patient_taskset_task_game_task_taskset_patient_path_can_be_built_from_dict(
         self,
     ) -> None:
@@ -72,6 +138,57 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(path.g.name, "打怪物")
         self.assertEqual(path.i1.状态, "完成")
         self.assertIsNone(path.g.艺术风格)
+
+    def test_task_instance_set_rejects_unsupported_education_value_from_dict(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported value"):
+            PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+                {
+                    "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+                    "row": {
+                        "p": {"id": "40"},
+                        "s1": {"id": "40_20220401", "执行学历": "夜校"},
+                        "i1": {"id": "40_20220401_8_x"},
+                        "g": {"id": "8"},
+                        "i2": {"id": "20102799_20230123_8_y"},
+                        "s2": {"id": "20102799_20230123"},
+                        "p2": {"id": "20102799"},
+                    },
+                }
+            )
+
+    def test_task_instance_rejects_unsupported_result_value_from_dict(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported value"):
+            PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+                {
+                    "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+                    "row": {
+                        "p": {"id": "40"},
+                        "s1": {"id": "40_20220401"},
+                        "i1": {"id": "40_20220401_8_x", "结果": "达标"},
+                        "g": {"id": "8"},
+                        "i2": {"id": "20102799_20230123_8_y", "结果": "未完成"},
+                        "s2": {"id": "20102799_20230123"},
+                        "p2": {"id": "20102799"},
+                    },
+                }
+            )
+
+    def test_task_instance_rejects_unsupported_activity_value_from_dict(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported value"):
+            PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+                {
+                    "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+                    "row": {
+                        "p": {"id": "40"},
+                        "s1": {"id": "40_20220401"},
+                        "i1": {"id": "40_20220401_8_x", "结果": "完成"},
+                        "g": {"id": "8"},
+                        "i2": {"id": "20102799_20230123_8_y", "结果": "未完成", "活跃": "高"},
+                        "s2": {"id": "20102799_20230123"},
+                        "p2": {"id": "20102799"},
+                    },
+                }
+            )
 
     def test_game_node_can_load_extended_properties_from_dict(self) -> None:
         path = PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(

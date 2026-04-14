@@ -6,7 +6,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from .graph_schema import PathPattern
-from .item import GameNode, TaskInstanceNode, TaskInstanceSetNode
+from .item import (
+    TASK_INSTANCE_ACTIVITY_VALUES,
+    TASK_INSTANCE_RESULT_VALUES,
+    TaskActivityValue,
+    EducationValue,
+    TASK_INSTANCE_SET_EDUCATION_VALUES,
+    GameNode,
+    TaskResultValue,
+    TaskInstanceNode,
+    TaskInstanceSetNode,
+)
 from .user import PatientNode
 
 
@@ -84,7 +94,7 @@ def _build_task_instance_set_node(
         name=_optional_string(data.get("name")),
         训练日期=_optional_string(data.get("训练日期")),
         执行年龄=_optional_string(data.get("执行年龄")),
-        执行学历=_optional_string(data.get("执行学历")),
+        执行学历=_optional_education_value(data.get("执行学历"), f"{field_name}.执行学历"),
     )
 
 
@@ -96,8 +106,8 @@ def _build_task_instance_node(value: object, field_name: str) -> TaskInstanceNod
         name=_optional_string(data.get("name")),
         得分=_optional_string(data.get("得分")),
         常模分=_optional_string(data.get("常模分")),
-        结果=_optional_string(data.get("结果")),
-        活跃=_optional_string(data.get("活跃")),
+        结果=_optional_result_value(data.get("结果"), f"{field_name}.结果"),
+        活跃=_optional_activity_value(data.get("活跃"), f"{field_name}.活跃"),
         任务类型=_optional_string(data.get("任务类型")),
         状态=_optional_string(data.get("状态")),
     )
@@ -130,3 +140,51 @@ def _optional_string(value: object) -> str | None:
     if not isinstance(value, str):
         return str(value)
     return value
+
+
+def _optional_education_value(value: object, field_name: str) -> EducationValue | None:
+    """Normalize and validate TaskInstanceSet.执行学历."""
+    normalized = _optional_string(value)
+    if normalized is None:
+        return None
+    normalized = normalized.strip()
+    if not normalized:
+        return None
+    if normalized not in TASK_INSTANCE_SET_EDUCATION_VALUES:
+        raise ValueError(
+            f"{field_name} has unsupported value {normalized!r}; "
+            "expected one of the observed TaskInstanceSet.执行学历 values."
+        )
+    return normalized
+
+
+def _optional_result_value(value: object, field_name: str) -> TaskResultValue | None:
+    """Normalize and validate TaskInstance.结果."""
+    normalized = _optional_string(value)
+    if normalized is None:
+        return None
+    normalized = normalized.strip()
+    if not normalized:
+        return None
+    if normalized not in TASK_INSTANCE_RESULT_VALUES:
+        raise ValueError(
+            f"{field_name} has unsupported value {normalized!r}; "
+            "expected one of the supported TaskInstance.结果 values."
+        )
+    return normalized
+
+
+def _optional_activity_value(value: object, field_name: str) -> TaskActivityValue | None:
+    """Normalize and validate TaskInstance.活跃."""
+    normalized = _optional_string(value)
+    if normalized is None:
+        return None
+    normalized = normalized.strip()
+    if not normalized:
+        return None
+    if normalized not in TASK_INSTANCE_ACTIVITY_VALUES:
+        raise ValueError(
+            f"{field_name} has unsupported value {normalized!r}; "
+            "expected one of the supported TaskInstance.活跃 values."
+        )
+    return normalized
