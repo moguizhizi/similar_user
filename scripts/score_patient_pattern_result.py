@@ -18,10 +18,12 @@ from similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
 )
 from similar_user.services.path_scoring import PathScorer
+from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore
 
 
 DEFAULT_QUERY_CONFIG_PATH = Path("config/query.yaml")
+LOGGER = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,7 +108,7 @@ def score_patient_pattern_result(
 
 
 def main() -> int:
-    """Score saved patient pattern paths and print JSON output."""
+    """Score saved patient pattern paths and log JSON output."""
     args = parse_args()
     try:
         result = score_patient_pattern_result(
@@ -117,10 +119,10 @@ def main() -> int:
             top_k=args.top_k,
         )
     except Exception as exc:
-        print(f"Score patient pattern result failed: {exc}", file=sys.stderr)
+        LOGGER.exception("Score patient pattern result failed: %s", exc)
         return 1
 
-    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    LOGGER.info(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     return 0
 
 

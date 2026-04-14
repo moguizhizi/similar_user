@@ -376,12 +376,12 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scored["scored_path_count"], 1)
         self.assertEqual(scored["scores"][0]["path_index"], 0)
 
+    @patch("scripts.score_patient_pattern_result.LOGGER")
     @patch("scripts.score_patient_pattern_result.parse_args")
-    @patch("builtins.print")
     def test_main_prints_scored_result(
         self,
-        mock_print: Mock,
         mock_parse_args: Mock,
+        mock_logger: Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "query.yaml"
@@ -449,9 +449,29 @@ class PathScoringTest(unittest.TestCase):
             exit_code = main()
 
         self.assertEqual(exit_code, 0)
-        mock_print.assert_called_once_with(
+        mock_logger.info.assert_called_once_with(
             json.dumps(expected, ensure_ascii=False, indent=2, default=str)
         )
+
+    @patch("scripts.score_patient_pattern_result.LOGGER")
+    @patch("scripts.score_patient_pattern_result.parse_args")
+    def test_main_logs_error_when_scoring_fails(
+        self,
+        mock_parse_args: Mock,
+        mock_logger: Mock,
+    ) -> None:
+        mock_parse_args.return_value = Mock(
+            patient_id="missing",
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            query_config="missing.yaml",
+            path_index=None,
+            top_k=None,
+        )
+
+        exit_code = main()
+
+        self.assertEqual(exit_code, 1)
+        mock_logger.exception.assert_called_once()
 
 
 if __name__ == "__main__":
