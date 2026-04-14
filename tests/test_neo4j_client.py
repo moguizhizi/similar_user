@@ -101,19 +101,19 @@ class DebugQueryScriptTest(unittest.TestCase):
             "RETURN 1 AS ok, 'neo4j connected' AS message"
         )
 
+    @patch("scripts.debug_query.LOGGER")
     @patch("scripts.debug_query.run_debug_query")
-    @patch("builtins.print")
-    def test_main_prints_json_on_success(
+    def test_main_logs_json_on_success(
         self,
-        mock_print: Mock,
         mock_run_debug_query: Mock,
+        mock_logger: Mock,
     ) -> None:
         mock_run_debug_query.return_value = [{"ok": 1, "message": "neo4j connected"}]
 
         exit_code = main()
 
         self.assertEqual(exit_code, 0)
-        mock_print.assert_called_once_with(
+        mock_logger.info.assert_called_once_with(
             json.dumps(
                 [{"ok": 1, "message": "neo4j connected"}],
                 ensure_ascii=False,
@@ -172,14 +172,14 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         )
         mock_logger.info.assert_called()
 
+    @patch("scripts.debug_patient_pattern_paths.LOGGER")
     @patch("scripts.debug_patient_pattern_paths.run_patient_pattern_path_flow")
     @patch("scripts.debug_patient_pattern_paths.parse_args")
-    @patch("builtins.print")
-    def test_main_returns_zero_on_success_without_printing_result(
+    def test_main_returns_zero_on_success_without_logging_error(
         self,
-        mock_print: Mock,
         mock_parse_args: Mock,
         mock_run_flow: Mock,
+        mock_logger: Mock,
     ) -> None:
         mock_parse_args.return_value = Mock(
             patient_id="30010096",
@@ -195,7 +195,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         exit_code = patient_path_main()
 
         self.assertEqual(exit_code, 0)
-        mock_print.assert_not_called()
+        mock_logger.exception.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -14,10 +14,12 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
         sys.path.insert(0, candidate_str)
 
 from similar_user.data_access.neo4j_client import Neo4jClient
+from similar_user.utils.logger import get_logger
 
 
 DEFAULT_CONFIG_PATH = Path("config/neo4j.yaml")
 DEFAULT_QUERY = "RETURN 1 AS ok, 'neo4j connected' AS message"
+LOGGER = get_logger(__name__)
 
 
 def run_debug_query(
@@ -30,14 +32,14 @@ def run_debug_query(
 
 
 def main() -> int:
-    """Run a simple query and print JSON output for quick verification."""
+    """Run a simple query and log JSON output for quick verification."""
     try:
         result = run_debug_query()
     except Exception as exc:
-        print(f"Neo4j query failed: {exc}", file=sys.stderr)
+        LOGGER.exception("Neo4j query failed: %s", exc)
         return 1
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    LOGGER.info(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 

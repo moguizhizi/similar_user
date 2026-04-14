@@ -17,10 +17,12 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
 from similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
 )
+from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore, StoredPatternResult
 
 
 DEFAULT_QUERY_CONFIG_PATH = Path("config/query.yaml")
+LOGGER = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,7 +55,7 @@ def read_patient_pattern_result(
 
 
 def main() -> int:
-    """Read and print one saved patient pattern result."""
+    """Read and log one saved patient pattern result."""
     args = parse_args()
     try:
         result = read_patient_pattern_result(
@@ -62,10 +64,10 @@ def main() -> int:
             query_config_path=args.query_config,
         )
     except Exception as exc:
-        print(f"Read patient pattern result failed: {exc}", file=sys.stderr)
+        LOGGER.exception("Read patient pattern result failed: %s", exc)
         return 1
 
-    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=str))
+    LOGGER.info(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=str))
     return 0
 
 
