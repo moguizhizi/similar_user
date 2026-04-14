@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..domain.item import GameNode
 from ..domain.path_models import PatientTasksetTaskGameTaskTasksetPatientPath
 
 
@@ -17,6 +18,7 @@ class PathScoreBreakdown:
     age_score: float | None
     completion_score: float | None
     activity_score: float | None
+    task_type_score: float | None
     task_relevance_score: float | None
     used_weights: dict[str, float] = field(default_factory=dict)
     details: dict[str, str] = field(default_factory=dict)
@@ -29,6 +31,7 @@ class PathScoreBreakdown:
             "age_score": self.age_score,
             "completion_score": self.completion_score,
             "activity_score": self.activity_score,
+            "task_type_score": self.task_type_score,
             "task_relevance_score": self.task_relevance_score,
             "used_weights": self.used_weights,
             "details": self.details,
@@ -43,7 +46,8 @@ class PathScorer:
     age_weight: float = 0.20
     completion_weight: float = 0.25
     activity_weight: float = 0.15
-    task_relevance_weight: float = 0.25
+    task_type_weight: float = 0.10
+    task_relevance_weight: float = 0.15
 
     EDUCATION_NORMALIZATION = {
         "专科": "大专",
@@ -76,15 +80,6 @@ class PathScorer:
         "博士后": 17,
     }
 
-    TASK_TYPE_GROUPS = {
-        "句子识别": "语言认知",
-        "语义判断": "语言认知",
-        "词语理解": "语言认知",
-        "听觉注意": "注意功能",
-        "视觉注意": "注意功能",
-        "注意训练": "注意功能",
-    }
-
     def score(
         self,
         path: PatientTasksetTaskGameTaskTasksetPatientPath,
@@ -94,6 +89,7 @@ class PathScorer:
         age_score, age_detail = self._score_age(path)
         completion_score, completion_detail = self._score_completion(path)
         activity_score, activity_detail = self._score_activity(path)
+        task_type_score, task_type_detail = self._score_task_type(path)
         task_relevance_score, task_relevance_detail = self._score_task_relevance(path)
 
         scores = {
@@ -101,6 +97,7 @@ class PathScorer:
             "age": age_score,
             "completion": completion_score,
             "activity": activity_score,
+            "task_type": task_type_score,
             "task_relevance": task_relevance_score,
         }
         weights = {
@@ -108,6 +105,7 @@ class PathScorer:
             "age": self.age_weight,
             "completion": self.completion_weight,
             "activity": self.activity_weight,
+            "task_type": self.task_type_weight,
             "task_relevance": self.task_relevance_weight,
         }
         active_weights = {
@@ -130,6 +128,7 @@ class PathScorer:
             age_score=age_score,
             completion_score=completion_score,
             activity_score=activity_score,
+            task_type_score=task_type_score,
             task_relevance_score=task_relevance_score,
             used_weights={key: round(value, 4) for key, value in normalized_weights.items()},
             details={
@@ -137,6 +136,7 @@ class PathScorer:
                 "age": age_detail,
                 "completion": completion_detail,
                 "activity": activity_detail,
+                "task_type": task_type_detail,
                 "task_relevance": task_relevance_detail,
             },
         )
@@ -210,30 +210,45 @@ class PathScorer:
             return 20.0, f"活跃={activity}"
         return None, f"活跃={activity}，不在支持范围内，跳过该项"
 
-    def _score_task_relevance(
+    def _score_task_type(
         self,
         path: PatientTasksetTaskGameTaskTasksetPatientPath,
     ) -> tuple[float | None, str]:
         task1 = self._normalize_text(path.i1.任务类型)
         task2 = self._normalize_text(path.i2.任务类型)
-        game_task = self._normalize_text(path.g.任务类型)
-
-        if task1 is None and task2 is None and game_task is None:
+        if task1 is None or task2 is None:
             return None, "任务类型缺失，跳过该项"
-        if task1 is not None and task2 is not None and task1 == task2:
-            return 100.0, f"任务类型一致: {task1}"
-        if task1 is not None and game_task is not None and task1 == game_task:
-            return 80.0, f"当前任务类型与游戏任务类型一致: {task1}"
-        if task2 is not None and game_task is not None and task2 == game_task:
-            return 80.0, f"相似任务类型与游戏任务类型一致: {task2}"
+        if task1 == task2:
+            return 100.0, f"专属类型一致: {task1}"
+        return 30.0, f"专属类型不一致: {task1}/{task2}"
 
-        group1 = self.TASK_TYPE_GROUPS.get(task1 or "")
-        group2 = self.TASK_TYPE_GROUPS.get(task2 or "")
-        if group1 is not None and group1 == group2:
-            return 70.0, f"任务类型同属{group1}"
-        if task1 is not None or task2 is not None or game_task is not None:
-            return 30.0, "任务类型不完全匹配"
-        return None, "任务类型缺失，跳过该项"
+    def _score_task_relevance(
+        self,
+        path: PatientTasksetTaskGameTaskTasksetPatientPath,
+    ) -> tuple[float | None, str]:
+        games = self._extract_games_for_relevance(path)
+        if len(games) < 2:
+            return None, "当前path上不足两个g，无法计算两个g之间的相关度，跳过该项"
+
+        left_game, right_game = games[0], games[1]
+        left_task_type = self._normalize_text(left_game.任务类型)
+        right_task_type = self._normalize_text(right_game.任务类型)
+        if left_task_type is None or right_task_type is None:
+            return None, "game任务类型缺失，无法计算两个g之间的相关度，跳过该项"
+        if left_task_type == right_task_type:
+            return 100.0, f"两个g的任务类型一致: {left_task_type}"
+        return 30.0, f"两个g的任务类型不一致: {left_task_type}/{right_task_type}"
+
+    @staticmethod
+    def _extract_games_for_relevance(
+        path: PatientTasksetTaskGameTaskTasksetPatientPath,
+    ) -> list[GameNode]:
+        games: list[GameNode] = []
+        for attr_name in ("g1", "g2", "g"):
+            value = getattr(path, attr_name, None)
+            if isinstance(value, GameNode):
+                games.append(value)
+        return games
 
     def _map_education_rank(self, value: str | None) -> int | None:
         normalized = self._normalize_text(value)

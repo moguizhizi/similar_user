@@ -7,12 +7,14 @@ from typing import Any
 
 from .graph_schema import PathPattern
 from .item import (
+    TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES,
     TASK_INSTANCE_ACTIVITY_VALUES,
     TASK_INSTANCE_RESULT_VALUES,
     TaskActivityValue,
     EducationValue,
     TASK_INSTANCE_SET_EDUCATION_VALUES,
     GameNode,
+    TaskExclusiveTypeValue,
     TaskResultValue,
     TaskInstanceNode,
     TaskInstanceSetNode,
@@ -108,7 +110,7 @@ def _build_task_instance_node(value: object, field_name: str) -> TaskInstanceNod
         常模分=_optional_string(data.get("常模分")),
         结果=_optional_result_value(data.get("结果"), f"{field_name}.结果"),
         活跃=_optional_activity_value(data.get("活跃"), f"{field_name}.活跃"),
-        任务类型=_optional_string(data.get("任务类型")),
+        任务类型=_optional_exclusive_type_value(data.get("任务类型"), f"{field_name}.任务类型"),
         状态=_optional_string(data.get("状态")),
     )
 
@@ -186,5 +188,23 @@ def _optional_activity_value(value: object, field_name: str) -> TaskActivityValu
         raise ValueError(
             f"{field_name} has unsupported value {normalized!r}; "
             "expected one of the supported TaskInstance.活跃 values."
+        )
+    return normalized
+
+
+def _optional_exclusive_type_value(
+    value: object, field_name: str
+) -> TaskExclusiveTypeValue | None:
+    """Normalize and validate TaskInstance.任务类型."""
+    normalized = _optional_string(value)
+    if normalized is None:
+        return None
+    normalized = normalized.strip()
+    if not normalized:
+        return None
+    if normalized not in TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES:
+        raise ValueError(
+            f"{field_name} has unsupported value {normalized!r}; "
+            "expected one of the supported TaskInstance.任务类型 values."
         )
     return normalized

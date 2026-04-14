@@ -37,7 +37,7 @@ class PathScoringTest(unittest.TestCase):
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
             s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
-            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="句子识别", 结果="完成"),
+            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="专属", 结果="完成"),
             g=GameNode(id="348", name="真假句辨别", 任务类型="句子识别"),
             i2=TaskInstanceNode(
                 id="20113562_20211214_348_y",
@@ -45,7 +45,7 @@ class PathScoringTest(unittest.TestCase):
                 常模分="102",
                 结果="完成",
                 活跃="是",
-                任务类型="句子识别",
+                任务类型="专属",
                 状态="完成",
             ),
             s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="本科"),
@@ -58,8 +58,11 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(result.education_score, 100.0)
         self.assertEqual(result.age_score, 100.0)
         self.assertEqual(result.activity_score, 100.0)
-        self.assertEqual(result.task_relevance_score, 100.0)
+        self.assertEqual(result.task_type_score, 100.0)
+        self.assertIsNone(result.task_relevance_score)
         self.assertIn("学历一致", result.details["education"])
+        self.assertIn("专属类型一致", result.details["task_type"])
+        self.assertIn("当前path上不足两个g", result.details["task_relevance"])
 
     def test_path_scorer_scores_neighboring_observed_education_levels(self) -> None:
         scorer = PathScorer()
@@ -67,7 +70,7 @@ class PathScoringTest(unittest.TestCase):
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
             s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="高中以后"),
-            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="句子识别", 结果="完成"),
+            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="专属", 结果="完成"),
             g=GameNode(id="348", name="真假句辨别", 任务类型="句子识别"),
             i2=TaskInstanceNode(
                 id="20113562_20211214_348_y",
@@ -75,7 +78,7 @@ class PathScoringTest(unittest.TestCase):
                 常模分="102",
                 结果="完成",
                 活跃="是",
-                任务类型="句子识别",
+                任务类型="专属",
                 状态="完成",
             ),
             s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="专科"),
@@ -93,7 +96,7 @@ class PathScoringTest(unittest.TestCase):
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
             s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
-            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="句子识别", 结果="完成"),
+            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="专属", 结果="完成"),
             g=GameNode(id="348", name="真假句辨别", 任务类型="句子识别"),
             i2=TaskInstanceNode(
                 id="20113562_20211214_348_y",
@@ -101,7 +104,7 @@ class PathScoringTest(unittest.TestCase):
                 常模分="55",
                 结果="完成",
                 活跃="是",
-                任务类型="句子识别",
+                任务类型="专属",
                 状态="失败",
             ),
             s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="本科"),
@@ -119,13 +122,13 @@ class PathScoringTest(unittest.TestCase):
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
             s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
-            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="句子识别", 结果="完成"),
+            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="专属", 结果="完成"),
             g=GameNode(id="348", name="真假句辨别", 任务类型="句子识别"),
             i2=TaskInstanceNode(
                 id="20113562_20211214_348_y",
                 结果="未完成",
                 活跃="是",
-                任务类型="句子识别",
+                任务类型="专属",
             ),
             s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="本科"),
             p2=PatientNode(id="20113562"),
@@ -142,13 +145,13 @@ class PathScoringTest(unittest.TestCase):
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
             s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
-            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="句子识别", 结果="完成"),
+            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="专属", 结果="完成"),
             g=GameNode(id="348", name="真假句辨别", 任务类型="句子识别"),
             i2=TaskInstanceNode(
                 id="20113562_20211214_348_y",
                 结果="完成",
                 活跃="否",
-                任务类型="句子识别",
+                任务类型="专属",
             ),
             s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="本科"),
             p2=PatientNode(id="20113562"),
@@ -158,6 +161,73 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(result.activity_score, 20.0)
         self.assertEqual(result.details["activity"], "活跃=否")
+
+    def test_path_scorer_task_type_scores_task_instance_exclusive_type(self) -> None:
+        scorer = PathScorer()
+        path = PatientTasksetTaskGameTaskTasksetPatientPath(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            p=PatientNode(id="30010096"),
+            s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
+            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="专属", 结果="完成"),
+            g=GameNode(id="348", name="真假句辨别", 任务类型="语义判断"),
+            i2=TaskInstanceNode(
+                id="20113562_20211214_348_y",
+                结果="完成",
+                活跃="是",
+                任务类型="自由",
+            ),
+            s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="本科"),
+            p2=PatientNode(id="20113562"),
+        )
+
+        result = scorer.score(path)
+
+        self.assertEqual(result.task_type_score, 30.0)
+        self.assertIn("专属类型不一致: 专属/自由", result.details["task_type"])
+
+    def test_path_scorer_task_type_returns_none_when_task_type_missing(self) -> None:
+        scorer = PathScorer()
+        path = PatientTasksetTaskGameTaskTasksetPatientPath(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            p=PatientNode(id="30010096"),
+            s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
+            i1=TaskInstanceNode(id="30010096_20220522_348_x", 结果="完成"),
+            g=GameNode(id="348", name="真假句辨别", 任务类型="句子识别"),
+            i2=TaskInstanceNode(id="20113562_20211214_348_y", 结果="完成", 活跃="是"),
+            s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="本科"),
+            p2=PatientNode(id="20113562"),
+        )
+
+        result = scorer.score(path)
+
+        self.assertIsNone(result.task_type_score)
+        self.assertEqual(result.details["task_type"], "任务类型缺失，跳过该项")
+
+    def test_path_scorer_task_relevance_returns_none_when_only_one_game_exists(self) -> None:
+        scorer = PathScorer()
+        path = PatientTasksetTaskGameTaskTasksetPatientPath(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            p=PatientNode(id="30010096"),
+            s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
+            i1=TaskInstanceNode(id="30010096_20220522_348_x", 任务类型="专属", 结果="完成"),
+            g=GameNode(id="348", name="真假句辨别", 任务类型="句子识别"),
+            i2=TaskInstanceNode(
+                id="20113562_20211214_348_y",
+                结果="完成",
+                活跃="是",
+                任务类型="专属",
+            ),
+            s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="本科"),
+            p2=PatientNode(id="20113562"),
+        )
+
+        result = scorer.score(path)
+
+        self.assertIsNone(result.task_relevance_score)
+        self.assertEqual(
+            result.details["task_relevance"],
+            "当前path上不足两个g，无法计算两个g之间的相关度，跳过该项",
+        )
 
     def test_score_patient_pattern_result_scores_saved_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -193,14 +263,14 @@ class PathScoringTest(unittest.TestCase):
                         "row": {
                             "p": {"id": "30010096"},
                             "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
-                            "i1": {"id": "30010096_20220522_348_x", "任务类型": "句子识别", "结果": "完成"},
+                            "i1": {"id": "30010096_20220522_348_x", "任务类型": "专属", "结果": "完成"},
                             "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
                             "i2": {
                                 "id": "20113562_20211214_348_y",
                                 "常模分": "102",
                                 "结果": "完成",
                                 "活跃": "是",
-                                "任务类型": "句子识别",
+                                "任务类型": "专属",
                                 "状态": "完成",
                             },
                             "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "本科"},
@@ -261,14 +331,14 @@ class PathScoringTest(unittest.TestCase):
                         "row": {
                             "p": {"id": "30010096"},
                             "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
-                            "i1": {"id": "30010096_20220522_348_x", "任务类型": "句子识别", "结果": "完成"},
+                            "i1": {"id": "30010096_20220522_348_x", "任务类型": "专属", "结果": "完成"},
                             "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
                             "i2": {
                                 "id": "20113562_20211214_348_y",
                                 "常模分": "102",
                                 "结果": "完成",
                                 "活跃": "是",
-                                "任务类型": "句子识别",
+                                "任务类型": "专属",
                                 "状态": "完成",
                             },
                             "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "本科"},
