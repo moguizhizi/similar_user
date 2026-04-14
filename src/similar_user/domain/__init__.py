@@ -5,12 +5,14 @@ from .graph_schema import (
     PathPattern,
 )
 from .item import (
+    TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES,
     TASK_INSTANCE_ACTIVITY_VALUES,
     TASK_INSTANCE_RESULT_VALUES,
     TaskActivityValue,
     TASK_INSTANCE_SET_EDUCATION_VALUES,
     EducationValue,
     GameNode,
+    TaskExclusiveTypeValue,
     TaskResultValue,
     TaskInstanceNode,
     TaskInstanceSetNode,
@@ -32,8 +34,10 @@ __all__ = [
     "TaskActivityValue",
     "TASK_INSTANCE_SET_EDUCATION_VALUES",
     "TASK_INSTANCE_ACTIVITY_VALUES",
+    "TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES",
     "TaskResultValue",
     "TASK_INSTANCE_RESULT_VALUES",
+    "TaskExclusiveTypeValue",
     "TaskInstanceNode",
     "TaskInstanceSetNode",
 ]

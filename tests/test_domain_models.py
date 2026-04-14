@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from src.similar_user.domain import (
+    TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES,
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     TASK_INSTANCE_ACTIVITY_VALUES,
     TASK_INSTANCE_RESULT_VALUES,
@@ -112,6 +113,27 @@ class DomainModelsTest(unittest.TestCase):
 
         self.assertEqual(path.i2.活跃, "是")
 
+    def test_task_instance_task_type_values_are_bound_to_domain_field(self) -> None:
+        self.assertEqual(TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES, ("专属", "自由"))
+
+        path = PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+            {
+                "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+                "row": {
+                    "p": {"id": "40"},
+                    "s1": {"id": "40_20220401"},
+                    "i1": {"id": "40_20220401_8_x", "任务类型": "专属"},
+                    "g": {"id": "8"},
+                    "i2": {"id": "20102799_20230123_8_y", "任务类型": "自由"},
+                    "s2": {"id": "20102799_20230123"},
+                    "p2": {"id": "20102799"},
+                },
+            }
+        )
+
+        self.assertEqual(path.i1.任务类型, "专属")
+        self.assertEqual(path.i2.任务类型, "自由")
+
     def test_patient_taskset_task_game_task_taskset_patient_path_can_be_built_from_dict(
         self,
     ) -> None:
@@ -184,6 +206,23 @@ class DomainModelsTest(unittest.TestCase):
                         "i1": {"id": "40_20220401_8_x", "结果": "完成"},
                         "g": {"id": "8"},
                         "i2": {"id": "20102799_20230123_8_y", "结果": "未完成", "活跃": "高"},
+                        "s2": {"id": "20102799_20230123"},
+                        "p2": {"id": "20102799"},
+                    },
+                }
+            )
+
+    def test_task_instance_rejects_unsupported_task_type_value_from_dict(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported value"):
+            PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+                {
+                    "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+                    "row": {
+                        "p": {"id": "40"},
+                        "s1": {"id": "40_20220401"},
+                        "i1": {"id": "40_20220401_8_x", "任务类型": "句子识别"},
+                        "g": {"id": "8"},
+                        "i2": {"id": "20102799_20230123_8_y", "任务类型": "自由"},
                         "s2": {"id": "20102799_20230123"},
                         "p2": {"id": "20102799"},
                     },

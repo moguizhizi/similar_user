@@ -66,6 +66,10 @@ TaskActivityValue: TypeAlias = Literal["是", "否"]
 
 TASK_INSTANCE_ACTIVITY_VALUES: tuple[TaskActivityValue, ...] = ("是", "否")
 
+TaskExclusiveTypeValue: TypeAlias = Literal["专属", "自由"]
+
+TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES: tuple[TaskExclusiveTypeValue, ...] = ("专属", "自由")
+
 
 @dataclass(frozen=True)
 class TaskInstanceSetNode:
@@ -91,7 +95,8 @@ class TaskInstanceNode:
     结果: TaskResultValue | None = None
     # 基于当前业务约束收紧为固定活跃取值。
     活跃: TaskActivityValue | None = None
-    任务类型: str | None = None
+    # 当前仓库中的该字段用于表达“专属/自由”两类取值。
+    任务类型: TaskExclusiveTypeValue | None = None
     状态: str | None = None
 
 
