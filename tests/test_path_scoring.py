@@ -31,6 +31,14 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scorer._map_education_rank("初中3年级"), scorer._map_education_rank("初中"))
         self.assertIsNone(scorer._map_education_rank("保密"))
 
+    def test_parse_int_supports_decimal_strings(self) -> None:
+        scorer = PathScorer()
+
+        self.assertEqual(scorer._parse_int("14.0"), 14)
+        self.assertEqual(scorer._parse_int(" 14.8 "), 14)
+        self.assertEqual(scorer._parse_int("14"), 14)
+        self.assertIsNone(scorer._parse_int("abc"))
+
     def test_path_scorer_returns_detailed_breakdown(self) -> None:
         scorer = PathScorer()
         path = PatientTasksetTaskGameTaskTasksetPatientPath(
