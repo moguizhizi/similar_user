@@ -91,7 +91,6 @@ def main() -> int:
             args.patient_id,
             args.config,
         )
-        print(f"Patient pattern path flow failed: {exc}", file=sys.stderr)
         return 1
 
     return 0

@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from ..data_access.neo4j_client import Neo4jClient
+from ..utils.logger import get_logger
 
 
 DEFAULT_CONFIG_PATH = Path("config/neo4j.yaml")
+LOGGER = get_logger(__name__)
 
 
 def build_neo4j_health_payload(
@@ -161,7 +163,7 @@ class SimilarUserRequestHandler(BaseHTTPRequestHandler):
 def run_server(host: str = "0.0.0.0", port: int = 8000) -> None:
     """Start the local HTTP server."""
     server = ThreadingHTTPServer((host, port), SimilarUserRequestHandler)
-    print(f"Serving on http://{host}:{port}")
+    LOGGER.info("Serving on http://%s:%s", host, port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

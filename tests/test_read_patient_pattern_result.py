@@ -61,12 +61,12 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
         self.assertIsInstance(loaded_result, StoredPatternResult)
         self.assertEqual(loaded_result.to_dict(), expected_result)
 
+    @patch("scripts.read_patient_pattern_result.LOGGER")
     @patch("scripts.read_patient_pattern_result.parse_args")
-    @patch("builtins.print")
-    def test_main_prints_loaded_result_json(
+    def test_main_logs_loaded_result_json(
         self,
-        mock_print: Mock,
         mock_parse_args: Mock,
+        mock_logger: Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "query.yaml"
@@ -108,7 +108,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             exit_code = main()
 
         self.assertEqual(exit_code, 0)
-        mock_print.assert_called_once_with(
+        mock_logger.info.assert_called_once_with(
             json.dumps(expected_result, ensure_ascii=False, indent=2, default=str)
         )
 
