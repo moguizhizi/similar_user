@@ -270,10 +270,13 @@ class PathScorer:
     def _parse_int(value: str | None) -> int | None:
         if value is None:
             return None
-        digits = "".join(char for char in value if char.isdigit())
-        if not digits:
+        normalized = value.strip()
+        if not normalized:
             return None
-        return int(digits)
+        try:
+            return int(float(normalized))
+        except ValueError:
+            return None
 
     @staticmethod
     def _parse_float(value: str | None) -> float | None:
