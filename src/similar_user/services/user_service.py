@@ -239,9 +239,7 @@ class UserService:
             "first_training_date": None,
             "last_training_date": None,
             "training_date_count": 0,
-            "statistics": None,
-            "limit_recommendation": None,
-            "paths": [],
+            "retrieval_context": None,
         }
 
     @staticmethod
@@ -253,12 +251,33 @@ class UserService:
         paths: list[dict[str, object]],
     ) -> dict[str, Any]:
         """Build the standard patient pattern path result payload."""
+        retrieval_context = (
+            None
+            if statistics is None and limit_recommendation is None and not paths
+            else {
+                "split_training_date": (
+                    statistics.get("split_training_date")
+                    if isinstance(statistics, dict)
+                    else None
+                ),
+                "before_split": (
+                    statistics.get("before_split")
+                    if isinstance(statistics, dict)
+                    else None
+                ),
+                "post_split_games": (
+                    statistics.get("post_split_games")
+                    if isinstance(statistics, dict)
+                    else []
+                ),
+                "limit_recommendation": limit_recommendation,
+                "paths": paths,
+            }
+        )
         return {
             **training_context,
             "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-            "statistics": statistics,
-            "limit_recommendation": limit_recommendation,
-            "paths": paths,
+            "retrieval_context": retrieval_context,
         }
 
     @staticmethod

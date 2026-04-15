@@ -55,9 +55,7 @@ class UserServiceTest(unittest.TestCase):
                 "first_training_date": None,
                 "last_training_date": None,
                 "training_date_count": 0,
-                "statistics": None,
-                "limit_recommendation": None,
-                "paths": [],
+                "retrieval_context": None,
             },
         )
         mock_logger.info.assert_called()
@@ -89,7 +87,7 @@ class UserServiceTest(unittest.TestCase):
             ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"],
         )
         self.assertEqual(
-            result["statistics"],
+            result["retrieval_context"],
             {
                 "split_training_date": "2022-01-13",
                 "before_split": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
@@ -97,14 +95,14 @@ class UserServiceTest(unittest.TestCase):
                     {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
                     {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
                 ],
+                "limit_recommendation": None,
+                "paths": [],
             },
         )
         self.assertEqual(
             result["pattern"],
             PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         )
-        self.assertEqual(result["limit_recommendation"], None)
-        self.assertEqual(result["paths"], [])
         mock_repository.recommend_graph_path_limit.assert_not_called()
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_end_date.assert_not_called()
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.assert_called_once_with(
@@ -156,7 +154,7 @@ class UserServiceTest(unittest.TestCase):
             PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         )
         self.assertEqual(
-            result["statistics"],
+            result["retrieval_context"],
             {
                 "split_training_date": "2022-01-13",
                 "before_split": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
@@ -164,24 +162,21 @@ class UserServiceTest(unittest.TestCase):
                     {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
                     {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
                 ],
-            },
-        )
-        self.assertEqual(result["limit_recommendation"], {"per_g": 5, "limit": 10})
-        self.assertEqual(
-            result["paths"],
-            [
-                {
-                    "row": {
-                        "p": {"id": "30010096"},
-                        "s1": {"id": "40_20220516"},
-                        "i1": {"id": "40_20220516_42_464CAOTKJK2BX3"},
-                        "g": {"id": "42"},
-                        "i2": {"id": "20113562_20211214_42_KUVB2LIK9KX60Y"},
-                        "s2": {"id": "20113562_20211214"},
-                        "p2": {"id": "20113562"},
+                "limit_recommendation": {"per_g": 5, "limit": 10},
+                "paths": [
+                    {
+                        "row": {
+                            "p": {"id": "30010096"},
+                            "s1": {"id": "40_20220516"},
+                            "i1": {"id": "40_20220516_42_464CAOTKJK2BX3"},
+                            "g": {"id": "42"},
+                            "i2": {"id": "20113562_20211214_42_KUVB2LIK9KX60Y"},
+                            "s2": {"id": "20113562_20211214"},
+                            "p2": {"id": "20113562"},
+                        }
                     }
-                }
-            ],
+                ],
+            },
         )
         mock_repository.recommend_graph_path_limit.assert_called_once_with(
             total_paths=20,
@@ -212,9 +207,7 @@ class UserServiceTest(unittest.TestCase):
             result["pattern"],
             PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         )
-        self.assertEqual(result["statistics"], None)
-        self.assertEqual(result["limit_recommendation"], None)
-        self.assertEqual(result["paths"], [])
+        self.assertEqual(result["retrieval_context"], None)
         mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.assert_not_called()
         mock_repository.get_patient_training_date_games_by_start_date.assert_not_called()
 

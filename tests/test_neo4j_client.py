@@ -140,7 +140,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         mock_service.get_patient_pattern_paths.return_value = {
             "patient_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            "paths": [],
+            "retrieval_context": None,
         }
         mock_save_pattern_result.return_value = Path(
             "data/pattern_paths/PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT/30/30010096.json"
@@ -160,14 +160,18 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
             {
                 "patient_id": "30010096",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                "paths": [],
+                "retrieval_context": None,
             },
         )
         mock_repository_cls.assert_called_once_with(client=mock_client)
         mock_service_cls.assert_called_once_with(kg_repository=mock_repository)
         mock_service.get_patient_pattern_paths.assert_called_once_with("30010096")
         mock_save_pattern_result.assert_called_once_with(
-            {"patient_id": "30010096", "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT", "paths": []},
+            {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "retrieval_context": None,
+            },
             "config/query.yaml",
         )
         mock_logger.info.assert_called()
@@ -189,7 +193,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         mock_run_flow.return_value = {
             "patient_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            "paths": [],
+            "retrieval_context": None,
         }
 
         exit_code = patient_path_main()
