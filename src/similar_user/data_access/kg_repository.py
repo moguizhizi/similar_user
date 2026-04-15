@@ -11,11 +11,14 @@ from config.settings import GraphPathLimitSettings, load_query_settings
 from .cypher_queries import (
     PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
+    PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
     PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_SYMPTOMS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY,
+    PATIENT_DISTINCT_SYMPTOMS_BY_START_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
+    PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
     PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -108,6 +111,25 @@ class KgRepository:
             },
         )
 
+    def get_patient_distinct_symptoms_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct symptoms for one patient from a start date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISTINCT_SYMPTOMS_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+            },
+        )
+
     def get_patient_distinct_symptoms_by_date_range(
         self,
         patient_id: str,
@@ -149,6 +171,25 @@ class KgRepository:
             },
         )
 
+    def get_patient_distinct_diseases_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct diseases for one patient from a start date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+            },
+        )
+
     def get_patient_distinct_diseases_by_date_range(
         self,
         patient_id: str,
@@ -187,6 +228,25 @@ class KgRepository:
             parameters={
                 "patient_id": normalized_patient_id,
                 "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_distinct_unknowns_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct unknown-category nodes for one patient from a start date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
             },
         )
 
