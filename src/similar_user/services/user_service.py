@@ -32,6 +32,17 @@ class UserService:
             start_date,
         )
 
+    def get_patient_distinct_symptoms_by_end_date(
+        self,
+        patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct symptoms for one patient up to and including an end date."""
+        return self.kg_repository.get_patient_distinct_symptoms_by_end_date(
+            patient_id,
+            end_date,
+        )
+
     def get_patient_pattern_paths(
         self,
         patient_id: str,
