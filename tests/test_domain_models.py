@@ -19,6 +19,7 @@ from src.similar_user.domain import (
     SymptomNode,
     TaskInstanceNode,
     TaskInstanceSetNode,
+    UnknownNode,
 )
 
 
@@ -311,6 +312,17 @@ class DomainModelsTest(unittest.TestCase):
 
         self.assertEqual(symptom.id, "AU_SYM_0007")
         self.assertEqual(symptom.name, "睡眠障碍")
+
+    def test_unknown_node_from_dict_can_be_used_directly(self) -> None:
+        unknown = UnknownNode.from_dict(
+            {
+                "id": "AU_UNKOWN_0005",
+                "name": "儿童相关-其他",
+            }
+        )
+
+        self.assertEqual(unknown.id, "AU_UNKOWN_0005")
+        self.assertEqual(unknown.name, "儿童相关-其他")
 
 
 if __name__ == "__main__":

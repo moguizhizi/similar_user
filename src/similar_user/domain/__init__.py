@@ -18,6 +18,7 @@ from .item import (
     TaskResultValue,
     TaskInstanceNode,
     TaskInstanceSetNode,
+    UnknownNode,
 )
 from .path_models import (
     PatientTasksetTaskGameTaskTasksetPatientPath,
@@ -44,4 +45,5 @@ __all__ = [
     "TaskInstanceNode",
     "TaskInstanceSetNode",
     "SymptomNode",
+    "UnknownNode",
 ]

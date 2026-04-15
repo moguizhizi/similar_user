@@ -135,6 +135,22 @@ class SymptomNode:
 
 
 @dataclass(frozen=True)
+class UnknownNode:
+    """Unknown-category node data used in graph results."""
+
+    id: str
+    name: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> UnknownNode:
+        """Build an unknown-category node from raw JSON content."""
+        return cls(
+            id=_require_string(data.get("id"), "u.id"),
+            name=_optional_string(data.get("name")),
+        )
+
+
+@dataclass(frozen=True)
 class GameNode:
     """Game node data used in graph path results."""
 
