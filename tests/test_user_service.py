@@ -81,6 +81,29 @@ class UserServiceTest(unittest.TestCase):
             "2022-01-01",
         )
 
+    def test_get_patient_distinct_unknowns_by_end_date_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_distinct_unknowns_by_end_date.return_value = [
+            {"un": {"id": "AU_UNK_0001", "name": "其他异常表现"}}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_distinct_unknowns_by_end_date(
+            "30010096",
+            "2022-01-01",
+        )
+
+        self.assertEqual(
+            result,
+            [{"un": {"id": "AU_UNK_0001", "name": "其他异常表现"}}],
+        )
+        mock_repository.get_patient_distinct_unknowns_by_end_date.assert_called_once_with(
+            "30010096",
+            "2022-01-01",
+        )
+
     @patch("src.similar_user.services.user_service.LOGGER")
     def test_get_patient_pattern_paths_returns_empty_payload_when_no_training_dates(
         self,

@@ -12,6 +12,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY,
+    PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
     PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
@@ -204,6 +205,51 @@ class KgRepositoryTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
             repository.get_patient_distinct_diseases_by_end_date(
+                "30010096",
+                "   ",
+            )
+
+    def test_get_patient_distinct_unknowns_by_end_date(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"un": {"id": "AU_UNK_0001", "name": "其他异常表现"}},
+            {"un": {"id": "AU_UNK_0002", "name": "待分类表现"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_distinct_unknowns_by_end_date(
+            " 30010096 ",
+            " 2022-01-13 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {"un": {"id": "AU_UNK_0001", "name": "其他异常表现"}},
+                {"un": {"id": "AU_UNK_0002", "name": "待分类表现"}},
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_patient_distinct_unknowns_by_end_date_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_distinct_unknowns_by_end_date(
+                "   ",
+                "2022-01-13",
+            )
+
+        with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
+            repository.get_patient_distinct_unknowns_by_end_date(
                 "30010096",
                 "   ",
             )

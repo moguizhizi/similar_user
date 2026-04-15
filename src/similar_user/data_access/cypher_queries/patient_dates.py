@@ -57,6 +57,18 @@ WHERE
 RETURN DISTINCT dis
 """.strip()
 
+PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(un:Unknown)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) <= date($end_date)
+
+RETURN DISTINCT un
+""".strip()
+
 PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY = """
 MATCH (p:Patient {id: $patient_id})--(s:TaskInstanceSet)
 WHERE s.`训练日期` IS NOT NULL
