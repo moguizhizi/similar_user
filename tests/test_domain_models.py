@@ -16,6 +16,7 @@ from src.similar_user.domain import (
     PatientNode,
     PatientTasksetTaskGameTaskTasksetPatientPath,
     PatternPathResult,
+    SymptomNode,
     TaskInstanceNode,
     TaskInstanceSetNode,
 )
@@ -299,6 +300,17 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(disease.id, "AU_DIS_0013")
         self.assertEqual(disease.name, "遗忘型轻度认知障碍")
         self.assertEqual(disease.别名, "遗忘型MCI（aMCI）")
+
+    def test_symptom_node_from_dict_can_be_used_directly(self) -> None:
+        symptom = SymptomNode.from_dict(
+            {
+                "id": "AU_SYM_0007",
+                "name": "睡眠障碍",
+            }
+        )
+
+        self.assertEqual(symptom.id, "AU_SYM_0007")
+        self.assertEqual(symptom.name, "睡眠障碍")
 
 
 if __name__ == "__main__":
