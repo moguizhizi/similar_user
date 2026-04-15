@@ -10,6 +10,7 @@ from src.similar_user.domain import (
     TASK_INSTANCE_ACTIVITY_VALUES,
     TASK_INSTANCE_RESULT_VALUES,
     TASK_INSTANCE_SET_EDUCATION_VALUES,
+    DiseaseNode,
     GameNode,
     PathPattern,
     PatientNode,
@@ -285,6 +286,19 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(game.艺术风格, "卡通")
         self.assertEqual(game.背景环境, "教室")
         self.assertEqual(game.难度星级, 4)
+
+    def test_disease_node_from_dict_can_be_used_directly(self) -> None:
+        disease = DiseaseNode.from_dict(
+            {
+                "id": "AU_DIS_0013",
+                "name": "遗忘型轻度认知障碍",
+                "别名": "遗忘型MCI（aMCI）",
+            }
+        )
+
+        self.assertEqual(disease.id, "AU_DIS_0013")
+        self.assertEqual(disease.name, "遗忘型轻度认知障碍")
+        self.assertEqual(disease.别名, "遗忘型MCI（aMCI）")
 
 
 if __name__ == "__main__":

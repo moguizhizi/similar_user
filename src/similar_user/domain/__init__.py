@@ -10,6 +10,7 @@ from .item import (
     TASK_INSTANCE_RESULT_VALUES,
     TaskActivityValue,
     TASK_INSTANCE_SET_EDUCATION_VALUES,
+    DiseaseNode,
     EducationValue,
     GameNode,
     TaskExclusiveTypeValue,
@@ -24,6 +25,7 @@ from .path_models import (
 from .user import PatientNode
 
 __all__ = [
+    "DiseaseNode",
     "GameNode",
     "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
     "PathPattern",

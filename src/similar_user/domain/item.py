@@ -101,6 +101,24 @@ class TaskInstanceNode:
 
 
 @dataclass(frozen=True)
+class DiseaseNode:
+    """Disease node data used in graph results."""
+
+    id: str
+    name: str | None = None
+    别名: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DiseaseNode:
+        """Build a disease node from raw JSON content."""
+        return cls(
+            id=_require_string(data.get("id"), "d.id"),
+            name=_optional_string(data.get("name")),
+            别名=_optional_string(data.get("别名")),
+        )
+
+
+@dataclass(frozen=True)
 class GameNode:
     """Game node data used in graph path results."""
 
