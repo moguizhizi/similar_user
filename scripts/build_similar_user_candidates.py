@@ -93,6 +93,12 @@ def aggregate_candidates_from_scored_paths(
 ) -> dict[str, Any]:
     """Deduplicate candidate users from typed scored paths and summarize evidence."""
     scored_domain_paths = _build_scored_domain_paths(scored_result)
+    retrieval_context = scored_result.get("retrieval_context")
+    split_training_date = None
+    if isinstance(retrieval_context, dict):
+        raw_split_training_date = retrieval_context.get("split_training_date")
+        if isinstance(raw_split_training_date, str) and raw_split_training_date.strip():
+            split_training_date = raw_split_training_date.strip()
 
     candidate_buckets: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
@@ -145,6 +151,14 @@ def aggregate_candidates_from_scored_paths(
         "top_k": top_k,
         "path_count": scored_result.get("path_count", 0),
         "scored_path_count": scored_result.get("scored_path_count", 0),
+        "retrieval_context": {
+            "split_training_date": split_training_date,
+            "candidate_scope": (
+                f"候选相似用户来自训练日期小于等于 {split_training_date} 的 top-{top_k} path 去重结果"
+                if split_training_date is not None
+                else f"候选相似用户来自已保存检索集合的 top-{top_k} path 去重结果"
+            ),
+        },
         "candidate_count": len(candidates),
         "candidates": candidates,
     }

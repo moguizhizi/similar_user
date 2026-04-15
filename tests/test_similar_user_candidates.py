@@ -62,6 +62,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         result = aggregate_candidates_from_scored_paths(scored_result, top_k=3)
 
+        self.assertEqual(result["retrieval_context"]["split_training_date"], None)
         self.assertEqual(result["candidate_count"], 2)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
         self.assertEqual(result["candidates"][0]["best_score"], 95.0)
@@ -114,6 +115,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         result = aggregate_candidates_from_scored_paths(scored_result, top_k=2)
 
+        self.assertEqual(result["retrieval_context"]["split_training_date"], None)
         self.assertEqual(result["candidate_count"], 1)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
 
@@ -144,58 +146,62 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "first_training_date": None,
                 "last_training_date": None,
                 "training_date_count": 0,
-                "statistics": None,
-                "limit_recommendation": None,
-                "paths": [
-                    {
-                        "row": {
-                            "p": {"id": "30010096"},
-                            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
-                            "i1": {"id": "30010096_20220522_348_a", "任务类型": "专属", "结果": "完成"},
-                            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
-                            "i2": {
-                                "id": "20113562_20211214_348_a",
-                                "结果": "完成",
-                                "活跃": "是",
-                                "任务类型": "专属",
-                            },
-                            "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "本科"},
-                            "p2": {"id": "20113562"},
-                        }
-                    },
-                    {
-                        "row": {
-                            "p": {"id": "30010096"},
-                            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
-                            "i1": {"id": "30010096_20220522_348_b", "任务类型": "专属", "结果": "完成"},
-                            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
-                            "i2": {
-                                "id": "20113563_20211214_348_b",
-                                "结果": "未完成",
-                                "活跃": "否",
-                                "任务类型": "自由",
-                            },
-                            "s2": {"id": "20113563_20211214", "执行年龄": "88", "执行学历": "小学"},
-                            "p2": {"id": "20113563"},
-                        }
-                    },
-                    {
-                        "row": {
-                            "p": {"id": "30010096"},
-                            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
-                            "i1": {"id": "30010096_20220522_348_c", "任务类型": "专属", "结果": "完成"},
-                            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
-                            "i2": {
-                                "id": "20113562_20211215_348_c",
-                                "结果": "完成",
-                                "活跃": "是",
-                                "任务类型": "专属",
-                            },
-                            "s2": {"id": "20113562_20211215", "执行年龄": "65", "执行学历": "本科"},
-                            "p2": {"id": "20113562"},
-                        }
-                    },
-                ],
+                "retrieval_context": {
+                    "split_training_date": "2022-01-13",
+                    "before_split": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
+                    "post_split_games": [],
+                    "limit_recommendation": {"per_g": 5, "limit": 10},
+                    "paths": [
+                        {
+                            "row": {
+                                "p": {"id": "30010096"},
+                                "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+                                "i1": {"id": "30010096_20220522_348_a", "任务类型": "专属", "结果": "完成"},
+                                "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+                                "i2": {
+                                    "id": "20113562_20211214_348_a",
+                                    "结果": "完成",
+                                    "活跃": "是",
+                                    "任务类型": "专属",
+                                },
+                                "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "本科"},
+                                "p2": {"id": "20113562"},
+                            }
+                        },
+                        {
+                            "row": {
+                                "p": {"id": "30010096"},
+                                "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+                                "i1": {"id": "30010096_20220522_348_b", "任务类型": "专属", "结果": "完成"},
+                                "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+                                "i2": {
+                                    "id": "20113563_20211214_348_b",
+                                    "结果": "未完成",
+                                    "活跃": "否",
+                                    "任务类型": "自由",
+                                },
+                                "s2": {"id": "20113563_20211214", "执行年龄": "88", "执行学历": "小学"},
+                                "p2": {"id": "20113563"},
+                            }
+                        },
+                        {
+                            "row": {
+                                "p": {"id": "30010096"},
+                                "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+                                "i1": {"id": "30010096_20220522_348_c", "任务类型": "专属", "结果": "完成"},
+                                "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+                                "i2": {
+                                    "id": "20113562_20211215_348_c",
+                                    "结果": "完成",
+                                    "活跃": "是",
+                                    "任务类型": "专属",
+                                },
+                                "s2": {"id": "20113562_20211215", "执行年龄": "65", "执行学历": "本科"},
+                                "p2": {"id": "20113562"},
+                            }
+                        },
+                    ],
+                },
             }
             save_pattern_result(result, config_path)
 
@@ -206,6 +212,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             )
 
         self.assertEqual(candidates["candidate_count"], 2)
+        self.assertEqual(candidates["retrieval_context"]["split_training_date"], "2022-01-13")
         self.assertEqual(candidates["candidates"][0]["patient_id"], "20113562")
         self.assertEqual(candidates["candidates"][0]["match_count"], 2)
         self.assertEqual(candidates["candidates"][1]["patient_id"], "20113563")
@@ -225,6 +232,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "top_k": 5,
             "path_count": 10,
             "scored_path_count": 5,
+            "retrieval_context": {
+                "split_training_date": "2022-01-13",
+                "candidate_scope": "候选相似用户来自训练日期小于等于 2022-01-13 的 top-5 path 去重结果",
+            },
             "candidate_count": 2,
             "candidates": [{"patient_id": "20113562"}],
         }
