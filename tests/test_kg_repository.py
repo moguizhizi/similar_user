@@ -13,6 +13,9 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
     PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
+    PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY,
+    PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY,
+    PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY,
     PATIENT_DISTINCT_SYMPTOMS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_SYMPTOMS_BY_START_DATE_QUERY,
@@ -122,6 +125,140 @@ class KgRepositoryTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
             repository.get_patient_distinct_games_by_end_date(
                 "30010096",
+                "   ",
+            )
+
+    def test_get_patient_distinct_task_instances_by_start_date(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_distinct_task_instances_by_start_date(
+            " 30010096 ",
+            " 2022-01-01 ",
+        )
+
+        self.assertEqual(
+            result,
+            [{"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}}],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-01",
+            },
+        )
+
+    def test_get_patient_distinct_task_instances_by_start_date_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_distinct_task_instances_by_start_date(
+                "   ",
+                "2022-01-01",
+            )
+
+        with self.assertRaisesRegex(ValueError, "start_date must be a non-empty string."):
+            repository.get_patient_distinct_task_instances_by_start_date(
+                "30010096",
+                "   ",
+            )
+
+    def test_get_patient_distinct_task_instances_by_end_date(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_distinct_task_instances_by_end_date(
+            " 30010096 ",
+            " 2022-01-13 ",
+        )
+
+        self.assertEqual(
+            result,
+            [{"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}}],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_patient_distinct_task_instances_by_end_date_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_distinct_task_instances_by_end_date(
+                "   ",
+                "2022-01-13",
+            )
+
+        with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
+            repository.get_patient_distinct_task_instances_by_end_date(
+                "30010096",
+                "   ",
+            )
+
+    def test_get_patient_distinct_task_instances_by_date_range(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_distinct_task_instances_by_date_range(
+            " 30010096 ",
+            " 2022-01-01 ",
+            " 2022-01-13 ",
+        )
+
+        self.assertEqual(
+            result,
+            [{"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}}],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-01",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_patient_distinct_task_instances_by_date_range_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_distinct_task_instances_by_date_range(
+                "   ",
+                "2022-01-01",
+                "2022-01-13",
+            )
+
+        with self.assertRaisesRegex(ValueError, "start_date must be a non-empty string."):
+            repository.get_patient_distinct_task_instances_by_date_range(
+                "30010096",
+                "   ",
+                "2022-01-13",
+            )
+
+        with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
+            repository.get_patient_distinct_task_instances_by_date_range(
+                "30010096",
+                "2022-01-01",
                 "   ",
             )
 

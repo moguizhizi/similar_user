@@ -13,6 +13,9 @@ from .cypher_queries import (
     PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
     PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
+    PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY,
+    PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY,
+    PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY,
     PATIENT_DISTINCT_SYMPTOMS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_SYMPTOMS_BY_START_DATE_QUERY,
@@ -88,6 +91,66 @@ class KgRepository:
             query=PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_distinct_task_instances_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct task instances for one patient from a start date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+            },
+        )
+
+    def get_patient_distinct_task_instances_by_end_date(
+        self,
+        patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct task instances for one patient up to and including an end date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_distinct_task_instances_by_date_range(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct task instances for one patient within a date range."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
                 "end_date": normalized_end_date,
             },
         )
