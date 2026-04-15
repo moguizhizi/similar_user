@@ -10,6 +10,7 @@ from config.settings import GraphPathLimitSettings, load_query_settings
 
 from .cypher_queries import (
     PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
+    PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY,
     PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -77,6 +78,25 @@ class KgRepository:
 
         return self.client.run_query(
             query=PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_distinct_symptoms_by_end_date(
+        self,
+        patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct symptoms for one patient up to and including an end date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
                 "end_date": normalized_end_date,
