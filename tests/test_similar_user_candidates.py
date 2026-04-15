@@ -18,6 +18,24 @@ from src.similar_user.utils.pattern_storage import save_pattern_result
 
 class SimilarUserCandidatesTest(unittest.TestCase):
     def test_aggregate_candidates_from_scored_paths_deduplicates_and_sorts(self) -> None:
+        valid_row_a = {
+            "p": {"id": "30010096"},
+            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+            "i1": {"id": "30010096_20220522_348_a", "任务类型": "专属", "结果": "完成"},
+            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+            "i2": {"id": "20113562_20211214_348_a", "结果": "完成", "活跃": "是", "任务类型": "专属"},
+            "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "本科"},
+            "p2": {"id": "20113562"},
+        }
+        valid_row_b = {
+            "p": {"id": "30010096"},
+            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+            "i1": {"id": "30010096_20220522_348_b", "任务类型": "专属", "结果": "完成"},
+            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+            "i2": {"id": "20113563_20211214_348_b", "结果": "完成", "活跃": "是", "任务类型": "专属"},
+            "s2": {"id": "20113563_20211214", "执行年龄": "65", "执行学历": "本科"},
+            "p2": {"id": "20113563"},
+        }
         scored_result = {
             "patient_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
@@ -27,17 +45,17 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 {
                     "path_index": 2,
                     "score": {"total_score": 88.0},
-                    "path": {"row": {"p2": {"id": "20113562"}}},
+                    "path": {"row": valid_row_a},
                 },
                 {
                     "path_index": 0,
                     "score": {"total_score": 95.0},
-                    "path": {"row": {"p2": {"id": "20113563"}}},
+                    "path": {"row": valid_row_b},
                 },
                 {
                     "path_index": 1,
                     "score": {"total_score": 90.0},
-                    "path": {"row": {"p2": {"id": "20113562"}}},
+                    "path": {"row": valid_row_a},
                 },
             ],
         }
@@ -66,6 +84,15 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             aggregate_candidates_from_scored_paths(scored_result, top_k=1)
 
     def test_aggregate_candidates_from_scored_paths_skips_paths_without_pattern_candidate(self) -> None:
+        valid_row = {
+            "p": {"id": "30010096"},
+            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+            "i1": {"id": "30010096_20220522_348_x", "任务类型": "专属", "结果": "完成"},
+            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+            "i2": {"id": "20113563_20211214_348_x", "结果": "完成", "活跃": "是", "任务类型": "专属"},
+            "s2": {"id": "20113563_20211214", "执行年龄": "65", "执行学历": "本科"},
+            "p2": {"id": "20113563"},
+        }
         scored_result = {
             "patient_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
@@ -75,7 +102,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 {
                     "path_index": 0,
                     "score": {"total_score": 95.0},
-                    "path": {"row": {"p2": {"id": "20113563"}}},
+                    "path": {"row": valid_row},
                 },
                 {
                     "path_index": 1,
