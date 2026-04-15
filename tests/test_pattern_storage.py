@@ -119,9 +119,13 @@ class PatternStorageTest(unittest.TestCase):
                 "first_training_date": None,
                 "last_training_date": None,
                 "training_date_count": 0,
-                "statistics": None,
-                "limit_recommendation": None,
-                "paths": [{"g": 2}],
+                "retrieval_context": {
+                    "split_training_date": None,
+                    "before_split": {},
+                    "post_split_games": [],
+                    "limit_recommendation": None,
+                    "paths": [{"g": 2}],
+                },
             }
 
             output_path = save_pattern_result(first_result, config_path)

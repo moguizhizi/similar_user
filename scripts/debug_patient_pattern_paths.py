@@ -70,7 +70,7 @@ def run_patient_pattern_path_flow(
             "Completed patient pattern path flow: patient_id=%s, training_date_count=%s, path_count=%s, output_path=%s",
             patient_id,
             result.get("training_date_count"),
-            len(result.get("paths", [])),
+            len((result.get("retrieval_context") or {}).get("paths", [])),
             output_path,
         )
         return result

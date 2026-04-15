@@ -92,9 +92,7 @@ class StoredPatternResult:
     first_training_date: str | None = None
     last_training_date: str | None = None
     training_date_count: int = 0
-    statistics: dict[str, Any] | None = None
-    limit_recommendation: dict[str, Any] | None = None
-    paths: list[dict[str, Any]] = field(default_factory=list)
+    retrieval_context: dict[str, Any] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StoredPatternResult:
@@ -102,7 +100,7 @@ class StoredPatternResult:
         patient_id = _normalize_required_string(data.get("patient_id"), "patient_id")
         pattern = _normalize_required_string(data.get("pattern"), "pattern")
         ordered_training_dates = data.get("ordered_training_dates", [])
-        paths = data.get("paths", [])
+        retrieval_context = _normalize_retrieval_context(data)
 
         return cls(
             patient_id=patient_id,
@@ -121,14 +119,7 @@ class StoredPatternResult:
                 else None
             ),
             training_date_count=int(data.get("training_date_count", 0) or 0),
-            statistics=data.get("statistics")
-            if isinstance(data.get("statistics"), dict) or data.get("statistics") is None
-            else None,
-            limit_recommendation=data.get("limit_recommendation")
-            if isinstance(data.get("limit_recommendation"), dict)
-            or data.get("limit_recommendation") is None
-            else None,
-            paths=paths if isinstance(paths, list) else [],
+            retrieval_context=retrieval_context,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -140,9 +131,7 @@ class StoredPatternResult:
             "first_training_date": self.first_training_date,
             "last_training_date": self.last_training_date,
             "training_date_count": self.training_date_count,
-            "statistics": self.statistics,
-            "limit_recommendation": self.limit_recommendation,
-            "paths": self.paths,
+            "retrieval_context": self.retrieval_context,
         }
 
     def to_domain_paths(self) -> list[PatientTasksetTaskGameTaskTasksetPatientPath]:
@@ -162,6 +151,38 @@ class StoredPatternResult:
         if self.statistics is None:
             return None
         return StoredPatternStatistics.from_dict(self.statistics)
+
+    @property
+    def statistics(self) -> dict[str, Any] | None:
+        """Compatibility accessor for statistics derived from retrieval_context."""
+        if not isinstance(self.retrieval_context, dict):
+            return None
+        split_training_date = self.retrieval_context.get("split_training_date")
+        before_split = self.retrieval_context.get("before_split")
+        post_split_games = self.retrieval_context.get("post_split_games")
+        if split_training_date is None and before_split is None and post_split_games in (None, []):
+            return None
+        return {
+            "split_training_date": split_training_date,
+            "before_split": before_split if isinstance(before_split, dict) else {},
+            "post_split_games": post_split_games if isinstance(post_split_games, list) else [],
+        }
+
+    @property
+    def limit_recommendation(self) -> dict[str, Any] | None:
+        """Compatibility accessor for limit recommendation stored in retrieval_context."""
+        if not isinstance(self.retrieval_context, dict):
+            return None
+        value = self.retrieval_context.get("limit_recommendation")
+        return value if isinstance(value, dict) or value is None else None
+
+    @property
+    def paths(self) -> list[dict[str, Any]]:
+        """Compatibility accessor for paths stored in retrieval_context."""
+        if not isinstance(self.retrieval_context, dict):
+            return []
+        value = self.retrieval_context.get("paths")
+        return value if isinstance(value, list) else []
 
 
 def get_pattern_result_output_dir(query_config_path: str | Path, pattern: str) -> Path:
@@ -258,6 +279,57 @@ def _normalize_required_string(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string.")
     return value.strip()
+
+
+def _normalize_retrieval_context(data: dict[str, Any]) -> dict[str, Any] | None:
+    """Normalize retrieval_context and keep backward compatibility with old payloads."""
+    retrieval_context = data.get("retrieval_context")
+    if isinstance(retrieval_context, dict):
+        return {
+            "split_training_date": (
+                str(retrieval_context["split_training_date"])
+                if retrieval_context.get("split_training_date") is not None
+                else None
+            ),
+            "before_split": retrieval_context.get("before_split")
+            if isinstance(retrieval_context.get("before_split"), dict)
+            or retrieval_context.get("before_split") is None
+            else None,
+            "post_split_games": retrieval_context.get("post_split_games")
+            if isinstance(retrieval_context.get("post_split_games"), list)
+            else [],
+            "limit_recommendation": retrieval_context.get("limit_recommendation")
+            if isinstance(retrieval_context.get("limit_recommendation"), dict)
+            or retrieval_context.get("limit_recommendation") is None
+            else None,
+            "paths": retrieval_context.get("paths")
+            if isinstance(retrieval_context.get("paths"), list)
+            else [],
+        }
+
+    statistics = data.get("statistics")
+    limit_recommendation = data.get("limit_recommendation")
+    paths = data.get("paths")
+    if statistics is None and limit_recommendation is None and not isinstance(paths, list):
+        return None
+
+    return {
+        "split_training_date": (
+            statistics.get("split_training_date")
+            if isinstance(statistics, dict)
+            else None
+        ),
+        "before_split": statistics.get("before_split")
+        if isinstance(statistics, dict) and isinstance(statistics.get("before_split"), dict)
+        else {},
+        "post_split_games": statistics.get("post_split_games")
+        if isinstance(statistics, dict) and isinstance(statistics.get("post_split_games"), list)
+        else [],
+        "limit_recommendation": limit_recommendation
+        if isinstance(limit_recommendation, dict) or limit_recommendation is None
+        else None,
+        "paths": paths if isinstance(paths, list) else [],
+    }
 
 
 def _optional_string(value: object) -> str | None:

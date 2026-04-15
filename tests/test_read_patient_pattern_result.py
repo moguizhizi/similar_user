@@ -46,9 +46,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 "first_training_date": "2022-01-01",
                 "last_training_date": "2022-01-13",
                 "training_date_count": 2,
-                "statistics": None,
-                "limit_recommendation": None,
-                "paths": [],
+                "retrieval_context": None,
             }
             save_pattern_result(expected_result, config_path)
 
@@ -94,9 +92,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 "first_training_date": None,
                 "last_training_date": None,
                 "training_date_count": 0,
-                "statistics": None,
-                "limit_recommendation": None,
-                "paths": [],
+                "retrieval_context": None,
             }
             save_pattern_result(expected_result, config_path)
             mock_parse_args.return_value = Mock(
@@ -121,21 +117,25 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 "first_training_date": None,
                 "last_training_date": None,
                 "training_date_count": 0,
-                "statistics": None,
-                "limit_recommendation": None,
-                "paths": [
-                    {
-                        "row": {
-                            "p": {"id": "30010096", "name": "患者_30010096"},
-                            "s1": {"id": "30010096_20220113", "训练日期": "2022-01-13"},
-                            "i1": {"id": "30010096_20220113_42_x"},
-                            "g": {"id": "42", "name": "打怪物"},
-                            "i2": {"id": "20113562_20211214_42_y"},
-                            "s2": {"id": "20113562_20211214", "训练日期": "2021-12-14"},
-                            "p2": {"id": "20113562", "name": "患者_20113562"},
+                "retrieval_context": {
+                    "split_training_date": None,
+                    "before_split": {},
+                    "post_split_games": [],
+                    "limit_recommendation": None,
+                    "paths": [
+                        {
+                            "row": {
+                                "p": {"id": "30010096", "name": "患者_30010096"},
+                                "s1": {"id": "30010096_20220113", "训练日期": "2022-01-13"},
+                                "i1": {"id": "30010096_20220113_42_x"},
+                                "g": {"id": "42", "name": "打怪物"},
+                                "i2": {"id": "20113562_20211214_42_y"},
+                                "s2": {"id": "20113562_20211214", "训练日期": "2021-12-14"},
+                                "p2": {"id": "20113562", "name": "患者_20113562"},
+                            }
                         }
-                    }
-                ],
+                    ],
+                },
             }
         )
 
@@ -155,7 +155,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 "first_training_date": "2022-05-01",
                 "last_training_date": "2022-05-22",
                 "training_date_count": 2,
-                "statistics": {
+                "retrieval_context": {
                     "split_training_date": "2022-05-22",
                     "before_split": {"totalPaths": 10, "gCount": 4, "p2Count": 3},
                     "post_split_games": [
@@ -167,9 +167,9 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                             ],
                         }
                     ],
+                    "limit_recommendation": None,
+                    "paths": [],
                 },
-                "limit_recommendation": None,
-                "paths": [],
             }
         )
 
@@ -195,7 +195,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             "数字筛选•进阶",
         )
         self.assertEqual(
-            result.to_dict()["statistics"]["post_split_games"][0]["games"][1]["id"],
+            result.to_dict()["retrieval_context"]["post_split_games"][0]["games"][1]["id"],
             "48",
         )
 
