@@ -13,6 +13,7 @@ from .item import (
     DiseaseNode,
     EducationValue,
     GameNode,
+    SymptomNode,
     TaskExclusiveTypeValue,
     TaskResultValue,
     TaskInstanceNode,
@@ -42,4 +43,5 @@ __all__ = [
     "TaskExclusiveTypeValue",
     "TaskInstanceNode",
     "TaskInstanceSetNode",
+    "SymptomNode",
 ]

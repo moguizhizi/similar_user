@@ -119,6 +119,22 @@ class DiseaseNode:
 
 
 @dataclass(frozen=True)
+class SymptomNode:
+    """Symptom node data used in graph results."""
+
+    id: str
+    name: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SymptomNode:
+        """Build a symptom node from raw JSON content."""
+        return cls(
+            id=_require_string(data.get("id"), "sym.id"),
+            name=_optional_string(data.get("name")),
+        )
+
+
+@dataclass(frozen=True)
 class GameNode:
     """Game node data used in graph path results."""
 
