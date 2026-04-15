@@ -43,6 +43,17 @@ class UserService:
             end_date,
         )
 
+    def get_patient_distinct_symptoms_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct symptoms for one patient from a start date."""
+        return self.kg_repository.get_patient_distinct_symptoms_by_start_date(
+            patient_id,
+            start_date,
+        )
+
     def get_patient_distinct_symptoms_by_date_range(
         self,
         patient_id: str,
@@ -67,6 +78,17 @@ class UserService:
             end_date,
         )
 
+    def get_patient_distinct_diseases_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct diseases for one patient from a start date."""
+        return self.kg_repository.get_patient_distinct_diseases_by_start_date(
+            patient_id,
+            start_date,
+        )
+
     def get_patient_distinct_diseases_by_date_range(
         self,
         patient_id: str,
@@ -89,6 +111,17 @@ class UserService:
         return self.kg_repository.get_patient_distinct_unknowns_by_end_date(
             patient_id,
             end_date,
+        )
+
+    def get_patient_distinct_unknowns_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct unknown-category nodes for one patient from a start date."""
+        return self.kg_repository.get_patient_distinct_unknowns_by_start_date(
+            patient_id,
+            start_date,
         )
 
     def get_patient_distinct_unknowns_by_date_range(
