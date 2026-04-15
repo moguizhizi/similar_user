@@ -98,11 +98,26 @@ def score_patient_pattern_result(
         if top_k is not None:
             scored_paths = scored_paths[:top_k]
 
+    retrieval_context = stored_result.retrieval_context
+    split_training_date = None
+    if isinstance(retrieval_context, dict):
+        raw_split_training_date = retrieval_context.get("split_training_date")
+        if isinstance(raw_split_training_date, str) and raw_split_training_date.strip():
+            split_training_date = raw_split_training_date.strip()
+
     return {
         "patient_id": stored_result.patient_id,
         "pattern": stored_result.pattern,
         "path_count": len(domain_paths),
         "scored_path_count": len(scored_paths),
+        "retrieval_context": {
+            "split_training_date": split_training_date,
+            "path_scope": (
+                f"当前评分结果中的 paths 来自训练日期小于等于 {split_training_date} 的检索集合"
+                if split_training_date is not None
+                else "当前评分结果中的 paths 来自已保存的检索集合"
+            ),
+        },
         "scores": scored_paths,
     }
 

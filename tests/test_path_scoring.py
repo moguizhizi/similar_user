@@ -297,6 +297,7 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(scored["path_count"], 1)
         self.assertEqual(scored["scored_path_count"], 1)
+        self.assertEqual(scored["retrieval_context"]["split_training_date"], None)
         self.assertGreater(scored["scores"][0]["score"]["total_score"], 90)
 
     def test_score_patient_pattern_result_returns_top_k_paths(self) -> None:
@@ -374,6 +375,7 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(scored["path_count"], 2)
         self.assertEqual(scored["scored_path_count"], 1)
+        self.assertEqual(scored["retrieval_context"]["split_training_date"], None)
         self.assertEqual(scored["scores"][0]["path_index"], 0)
 
     @patch("scripts.score_patient_pattern_result.LOGGER")
