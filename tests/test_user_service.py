@@ -35,6 +35,77 @@ class UserServiceTest(unittest.TestCase):
             "2022-01-01",
         )
 
+    def test_get_patient_distinct_task_instances_by_start_date_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_distinct_task_instances_by_start_date.return_value = [
+            {"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_distinct_task_instances_by_start_date(
+            "30010096",
+            "2022-01-01",
+        )
+
+        self.assertEqual(
+            result,
+            [{"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}}],
+        )
+        mock_repository.get_patient_distinct_task_instances_by_start_date.assert_called_once_with(
+            "30010096",
+            "2022-01-01",
+        )
+
+    def test_get_patient_distinct_task_instances_by_end_date_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_distinct_task_instances_by_end_date.return_value = [
+            {"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_distinct_task_instances_by_end_date(
+            "30010096",
+            "2022-01-13",
+        )
+
+        self.assertEqual(
+            result,
+            [{"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}}],
+        )
+        mock_repository.get_patient_distinct_task_instances_by_end_date.assert_called_once_with(
+            "30010096",
+            "2022-01-13",
+        )
+
+    def test_get_patient_distinct_task_instances_by_date_range_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_distinct_task_instances_by_date_range.return_value = [
+            {"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_distinct_task_instances_by_date_range(
+            "30010096",
+            "2022-01-01",
+            "2022-01-13",
+        )
+
+        self.assertEqual(
+            result,
+            [{"i1": {"id": "40_20220516_42_464CAOTKJK2BX3", "状态": "完成"}}],
+        )
+        mock_repository.get_patient_distinct_task_instances_by_date_range.assert_called_once_with(
+            "30010096",
+            "2022-01-01",
+            "2022-01-13",
+        )
+
     def test_get_patient_distinct_symptoms_by_end_date_delegates_to_repository(
         self,
     ) -> None:
