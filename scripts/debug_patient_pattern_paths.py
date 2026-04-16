@@ -20,7 +20,7 @@ from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import save_pattern_result
 
 
-DEFAULT_CONFIG_PATH = Path("config/neo4j.yaml")
+DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 LOGGER = get_logger(__name__)
 
 
@@ -57,7 +57,7 @@ def run_patient_pattern_path_flow(
         config_path,
     )
     with Neo4jClient.from_config(config_path) as client:
-        repository = KgRepository(client=client)
+        repository = KgRepository(client=client, query_config_path=Path(config_path))
         service = UserService(kg_repository=repository)
         if not use_dated_statistics:
             LOGGER.warning(

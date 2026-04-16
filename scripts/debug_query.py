@@ -17,7 +17,7 @@ from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.utils.logger import get_logger
 
 
-DEFAULT_CONFIG_PATH = Path("config/neo4j.yaml")
+DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 DEFAULT_QUERY = "RETURN 1 AS ok, 'neo4j connected' AS message"
 LOGGER = get_logger(__name__)
 

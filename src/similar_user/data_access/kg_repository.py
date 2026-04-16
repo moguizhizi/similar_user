@@ -39,7 +39,7 @@ from .neo4j_client import Neo4jClient
 
 
 DEFAULT_PATH_LIMITS = [500, 1000, 2000, 3000, 5000]
-DEFAULT_QUERY_CONFIG_PATH = Path("config/query.yaml")
+DEFAULT_QUERY_CONFIG_PATH = Path("config/settings.yaml")
 
 
 @dataclass(frozen=True)

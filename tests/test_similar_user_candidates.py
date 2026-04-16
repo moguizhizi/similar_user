@@ -13,7 +13,7 @@ from scripts.build_similar_user_candidates import (
     build_similar_user_candidates,
     main,
 )
-from src.similar_user.utils.pattern_storage import save_pattern_result
+from similar_user.utils.pattern_storage import save_pattern_result
 
 
 class SimilarUserCandidatesTest(unittest.TestCase):
@@ -60,7 +60,11 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ],
         }
 
-        result = aggregate_candidates_from_scored_paths(scored_result, top_k=3)
+        result = aggregate_candidates_from_scored_paths(
+            scored_result,
+            path_top_k=3,
+            candidate_top_k=3,
+        )
 
         self.assertEqual(result["retrieval_context"]["split_training_date"], None)
         self.assertEqual(result["candidate_count"], 2)
@@ -82,7 +86,100 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(ValueError, "Unsupported pattern"):
-            aggregate_candidates_from_scored_paths(scored_result, top_k=1)
+            aggregate_candidates_from_scored_paths(
+                scored_result,
+                path_top_k=1,
+                candidate_top_k=1,
+            )
+
+    def test_aggregate_candidates_from_scored_paths_applies_candidate_top_k(self) -> None:
+        def build_row(candidate_id: str) -> dict[str, object]:
+            return {
+                "p": {"id": "30010096"},
+                "s1": {
+                    "id": "30010096_20220522",
+                    "执行年龄": "66",
+                    "执行学历": "本科",
+                },
+                "i1": {
+                    "id": f"30010096_20220522_348_{candidate_id}",
+                    "任务类型": "专属",
+                    "结果": "完成",
+                },
+                "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+                "i2": {
+                    "id": f"{candidate_id}_20211214_348_a",
+                    "结果": "完成",
+                    "活跃": "是",
+                    "任务类型": "专属",
+                },
+                "s2": {
+                    "id": f"{candidate_id}_20211214",
+                    "执行年龄": "64",
+                    "执行学历": "本科",
+                },
+                "p2": {"id": candidate_id},
+            }
+
+        scored_result = {
+            "patient_id": "30010096",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "path_count": 3,
+            "scored_path_count": 3,
+            "scores": [
+                {
+                    "path_index": 0,
+                    "score": {"total_score": 95.0},
+                    "path": {"row": build_row("20113562")},
+                },
+                {
+                    "path_index": 1,
+                    "score": {"total_score": 90.0},
+                    "path": {"row": build_row("20113563")},
+                },
+                {
+                    "path_index": 2,
+                    "score": {"total_score": 85.0},
+                    "path": {"row": build_row("20113564")},
+                },
+            ],
+        }
+
+        result = aggregate_candidates_from_scored_paths(
+            scored_result,
+            path_top_k=3,
+            candidate_top_k=2,
+        )
+
+        self.assertEqual(result["path_top_k"], 3)
+        self.assertEqual(result["candidate_top_k"], 2)
+        self.assertEqual(result["candidate_count"], 2)
+        self.assertEqual(
+            [candidate["patient_id"] for candidate in result["candidates"]],
+            ["20113562", "20113563"],
+        )
+
+    def test_aggregate_candidates_from_scored_paths_validates_top_k_values(self) -> None:
+        scored_result = {
+            "patient_id": "30010096",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "path_count": 0,
+            "scored_path_count": 0,
+            "scores": [],
+        }
+
+        with self.assertRaisesRegex(ValueError, "path_top_k"):
+            aggregate_candidates_from_scored_paths(
+                scored_result,
+                path_top_k=0,
+                candidate_top_k=1,
+            )
+        with self.assertRaisesRegex(ValueError, "candidate_top_k"):
+            aggregate_candidates_from_scored_paths(
+                scored_result,
+                path_top_k=1,
+                candidate_top_k=0,
+            )
 
     def test_aggregate_candidates_from_scored_paths_skips_paths_without_pattern_candidate(self) -> None:
         valid_row = {
@@ -113,7 +210,11 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ],
         }
 
-        result = aggregate_candidates_from_scored_paths(scored_result, top_k=2)
+        result = aggregate_candidates_from_scored_paths(
+            scored_result,
+            path_top_k=2,
+            candidate_top_k=2,
+        )
 
         self.assertEqual(result["retrieval_context"]["split_training_date"], None)
         self.assertEqual(result["candidate_count"], 1)
@@ -135,6 +236,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                         "  after_ratio: 1",
                         "pattern_path_storage:",
                         f'  output_dir: "{output_dir}"',
+                        "candidate_ranking:",
+                        "  path_top_k: 3",
+                        "  candidate_top_k: 2",
                     ]
                 ),
                 encoding="utf-8",
@@ -207,7 +311,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
             candidates = build_similar_user_candidates(
                 "30010096",
-                top_k=3,
+                path_top_k=3,
+                candidate_top_k=2,
                 query_config_path=config_path,
             )
 
@@ -216,6 +321,69 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(candidates["candidates"][0]["patient_id"], "20113562")
         self.assertEqual(candidates["candidates"][0]["match_count"], 2)
         self.assertEqual(candidates["candidates"][1]["patient_id"], "20113563")
+
+    def test_build_similar_user_candidates_reads_top_k_from_query_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "query.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "candidate_ranking:",
+                        "  path_top_k: 2",
+                        "  candidate_top_k: 1",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            valid_row = {
+                "p": {"id": "30010096"},
+                "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+                "i1": {"id": "30010096_20220522_348_a", "任务类型": "专属", "结果": "完成"},
+                "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+                "i2": {
+                    "id": "20113562_20211214_348_a",
+                    "结果": "完成",
+                    "活跃": "是",
+                    "任务类型": "专属",
+                },
+                "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "本科"},
+                "p2": {"id": "20113562"},
+            }
+            scored_result = {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "path_count": 2,
+                "scored_path_count": 1,
+                "scores": [
+                    {
+                        "path_index": 0,
+                        "score": {"total_score": 95.0},
+                        "path": {"row": valid_row},
+                    }
+                ],
+            }
+            with patch(
+                "scripts.build_similar_user_candidates.score_patient_pattern_result",
+                return_value=scored_result,
+            ) as mock_score:
+                candidates = build_similar_user_candidates(
+                    "30010096",
+                    query_config_path=config_path,
+                )
+
+        self.assertEqual(candidates["path_top_k"], 2)
+        self.assertEqual(candidates["candidate_top_k"], 1)
+        self.assertEqual(candidates["candidate_count"], 1)
+        self.assertEqual(candidates["candidates"][0]["patient_id"], "20113562")
+        mock_score.assert_called_once_with(
+            "30010096",
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            query_config_path=config_path,
+            top_k=2,
+        )
 
     @patch("scripts.build_similar_user_candidates.LOGGER")
     @patch("scripts.build_similar_user_candidates.parse_args")
@@ -229,21 +397,23 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         expected = {
             "patient_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            "top_k": 5,
+            "path_top_k": 5,
+            "candidate_top_k": 2,
             "path_count": 10,
             "scored_path_count": 5,
             "retrieval_context": {
                 "split_training_date": "2022-01-13",
-                "candidate_scope": "候选相似用户来自训练日期小于等于 2022-01-13 的 top-5 path 去重结果",
+                "candidate_scope": "候选相似用户来自训练日期小于等于 2022-01-13 的 top-5 path 去重结果，最终返回 top-2 候选用户",
             },
             "candidate_count": 2,
             "candidates": [{"patient_id": "20113562"}],
         }
         mock_parse_args.return_value = Mock(
             patient_id="30010096",
-            top_k=5,
+            path_top_k=5,
+            candidate_top_k=2,
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            query_config="config/query.yaml",
+            query_config="config/settings.yaml",
         )
         mock_build_candidates.return_value = expected
 

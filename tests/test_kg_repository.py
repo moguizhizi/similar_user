@@ -744,7 +744,7 @@ class KgRepositoryTest(unittest.TestCase):
         )
 
     def test_load_query_settings_from_yaml(self) -> None:
-        settings = load_query_settings("config/query.yaml")
+        settings = load_query_settings("config/settings.yaml")
 
         self.assertEqual(settings.graph_path_limit.max_limit_source, "total_paths")
         self.assertEqual(settings.graph_path_limit.per_g_strategy, "band")
@@ -757,6 +757,8 @@ class KgRepositoryTest(unittest.TestCase):
             ),
         )
         self.assertEqual(settings.pattern_path_storage.output_dir, "data/pattern_paths")
+        self.assertEqual(settings.candidate_ranking.path_top_k, 50)
+        self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
 
     def test_get_patient_task_instance_set_ordered_training_dates(self) -> None:
         mock_client = Mock()
