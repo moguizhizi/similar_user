@@ -32,6 +32,19 @@ class UserService:
             start_date,
         )
 
+    def get_patient_game_norm_score_series_comparison_by_end_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return game-level norm-score series for two patients up to an end date."""
+        return self.kg_repository.get_patient_game_norm_score_series_comparison_by_end_date(
+            primary_patient_id,
+            comparison_patient_id,
+            end_date,
+        )
+
     def get_patient_distinct_task_instances_by_start_date(
         self,
         patient_id: str,
