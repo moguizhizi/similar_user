@@ -34,6 +34,53 @@ def calculate_game_composite_score(scores: Sequence[object]) -> float:
     return float(calculate_game_series_features(scores)["score"])
 
 
+def calculate_game_similarity_with_diversity_score(
+    source_games: Sequence[object],
+    candidate_games: Sequence[object],
+) -> dict[str, float | int]:
+    """Calculate a score for candidates that are similar but not identical."""
+    source_game_set = _coerce_game_set(source_games)
+    candidate_game_set = _coerce_game_set(candidate_games)
+
+    common_game_count = len(source_game_set & candidate_game_set)
+    source_only_game_count = len(source_game_set - candidate_game_set)
+    candidate_only_game_count = len(candidate_game_set - source_game_set)
+
+    source_game_count = common_game_count + source_only_game_count
+    candidate_game_count = common_game_count + candidate_only_game_count
+    similarity_component = (
+        0.0 if source_game_count == 0 else common_game_count / source_game_count
+    )
+    diversity_component = (
+        0.0
+        if candidate_game_count == 0
+        else candidate_only_game_count / candidate_game_count
+    )
+    score = similarity_component * diversity_component
+
+    return {
+        "common_game_count": common_game_count,
+        "source_only_game_count": source_only_game_count,
+        "candidate_only_game_count": candidate_only_game_count,
+        "similarity_component": similarity_component,
+        "diversity_component": diversity_component,
+        "score": score,
+    }
+
+
+def _coerce_game_set(games: Sequence[object]) -> set[str]:
+    """Convert game identifiers to a normalized set."""
+    game_set: set[str] = set()
+    for game in games:
+        if game is None:
+            continue
+        normalized_game = str(game).strip()
+        if normalized_game:
+            game_set.add(normalized_game)
+
+    return game_set
+
+
 def _coerce_numeric_scores(scores: Sequence[object]) -> list[float]:
     """Convert numeric score values and numeric strings to floats."""
     numeric_scores: list[float] = []
