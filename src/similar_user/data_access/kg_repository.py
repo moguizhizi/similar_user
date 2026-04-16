@@ -22,6 +22,7 @@ from .cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -91,6 +92,30 @@ class KgRepository:
             query=PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_game_norm_score_series_comparison_by_end_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return game-level norm-score series for two patients up to an end date."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
                 "end_date": normalized_end_date,
             },
         )

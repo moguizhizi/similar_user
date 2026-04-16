@@ -22,6 +22,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
     PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
@@ -125,6 +126,68 @@ class KgRepositoryTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
             repository.get_patient_distinct_games_by_end_date(
                 "30010096",
+                "   ",
+            )
+
+    def test_get_patient_game_norm_score_series_comparison_by_end_date(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "game": "打怪物",
+                "scores_p1": ["91", "95"],
+                "scores_p2": ["88", "93"],
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_game_norm_score_series_comparison_by_end_date(
+            " 40 ",
+            " 30000035 ",
+            " 2026-02-12 ",
+        )
+
+        self.assertEqual(
+            result,
+            [{"game": "打怪物", "scores_p1": ["91", "95"], "scores_p2": ["88", "93"]}],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
+            parameters={
+                "primary_patient_id": "40",
+                "comparison_patient_id": "30000035",
+                "end_date": "2026-02-12",
+            },
+        )
+
+    def test_get_patient_game_norm_score_series_comparison_by_end_date_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "primary_patient_id must be a non-empty string.",
+        ):
+            repository.get_patient_game_norm_score_series_comparison_by_end_date(
+                "   ",
+                "30000035",
+                "2026-02-12",
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "comparison_patient_id must be a non-empty string.",
+        ):
+            repository.get_patient_game_norm_score_series_comparison_by_end_date(
+                "40",
+                "   ",
+                "2026-02-12",
+            )
+
+        with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
+            repository.get_patient_game_norm_score_series_comparison_by_end_date(
+                "40",
+                "30000035",
                 "   ",
             )
 
