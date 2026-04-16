@@ -44,7 +44,7 @@ class Neo4jClientTest(unittest.TestCase):
     def test_connect_verifies_connectivity(self, mock_driver_factory: Mock) -> None:
         mock_driver = Mock()
         mock_driver_factory.return_value = mock_driver
-        client = Neo4jClient.from_config("config/neo4j.yaml")
+        client = Neo4jClient.from_config("config/settings.yaml")
 
         client.connect()
 
@@ -61,7 +61,7 @@ class Neo4jClientTest(unittest.TestCase):
         mock_record.data.return_value = {"ok": 1}
         mock_driver.execute_query.return_value = ([mock_record], None, None)
         mock_driver_factory.return_value = mock_driver
-        client = Neo4jClient.from_config("config/neo4j.yaml")
+        client = Neo4jClient.from_config("config/settings.yaml")
 
         result = client.run_query("RETURN 1 AS ok")
 
@@ -79,7 +79,7 @@ class Neo4jClientTest(unittest.TestCase):
         mock_record.data.return_value = {"ok": 1}
         mock_driver.execute_query.return_value = ([mock_record], None, None)
         mock_driver_factory.return_value = mock_driver
-        client = Neo4jClient.from_config("config/neo4j.yaml")
+        client = Neo4jClient.from_config("config/settings.yaml")
 
         self.assertTrue(client.health_check())
 
@@ -135,7 +135,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         mock_client = Mock()
         mock_from_config.return_value.__enter__.return_value = mock_client
         mock_repository = Mock()
-        mock_repository.query_config_path = "config/query.yaml"
+        mock_repository.query_config_path = "config/settings.yaml"
         mock_service = Mock()
         mock_service.get_patient_pattern_paths.return_value = {
             "patient_id": "30010096",
@@ -163,7 +163,10 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
                 "retrieval_context": None,
             },
         )
-        mock_repository_cls.assert_called_once_with(client=mock_client)
+        mock_repository_cls.assert_called_once_with(
+            client=mock_client,
+            query_config_path=Path("config/settings.yaml"),
+        )
         mock_service_cls.assert_called_once_with(kg_repository=mock_repository)
         mock_service.get_patient_pattern_paths.assert_called_once_with("30010096")
         mock_save_pattern_result.assert_called_once_with(
@@ -172,7 +175,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 "retrieval_context": None,
             },
-            "config/query.yaml",
+            "config/settings.yaml",
         )
         mock_logger.info.assert_called()
 
@@ -187,7 +190,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
     ) -> None:
         mock_parse_args.return_value = Mock(
             patient_id="30010096",
-            config="config/neo4j.yaml",
+            config="config/settings.yaml",
             undated=False,
         )
         mock_run_flow.return_value = {

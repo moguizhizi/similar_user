@@ -1,5 +1,0 @@
-top_k: 20
-strategy: "graph"
-embedding:
-  enabled: false
-  dimension: 64

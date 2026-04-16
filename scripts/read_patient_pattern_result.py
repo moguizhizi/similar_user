@@ -21,7 +21,7 @@ from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore, StoredPatternResult
 
 
-DEFAULT_QUERY_CONFIG_PATH = Path("config/query.yaml")
+DEFAULT_QUERY_CONFIG_PATH = Path("config/settings.yaml")
 LOGGER = get_logger(__name__)
 
 

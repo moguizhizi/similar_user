@@ -9,6 +9,9 @@ from typing import Any
 import yaml
 
 
+DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
+
+
 @dataclass(frozen=True)
 class Neo4jSettings:
     """Connection settings for a Neo4j database."""
@@ -53,12 +56,21 @@ class PatternPathStorageSettings:
 
 
 @dataclass(frozen=True)
+class CandidateRankingSettings:
+    """Configuration for ranking similar-user candidates from scored paths."""
+
+    path_top_k: int = 50
+    candidate_top_k: int = 10
+
+
+@dataclass(frozen=True)
 class QuerySettings:
     """Query-related tuning settings."""
 
     graph_path_limit: GraphPathLimitSettings
     training_date_split: TrainingDateSplitSettings
     pattern_path_storage: PatternPathStorageSettings
+    candidate_ranking: CandidateRankingSettings
 
 
 def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
@@ -73,9 +85,22 @@ def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
     return data
 
 
+def _extract_config_section(
+    data: dict[str, Any],
+    section_name: str,
+) -> dict[str, Any]:
+    """Return a named config section, falling back to legacy flat mappings."""
+    section_data = data.get(section_name)
+    if section_data is None:
+        return data
+    if not isinstance(section_data, dict):
+        raise ValueError(f"{section_name} config section must be a mapping.")
+    return section_data
+
+
 def load_neo4j_settings(config_path: str | Path) -> Neo4jSettings:
     """Load Neo4j settings from YAML."""
-    data = load_yaml_config(config_path)
+    data = _extract_config_section(load_yaml_config(config_path), "neo4j")
 
     required_fields = ("uri", "username", "password")
     missing_fields = [field for field in required_fields if not data.get(field)]
@@ -93,11 +118,12 @@ def load_neo4j_settings(config_path: str | Path) -> Neo4jSettings:
 
 def load_query_settings(config_path: str | Path) -> QuerySettings:
     """Load query tuning settings from YAML."""
-    data = load_yaml_config(config_path)
+    data = _extract_config_section(load_yaml_config(config_path), "query")
 
     graph_path_limit_data = data.get("graph_path_limit") or {}
     training_date_split_data = data.get("training_date_split") or {}
     pattern_path_storage_data = data.get("pattern_path_storage") or {}
+    candidate_ranking_data = data.get("candidate_ranking") or {}
     bands_data = graph_path_limit_data.get("bands") or []
 
     bands: list[QueryLimitBandSettings] = []
@@ -140,6 +166,17 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     if not isinstance(output_dir, str) or not output_dir.strip():
         raise ValueError("pattern_path_storage output_dir must be a non-empty string.")
 
+    path_top_k = candidate_ranking_data.get("path_top_k", 50)
+    candidate_top_k = candidate_ranking_data.get("candidate_top_k", 10)
+    for field_name, value in (
+        ("path_top_k", path_top_k),
+        ("candidate_top_k", candidate_top_k),
+    ):
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError(
+                f"candidate_ranking {field_name} must be a positive integer."
+            )
+
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
             bands=tuple(bands),
@@ -154,4 +191,8 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             after_ratio=after_ratio,
         ),
         pattern_path_storage=PatternPathStorageSettings(output_dir=output_dir.strip()),
+        candidate_ranking=CandidateRankingSettings(
+            path_top_k=path_top_k,
+            candidate_top_k=candidate_top_k,
+        ),
     )

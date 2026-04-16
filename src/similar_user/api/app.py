@@ -12,7 +12,7 @@ from ..data_access.neo4j_client import Neo4jClient
 from ..utils.logger import get_logger
 
 
-DEFAULT_CONFIG_PATH = Path("config/neo4j.yaml")
+DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 LOGGER = get_logger(__name__)
 
 

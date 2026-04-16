@@ -1,4 +1,4 @@
-"""Build deduplicated similar-user candidates from top-k scored paths."""
+"""Build ranked similar-user candidates from top-k scored paths."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
+from config.settings import load_query_settings
 from similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     PathPattern,
@@ -47,14 +48,20 @@ class ScoredDomainPath:
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for candidate aggregation."""
     parser = argparse.ArgumentParser(
-        description="Build deduplicated similar-user candidates from top-k scored paths."
+        description="Build ranked similar-user candidates from top-k scored paths."
     )
     parser.add_argument("patient_id", help="Patient identifier used in the stored file.")
     parser.add_argument(
-        "--top-k",
+        "--path-top-k",
         type=int,
-        required=True,
-        help="Use the top-k scored paths as the candidate source.",
+        default=None,
+        help="Use the top-k scored paths as the candidate evidence source.",
+    )
+    parser.add_argument(
+        "--candidate-top-k",
+        type=int,
+        default=None,
+        help="Return the top-k ranked candidate users after aggregation.",
     )
     parser.add_argument(
         "--pattern",
@@ -72,26 +79,49 @@ def parse_args() -> argparse.Namespace:
 def build_similar_user_candidates(
     patient_id: str,
     *,
-    top_k: int,
+    path_top_k: int | None = None,
+    candidate_top_k: int | None = None,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     query_config_path: str | Path = DEFAULT_QUERY_CONFIG_PATH,
 ) -> dict[str, Any]:
-    """Aggregate deduplicated candidate users from top-k scored paths."""
+    """Aggregate ranked candidate users from top-k scored paths."""
+    ranking_settings = load_query_settings(query_config_path).candidate_ranking
+    resolved_path_top_k = (
+        ranking_settings.path_top_k if path_top_k is None else path_top_k
+    )
+    resolved_candidate_top_k = (
+        ranking_settings.candidate_top_k
+        if candidate_top_k is None
+        else candidate_top_k
+    )
+
     scored_result = score_patient_pattern_result(
         patient_id,
         pattern=pattern,
         query_config_path=query_config_path,
-        top_k=top_k,
+        top_k=resolved_path_top_k,
     )
-    return aggregate_candidates_from_scored_paths(scored_result, top_k=top_k)
+    return aggregate_candidates_from_scored_paths(
+        scored_result,
+        path_top_k=resolved_path_top_k,
+        candidate_top_k=resolved_candidate_top_k,
+    )
 
 
 def aggregate_candidates_from_scored_paths(
     scored_result: dict[str, Any],
     *,
-    top_k: int,
+    path_top_k: int,
+    candidate_top_k: int,
 ) -> dict[str, Any]:
     """Deduplicate candidate users from typed scored paths and summarize evidence."""
+    if path_top_k <= 0:
+        raise ValueError(f"path_top_k must be greater than 0, got {path_top_k}.")
+    if candidate_top_k <= 0:
+        raise ValueError(
+            f"candidate_top_k must be greater than 0, got {candidate_top_k}."
+        )
+
     scored_domain_paths = _build_scored_domain_paths(scored_result)
     retrieval_context = scored_result.get("retrieval_context")
     split_training_date = None
@@ -144,19 +174,26 @@ def aggregate_candidates_from_scored_paths(
         ),
         reverse=True,
     )
+    candidates = candidates[:candidate_top_k]
 
     return {
         "patient_id": scored_result.get("patient_id"),
         "pattern": scored_result.get("pattern"),
-        "top_k": top_k,
+        "path_top_k": path_top_k,
+        "candidate_top_k": candidate_top_k,
         "path_count": scored_result.get("path_count", 0),
         "scored_path_count": scored_result.get("scored_path_count", 0),
         "retrieval_context": {
             "split_training_date": split_training_date,
             "candidate_scope": (
-                f"候选相似用户来自训练日期小于等于 {split_training_date} 的 top-{top_k} path 去重结果"
+                "候选相似用户来自训练日期小于等于 "
+                f"{split_training_date} 的 top-{path_top_k} path 去重结果，"
+                f"最终返回 top-{candidate_top_k} 候选用户"
                 if split_training_date is not None
-                else f"候选相似用户来自已保存检索集合的 top-{top_k} path 去重结果"
+                else (
+                    f"候选相似用户来自已保存检索集合的 top-{path_top_k} "
+                    f"path 去重结果，最终返回 top-{candidate_top_k} 候选用户"
+                )
             ),
         },
         "candidate_count": len(candidates),
@@ -250,7 +287,8 @@ def main() -> int:
     try:
         result = build_similar_user_candidates(
             args.patient_id,
-            top_k=args.top_k,
+            path_top_k=args.path_top_k,
+            candidate_top_k=args.candidate_top_k,
             pattern=args.pattern,
             query_config_path=args.query_config,
         )

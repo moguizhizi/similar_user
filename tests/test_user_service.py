@@ -373,7 +373,7 @@ class UserServiceTest(unittest.TestCase):
         self,
     ) -> None:
         mock_repository = Mock()
-        mock_repository.query_config_path = "config/query.yaml"
+        mock_repository.query_config_path = "config/settings.yaml"
         mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
             {"orderedDatesa": ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]}
         ]
@@ -425,7 +425,7 @@ class UserServiceTest(unittest.TestCase):
 
     def test_get_patient_pattern_paths_returns_paths_with_recommendation(self) -> None:
         mock_repository = Mock()
-        mock_repository.query_config_path = "config/query.yaml"
+        mock_repository.query_config_path = "config/settings.yaml"
         mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
             {"orderedDatesa": ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]}
         ]
@@ -503,7 +503,7 @@ class UserServiceTest(unittest.TestCase):
         self,
     ) -> None:
         mock_repository = Mock()
-        mock_repository.query_config_path = "config/query.yaml"
+        mock_repository.query_config_path = "config/settings.yaml"
         mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
             {"orderedDatesa": ["2022-01-01", "2022-01-13", "2022-01-21", "2022-01-30"]}
         ]

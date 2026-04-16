@@ -9,16 +9,14 @@
 ```text
 similar_user/
 ├── config/
-│   ├── neo4j.yaml              # Neo4j 连接配置
-│   ├── query.yaml              # 固定模式路径查询与离线存储配置
-│   ├── similarity.yaml         # 相似度相关配置占位
+│   ├── settings.yaml           # 统一配置：Neo4j、查询、候选排序和相似度
 │   └── settings.py             # YAML 配置加载入口
 ├── data/
 │   └── pattern_paths/          # 固定模式路径离线结果存储
 ├── logs/
 │   └── similar_user.log        # 默认日志文件
 ├── scripts/
-│   ├── build_similar_user_candidates.py  # 从 top-k 评分路径构建候选相似用户
+│   ├── build_similar_user_candidates.py  # 从 top-k 评分路径构建 top-k 候选相似用户
 │   ├── debug_patient_pattern_paths.py    # 调试固定模式路径查询
 │   ├── debug_query.py                    # 直接连接 Neo4j 并执行验证查询
 │   ├── read_patient_pattern_result.py    # 读取本地离线保存的路径结果
@@ -76,9 +74,11 @@ similar_user/
 ## 当前可用能力
 
 - `python scripts/debug_query.py`
-  用于直接验证 `config/neo4j.yaml` 中的 Neo4j 连接是否可用。
+  用于直接验证 `config/settings.yaml` 中的 Neo4j 连接是否可用。
 - `python scripts/run_api.py --host 127.0.0.1 --port 8010`
   启动本地 HTTP 服务。
+- `python scripts/build_similar_user_candidates.py <patient_id>`
+  按 `config/settings.yaml` 中的 `query.candidate_ranking.path_top_k` 先保留高分 path 作为证据来源，再按 `query.candidate_ranking.candidate_top_k` 返回排序后的候选相似用户。
 - `GET /health/neo4j`
   用于检查 Neo4j 是否可连接。
 - `POST /query`
@@ -86,7 +86,7 @@ similar_user/
 
 ## 目录说明
 
-- `config/`：Neo4j、查询和相似度配置
+- `config/`：统一 YAML 配置和配置加载入口
 - `data/pattern_paths/`：固定模式路径的离线 JSONL 数据
 - `logs/`：运行日志输出
 - `src/similar_user/data_access/`：Neo4j 访问与仓储封装
@@ -98,9 +98,9 @@ similar_user/
 - `tests/`：针对性测试
 - `scripts/`：本地调试、离线读取和路径打分脚本
 
-## Query 配置说明
+## 配置说明
 
-`config/query.yaml` 中的 `graph_path_limit.per_g_strategy` 当前支持以下取值：
+`config/settings.yaml` 统一归纳 Neo4j、查询、候选排序和相似度配置。`query.graph_path_limit.per_g_strategy` 当前支持以下取值：
 
 - `band`：按 `gCount` 命中 `bands` 配置中的区间，直接使用对应的 `per_g`
 - `p2_div_g`：按 `ceil(p2Count / gCount)` 计算 `per_g`
@@ -108,15 +108,31 @@ similar_user/
 一个示例配置如下：
 
 ```yaml
-graph_path_limit:
-  per_g_strategy: "band"
-  bands:
-    - max_g_count: 49
-      per_g: 10
-    - max_g_count: 199
-      per_g: 6
-    - per_g: 4
-  max_limit_source: "total_paths"
+query:
+  graph_path_limit:
+    per_g_strategy: "band"
+    bands:
+      - max_g_count: 49
+        per_g: 10
+      - max_g_count: 199
+        per_g: 6
+      - per_g: 4
+    max_limit_source: "total_paths"
+```
+
+候选用户聚合排序使用 `query.candidate_ranking` 配置：
+
+```yaml
+query:
+  candidate_ranking:
+    path_top_k: 50       # 先保留多少条高分 path 作为证据来源
+    candidate_top_k: 10  # 最终返回多少个候选相似用户
+```
+
+如需临时覆盖配置值，也可以在脚本命令中传入：
+
+```bash
+python scripts/build_similar_user_candidates.py <patient_id> --path-top-k 100 --candidate-top-k 20
 ```
 
 ## 特定模式路径主流程
