@@ -10,6 +10,7 @@ from .item import (
     TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES,
     TASK_INSTANCE_ACTIVITY_VALUES,
     TASK_INSTANCE_RESULT_VALUES,
+    DiseaseNode,
     TaskActivityValue,
     EducationValue,
     TASK_INSTANCE_SET_EDUCATION_VALUES,
@@ -56,6 +57,36 @@ class PatientTasksetTaskGameTaskTasksetPatientPath:
             p2=_build_patient_node(row.get("p2"), "p2"),
         )
 
+@dataclass(frozen=True)
+class PatientTasksetDiseaseTasksetPatientPath:
+    """The P-S-D-S-P fixed graph path model."""
+
+    pattern: PathPattern
+    p: PatientNode
+    s1: TaskInstanceSetNode
+    dis: DiseaseNode
+    s2: TaskInstanceSetNode
+    p2: PatientNode
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+    ) -> PatientTasksetDiseaseTasksetPatientPath:
+        """Build a typed path from a stored path row."""
+        row = data.get("row") if isinstance(data.get("row"), dict) else data
+        if not isinstance(row, dict):
+            raise ValueError("path data must contain a mapping row.")
+
+        return cls(
+            pattern=_coerce_path_pattern(data.get("pattern")),
+            p=_build_patient_node(row.get("p"), "p"),
+            s1=_build_task_instance_set_node(row.get("s1"), "s1"),
+            dis=_build_disease_node(row.get("dis"), "dis"),
+            s2=_build_task_instance_set_node(row.get("s2"), "s2"),
+            p2=_build_patient_node(row.get("p2"), "p2"),
+        )
+
 
 @dataclass(frozen=True)
 class PatternPathResult:
@@ -63,7 +94,10 @@ class PatternPathResult:
 
     patient_id: str
     pattern: PathPattern
-    paths: list[PatientTasksetTaskGameTaskTasksetPatientPath]
+    paths: list[
+        PatientTasksetTaskGameTaskTasksetPatientPath
+        | PatientTasksetDiseaseTasksetPatientPath
+    ]
 
 
 def _coerce_path_pattern(value: object) -> PathPattern:
@@ -119,6 +153,12 @@ def _build_game_node(value: object, field_name: str) -> GameNode:
     """Build a game node from raw JSON content."""
     data = _require_mapping(value, field_name)
     return GameNode.from_dict(data)
+
+
+def _build_disease_node(value: object, field_name: str) -> DiseaseNode:
+    """Build a disease node from raw JSON content."""
+    data = _require_mapping(value, field_name)
+    return DiseaseNode.from_dict(data)
 
 
 def _require_mapping(value: object, field_name: str) -> dict[str, Any]:

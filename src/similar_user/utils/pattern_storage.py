@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from config.settings import load_query_settings
+from ..domain.graph_schema import PathPattern
 from ..domain.item import GameNode
 from ..domain.path_models import (
+    PatientTasksetDiseaseTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
 )
 
@@ -134,10 +136,23 @@ class StoredPatternResult:
             "retrieval_context": self.retrieval_context,
         }
 
-    def to_domain_paths(self) -> list[PatientTasksetTaskGameTaskTasksetPatientPath]:
+    def to_domain_paths(
+        self,
+    ) -> list[
+        PatientTasksetTaskGameTaskTasksetPatientPath
+        | PatientTasksetDiseaseTasksetPatientPath
+    ]:
         """Convert stored raw path rows to typed domain path objects."""
+        pattern = PathPattern(self.pattern)
+        if pattern == PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT:
+            path_cls = PatientTasksetTaskGameTaskTasksetPatientPath
+        elif pattern == PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT:
+            path_cls = PatientTasksetDiseaseTasksetPatientPath
+        else:
+            raise ValueError(f"Unsupported stored pattern: {self.pattern}")
+
         return [
-            PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(
+            path_cls.from_dict(
                 {
                     **path,
                     "pattern": self.pattern,
