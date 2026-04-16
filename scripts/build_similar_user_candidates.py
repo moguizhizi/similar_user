@@ -52,18 +52,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("patient_id", help="Patient identifier used in the stored file.")
     parser.add_argument(
-        "--path-top-k",
-        type=int,
-        default=None,
-        help="Use the top-k scored paths as the candidate evidence source.",
-    )
-    parser.add_argument(
-        "--candidate-top-k",
-        type=int,
-        default=None,
-        help="Return the top-k ranked candidate users after aggregation.",
-    )
-    parser.add_argument(
         "--pattern",
         default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         help="Pattern name used to locate the saved result.",
@@ -79,32 +67,22 @@ def parse_args() -> argparse.Namespace:
 def build_similar_user_candidates(
     patient_id: str,
     *,
-    path_top_k: int | None = None,
-    candidate_top_k: int | None = None,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     query_config_path: str | Path = DEFAULT_QUERY_CONFIG_PATH,
 ) -> dict[str, Any]:
     """Aggregate ranked candidate users from top-k scored paths."""
     ranking_settings = load_query_settings(query_config_path).candidate_ranking
-    resolved_path_top_k = (
-        ranking_settings.path_top_k if path_top_k is None else path_top_k
-    )
-    resolved_candidate_top_k = (
-        ranking_settings.candidate_top_k
-        if candidate_top_k is None
-        else candidate_top_k
-    )
 
     scored_result = score_patient_pattern_result(
         patient_id,
         pattern=pattern,
         query_config_path=query_config_path,
-        top_k=resolved_path_top_k,
+        top_k=ranking_settings.path_top_k,
     )
     return aggregate_candidates_from_scored_paths(
         scored_result,
-        path_top_k=resolved_path_top_k,
-        candidate_top_k=resolved_candidate_top_k,
+        path_top_k=ranking_settings.path_top_k,
+        candidate_top_k=ranking_settings.candidate_top_k,
     )
 
 
@@ -287,8 +265,6 @@ def main() -> int:
     try:
         result = build_similar_user_candidates(
             args.patient_id,
-            path_top_k=args.path_top_k,
-            candidate_top_k=args.candidate_top_k,
             pattern=args.pattern,
             query_config_path=args.query_config,
         )
