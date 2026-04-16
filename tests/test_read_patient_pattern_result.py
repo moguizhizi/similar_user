@@ -187,6 +187,47 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
         self.assertEqual(domain_paths[0].dis.name, "遗忘型轻度认知障碍")
         self.assertEqual(domain_paths[0].p2.id, "20113562")
 
+    def test_stored_pattern_result_can_convert_symptom_paths_to_domain_objects(
+        self,
+    ) -> None:
+        result = StoredPatternResult.from_dict(
+            {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT",
+                "ordered_training_dates": [],
+                "first_training_date": None,
+                "last_training_date": None,
+                "training_date_count": 0,
+                "retrieval_context": {
+                    "split_training_date": None,
+                    "before_split": {},
+                    "post_split_games": [],
+                    "limit_recommendation": None,
+                    "paths": [
+                        {
+                            "row": {
+                                "p": {"id": "30010096", "name": "患者_30010096"},
+                                "s1": {"id": "30010096_20220113", "训练日期": "2022-01-13"},
+                                "sym": {
+                                    "id": "AU_SYM_0007",
+                                    "name": "睡眠障碍",
+                                },
+                                "s2": {"id": "20113562_20211214", "训练日期": "2021-12-14"},
+                                "p2": {"id": "20113562", "name": "患者_20113562"},
+                            }
+                        }
+                    ],
+                },
+            }
+        )
+
+        domain_paths = result.to_domain_paths()
+
+        self.assertEqual(len(domain_paths), 1)
+        self.assertEqual(domain_paths[0].p.id, "30010096")
+        self.assertEqual(domain_paths[0].sym.name, "睡眠障碍")
+        self.assertEqual(domain_paths[0].p2.id, "20113562")
+
     def test_stored_pattern_result_can_convert_statistics_to_typed_object(self) -> None:
         result = StoredPatternResult.from_dict(
             {

@@ -14,6 +14,7 @@ from ..domain.graph_schema import PathPattern
 from ..domain.item import GameNode
 from ..domain.path_models import (
     PatientTasksetDiseaseTasksetPatientPath,
+    PatientTasksetSymptomTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
 )
 
@@ -141,6 +142,7 @@ class StoredPatternResult:
     ) -> list[
         PatientTasksetTaskGameTaskTasksetPatientPath
         | PatientTasksetDiseaseTasksetPatientPath
+        | PatientTasksetSymptomTasksetPatientPath
     ]:
         """Convert stored raw path rows to typed domain path objects."""
         pattern = PathPattern(self.pattern)
@@ -148,6 +150,8 @@ class StoredPatternResult:
             path_cls = PatientTasksetTaskGameTaskTasksetPatientPath
         elif pattern == PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT:
             path_cls = PatientTasksetDiseaseTasksetPatientPath
+        elif pattern == PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT:
+            path_cls = PatientTasksetSymptomTasksetPatientPath
         else:
             raise ValueError(f"Unsupported stored pattern: {self.pattern}")
 
