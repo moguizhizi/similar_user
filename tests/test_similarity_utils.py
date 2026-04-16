@@ -8,6 +8,7 @@ from src.similar_user.services.similarity.utils import (
     calculate_game_composite_score,
     calculate_game_series_features,
     calculate_game_similarity_with_diversity_score,
+    calculate_set_same_score,
 )
 
 
@@ -111,6 +112,62 @@ class SimilarityUtilsTest(unittest.TestCase):
         self.assertAlmostEqual(float(result["similarity_component"]), 1.0)
         self.assertAlmostEqual(float(result["diversity_component"]), 0.5)
         self.assertAlmostEqual(float(result["score"]), 0.5)
+
+    def test_calculate_set_same_score_uses_common_and_unique_items(self) -> None:
+        result = calculate_set_same_score(
+            ["睡眠障碍", "记忆下降", "焦虑"],
+            ["睡眠障碍", "记忆下降", "头晕", "乏力"],
+        )
+
+        self.assertEqual(result["common_count"], 2)
+        self.assertEqual(result["source_only_count"], 1)
+        self.assertEqual(result["candidate_only_count"], 2)
+        self.assertAlmostEqual(float(result["source_same_component"]), 2 / 3)
+        self.assertAlmostEqual(float(result["candidate_same_component"]), 2 / 4)
+        self.assertAlmostEqual(float(result["score"]), (2 / 3) * (2 / 4))
+
+    def test_calculate_set_same_score_returns_one_for_same_items(self) -> None:
+        result = calculate_set_same_score(
+            ["睡眠障碍", "记忆下降"],
+            ["记忆下降", "睡眠障碍"],
+        )
+
+        self.assertEqual(result["common_count"], 2)
+        self.assertEqual(result["source_only_count"], 0)
+        self.assertEqual(result["candidate_only_count"], 0)
+        self.assertAlmostEqual(float(result["source_same_component"]), 1.0)
+        self.assertAlmostEqual(float(result["candidate_same_component"]), 1.0)
+        self.assertAlmostEqual(float(result["score"]), 1.0)
+
+    def test_calculate_set_same_score_returns_zero_for_no_overlap(self) -> None:
+        result = calculate_set_same_score(
+            ["睡眠障碍"],
+            ["头晕"],
+        )
+
+        self.assertEqual(result["common_count"], 0)
+        self.assertEqual(result["source_only_count"], 1)
+        self.assertEqual(result["candidate_only_count"], 1)
+        self.assertAlmostEqual(float(result["score"]), 0.0)
+
+    def test_calculate_set_same_score_deduplicates_and_ignores_blank_values(self) -> None:
+        result = calculate_set_same_score(
+            ["睡眠障碍", "睡眠障碍", "", None],
+            ["睡眠障碍", "  ", None, "头晕", "头晕"],
+        )
+
+        self.assertEqual(result["common_count"], 1)
+        self.assertEqual(result["source_only_count"], 0)
+        self.assertEqual(result["candidate_only_count"], 1)
+        self.assertAlmostEqual(float(result["score"]), 0.5)
+
+    def test_calculate_set_same_score_returns_zero_when_one_side_is_empty(self) -> None:
+        result = calculate_set_same_score([], ["头晕"])
+
+        self.assertEqual(result["common_count"], 0)
+        self.assertEqual(result["source_only_count"], 0)
+        self.assertEqual(result["candidate_only_count"], 1)
+        self.assertAlmostEqual(float(result["score"]), 0.0)
 
 
 if __name__ == "__main__":

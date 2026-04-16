@@ -68,17 +68,52 @@ def calculate_game_similarity_with_diversity_score(
     }
 
 
+def calculate_set_same_score(
+    source_items: Sequence[object],
+    candidate_items: Sequence[object],
+) -> dict[str, float | int]:
+    """Calculate same-score for disease, symptom, or other item collections."""
+    source_item_set = _coerce_item_set(source_items)
+    candidate_item_set = _coerce_item_set(candidate_items)
+
+    common_count = len(source_item_set & candidate_item_set)
+    source_only_count = len(source_item_set - candidate_item_set)
+    candidate_only_count = len(candidate_item_set - source_item_set)
+
+    source_count = common_count + source_only_count
+    candidate_count = common_count + candidate_only_count
+    source_same_component = 0.0 if source_count == 0 else common_count / source_count
+    candidate_same_component = (
+        0.0 if candidate_count == 0 else common_count / candidate_count
+    )
+    score = source_same_component * candidate_same_component
+
+    return {
+        "common_count": common_count,
+        "source_only_count": source_only_count,
+        "candidate_only_count": candidate_only_count,
+        "source_same_component": source_same_component,
+        "candidate_same_component": candidate_same_component,
+        "score": score,
+    }
+
+
 def _coerce_game_set(games: Sequence[object]) -> set[str]:
     """Convert game identifiers to a normalized set."""
-    game_set: set[str] = set()
-    for game in games:
-        if game is None:
-            continue
-        normalized_game = str(game).strip()
-        if normalized_game:
-            game_set.add(normalized_game)
+    return _coerce_item_set(games)
 
-    return game_set
+
+def _coerce_item_set(items: Sequence[object]) -> set[str]:
+    """Convert item identifiers to a normalized set."""
+    item_set: set[str] = set()
+    for item in items:
+        if item is None:
+            continue
+        normalized_item = str(item).strip()
+        if normalized_item:
+            item_set.add(normalized_item)
+
+    return item_set
 
 
 def _coerce_numeric_scores(scores: Sequence[object]) -> list[float]:
