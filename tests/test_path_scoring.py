@@ -239,7 +239,7 @@ class PathScoringTest(unittest.TestCase):
 
     def test_score_patient_pattern_result_scores_saved_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
             config_path.write_text(
                 "\n".join(
@@ -292,7 +292,7 @@ class PathScoringTest(unittest.TestCase):
             scored = score_patient_pattern_result(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                query_config_path=config_path,
+                config_path=config_path,
             )
 
         self.assertEqual(scored["path_count"], 1)
@@ -302,7 +302,7 @@ class PathScoringTest(unittest.TestCase):
 
     def test_score_patient_pattern_result_returns_top_k_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
             config_path.write_text(
                 "\n".join(
@@ -369,7 +369,7 @@ class PathScoringTest(unittest.TestCase):
             scored = score_patient_pattern_result(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                query_config_path=config_path,
+                config_path=config_path,
                 top_k=1,
             )
 
@@ -386,7 +386,7 @@ class PathScoringTest(unittest.TestCase):
         mock_logger: Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
             config_path.write_text(
                 "\n".join(
@@ -438,12 +438,12 @@ class PathScoringTest(unittest.TestCase):
             expected = score_patient_pattern_result(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                query_config_path=config_path,
+                config_path=config_path,
             )
             mock_parse_args.return_value = Mock(
                 patient_id="30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                query_config=str(config_path),
+                config=str(config_path),
                 path_index=None,
                 top_k=None,
             )
@@ -465,7 +465,7 @@ class PathScoringTest(unittest.TestCase):
         mock_parse_args.return_value = Mock(
             patient_id="missing",
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            query_config="missing.yaml",
+            config="missing.yaml",
             path_index=None,
             top_k=None,
         )

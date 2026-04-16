@@ -39,7 +39,7 @@ from .neo4j_client import Neo4jClient
 
 
 DEFAULT_PATH_LIMITS = [500, 1000, 2000, 3000, 5000]
-DEFAULT_QUERY_CONFIG_PATH = Path("config/settings.yaml")
+DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,7 @@ class KgRepository:
 
     client: Neo4jClient
     default_limits: list[int] = field(default_factory=lambda: DEFAULT_PATH_LIMITS.copy())
-    query_config_path: Path = DEFAULT_QUERY_CONFIG_PATH
+    config_path: Path = DEFAULT_CONFIG_PATH
 
     def get_patient_training_date_games_by_start_date(
         self,
@@ -581,7 +581,7 @@ class KgRepository:
         if p2_count < 0:
             raise ValueError("p2_count must be a non-negative integer.")
 
-        settings = load_query_settings(self.query_config_path).graph_path_limit
+        settings = load_query_settings(self.config_path).graph_path_limit
         return self._recommend_graph_path_limit(total_paths, g_count, p2_count, settings)
 
     @staticmethod

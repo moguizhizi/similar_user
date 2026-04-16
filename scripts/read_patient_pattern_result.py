@@ -21,7 +21,7 @@ from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore, StoredPatternResult
 
 
-DEFAULT_QUERY_CONFIG_PATH = Path("config/settings.yaml")
+DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 LOGGER = get_logger(__name__)
 
 
@@ -37,9 +37,10 @@ def parse_args() -> argparse.Namespace:
         help="Pattern name used to locate the saved result.",
     )
     parser.add_argument(
-        "--query-config",
-        default=str(DEFAULT_QUERY_CONFIG_PATH),
-        help="Path to the query YAML config file.",
+        "--config",
+        dest="config",
+        default=str(DEFAULT_CONFIG_PATH),
+        help="Path to the YAML config file.",
     )
     return parser.parse_args()
 
@@ -48,10 +49,10 @@ def read_patient_pattern_result(
     patient_id: str,
     *,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-    query_config_path: str | Path = DEFAULT_QUERY_CONFIG_PATH,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
 ) -> StoredPatternResult:
     """Load one saved patient pattern result from disk."""
-    return PatternResultStore(query_config_path).load(pattern, patient_id)
+    return PatternResultStore(config_path).load(pattern, patient_id)
 
 
 def main() -> int:
@@ -61,7 +62,7 @@ def main() -> int:
         result = read_patient_pattern_result(
             args.patient_id,
             pattern=args.pattern,
-            query_config_path=args.query_config,
+            config_path=args.config,
         )
     except Exception as exc:
         LOGGER.exception("Read patient pattern result failed: %s", exc)

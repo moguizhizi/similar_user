@@ -57,7 +57,7 @@ def run_patient_pattern_path_flow(
         config_path,
     )
     with Neo4jClient.from_config(config_path) as client:
-        repository = KgRepository(client=client, query_config_path=Path(config_path))
+        repository = KgRepository(client=client, config_path=Path(config_path))
         service = UserService(kg_repository=repository)
         if not use_dated_statistics:
             LOGGER.warning(
@@ -65,7 +65,7 @@ def run_patient_pattern_path_flow(
                 patient_id,
             )
         result = service.get_patient_pattern_paths(patient_id)
-        output_path = save_pattern_result(result, repository.query_config_path)
+        output_path = save_pattern_result(result, repository.config_path)
         LOGGER.info(
             "Completed patient pattern path flow: patient_id=%s, training_date_count=%s, path_count=%s, output_path=%s",
             patient_id,

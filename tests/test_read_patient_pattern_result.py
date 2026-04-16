@@ -21,7 +21,7 @@ from similar_user.utils.pattern_storage import (
 class ReadPatientPatternResultScriptTest(unittest.TestCase):
     def test_read_patient_pattern_result_returns_typed_result(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
             config_path.write_text(
                 "\n".join(
@@ -53,7 +53,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             loaded_result = read_patient_pattern_result(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                query_config_path=config_path,
+                config_path=config_path,
             )
 
         self.assertIsInstance(loaded_result, StoredPatternResult)
@@ -67,7 +67,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
         mock_logger: Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
             config_path.write_text(
                 "\n".join(
@@ -98,7 +98,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             mock_parse_args.return_value = Mock(
                 patient_id="30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                query_config=str(config_path),
+                config=str(config_path),
             )
 
             exit_code = main()

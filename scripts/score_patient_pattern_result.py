@@ -22,7 +22,7 @@ from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore
 
 
-DEFAULT_QUERY_CONFIG_PATH = Path("config/settings.yaml")
+DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 LOGGER = get_logger(__name__)
 
 
@@ -38,9 +38,10 @@ def parse_args() -> argparse.Namespace:
         help="Pattern name used to locate the saved result.",
     )
     parser.add_argument(
-        "--query-config",
-        default=str(DEFAULT_QUERY_CONFIG_PATH),
-        help="Path to the query YAML config file.",
+        "--config",
+        dest="config",
+        default=str(DEFAULT_CONFIG_PATH),
+        help="Path to the YAML config file.",
     )
     parser.add_argument(
         "--path-index",
@@ -61,12 +62,12 @@ def score_patient_pattern_result(
     patient_id: str,
     *,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-    query_config_path: str | Path = DEFAULT_QUERY_CONFIG_PATH,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
     top_k: int | None = None,
 ) -> dict[str, object]:
     """Load a saved patient result and score its domain paths."""
-    stored_result = PatternResultStore(query_config_path).load(pattern, patient_id)
+    stored_result = PatternResultStore(config_path).load(pattern, patient_id)
     domain_paths = stored_result.to_domain_paths()
 
     if top_k is not None and top_k <= 0:
@@ -129,7 +130,7 @@ def main() -> int:
         result = score_patient_pattern_result(
             args.patient_id,
             pattern=args.pattern,
-            query_config_path=args.query_config,
+            config_path=args.config,
             path_index=args.path_index,
             top_k=args.top_k,
         )
