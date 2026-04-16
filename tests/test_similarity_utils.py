@@ -7,6 +7,7 @@ import unittest
 from src.similar_user.services.similarity.utils import (
     calculate_game_composite_score,
     calculate_game_series_features,
+    calculate_game_similarity_with_diversity_score,
 )
 
 
@@ -37,6 +38,80 @@ class SimilarityUtilsTest(unittest.TestCase):
             "scores must contain at least one numeric value.",
         ):
             calculate_game_series_features(["", None, "bad"])
+
+    def test_calculate_game_similarity_with_diversity_score_uses_common_and_unique_games(
+        self,
+    ) -> None:
+        result = calculate_game_similarity_with_diversity_score(
+            ["打怪物", "真假句辨别", "记忆广度"],
+            ["打怪物", "真假句辨别", "空间搜索", "连连看"],
+        )
+
+        self.assertEqual(result["common_game_count"], 2)
+        self.assertEqual(result["source_only_game_count"], 1)
+        self.assertEqual(result["candidate_only_game_count"], 2)
+        self.assertAlmostEqual(float(result["similarity_component"]), 2 / 3)
+        self.assertAlmostEqual(float(result["diversity_component"]), 2 / 4)
+        self.assertAlmostEqual(float(result["score"]), (2 / 3) * (2 / 4))
+
+    def test_calculate_game_similarity_with_diversity_score_deduplicates_games(
+        self,
+    ) -> None:
+        result = calculate_game_similarity_with_diversity_score(
+            ["打怪物", "打怪物", "真假句辨别"],
+            ["打怪物", "空间搜索", "空间搜索"],
+        )
+
+        self.assertEqual(result["common_game_count"], 1)
+        self.assertEqual(result["source_only_game_count"], 1)
+        self.assertEqual(result["candidate_only_game_count"], 1)
+        self.assertAlmostEqual(float(result["score"]), 0.25)
+
+    def test_calculate_game_similarity_with_diversity_score_returns_zero_for_same_games(
+        self,
+    ) -> None:
+        result = calculate_game_similarity_with_diversity_score(
+            ["打怪物", "真假句辨别"],
+            ["真假句辨别", "打怪物"],
+        )
+
+        self.assertEqual(result["common_game_count"], 2)
+        self.assertEqual(result["source_only_game_count"], 0)
+        self.assertEqual(result["candidate_only_game_count"], 0)
+        self.assertAlmostEqual(float(result["similarity_component"]), 1.0)
+        self.assertAlmostEqual(float(result["diversity_component"]), 0.0)
+        self.assertAlmostEqual(float(result["score"]), 0.0)
+
+    def test_calculate_game_similarity_with_diversity_score_returns_zero_for_no_overlap(
+        self,
+    ) -> None:
+        result = calculate_game_similarity_with_diversity_score(
+            ["打怪物"],
+            ["空间搜索"],
+        )
+
+        self.assertEqual(result["common_game_count"], 0)
+        self.assertEqual(result["source_only_game_count"], 1)
+        self.assertEqual(result["candidate_only_game_count"], 1)
+        self.assertAlmostEqual(float(result["similarity_component"]), 0.0)
+        self.assertAlmostEqual(float(result["diversity_component"]), 1.0)
+        self.assertAlmostEqual(float(result["score"]), 0.0)
+
+    def test_calculate_game_similarity_with_diversity_score_ignores_blank_game_values(
+        self,
+    ) -> None:
+        result = calculate_game_similarity_with_diversity_score(
+            ["打怪物", "", None],
+            ["打怪物", "  ", None, "空间搜索"],
+        )
+
+        self.assertEqual(result["common_game_count"], 1)
+        self.assertEqual(result["source_only_game_count"], 0)
+        self.assertEqual(result["candidate_only_game_count"], 1)
+        self.assertAlmostEqual(float(result["similarity_component"]), 1.0)
+        self.assertAlmostEqual(float(result["diversity_component"]), 0.5)
+        self.assertAlmostEqual(float(result["score"]), 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()
