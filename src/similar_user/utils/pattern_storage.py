@@ -185,14 +185,14 @@ class StoredPatternResult:
         return value if isinstance(value, list) else []
 
 
-def get_pattern_result_output_dir(query_config_path: str | Path, pattern: str) -> Path:
+def get_pattern_result_output_dir(config_path: str | Path, pattern: str) -> Path:
     """Return the output directory for a given pattern."""
-    settings = load_query_settings(query_config_path)
+    settings = load_query_settings(config_path)
     return Path(settings.pattern_path_storage.output_dir) / pattern
 
 
 def get_patient_pattern_result_output_path(
-    query_config_path: str | Path,
+    config_path: str | Path,
     pattern: str,
     patient_id: str,
 ) -> Path:
@@ -201,7 +201,7 @@ def get_patient_pattern_result_output_path(
     normalized_patient_id = _normalize_required_string(patient_id, "patient_id")
     bucket = normalized_patient_id[:2] or "unknown"
     return (
-        get_pattern_result_output_dir(query_config_path, normalized_pattern)
+        get_pattern_result_output_dir(config_path, normalized_pattern)
         / bucket
         / f"{normalized_patient_id}.json"
     )
@@ -210,8 +210,8 @@ def get_patient_pattern_result_output_path(
 class PatternResultStore:
     """Read and write patient-scoped pattern path result files."""
 
-    def __init__(self, query_config_path: str | Path) -> None:
-        self.query_config_path = query_config_path
+    def __init__(self, config_path: str | Path) -> None:
+        self.config_path = config_path
 
     def save(self, result: StoredPatternResult | dict[str, Any]) -> Path:
         """Save one patient's result as a single JSON file, overwriting older data."""
@@ -219,7 +219,7 @@ class PatternResultStore:
             result if isinstance(result, StoredPatternResult) else StoredPatternResult.from_dict(result)
         )
         output_path = get_patient_pattern_result_output_path(
-            self.query_config_path,
+            self.config_path,
             normalized_result.pattern,
             normalized_result.patient_id,
         )
@@ -248,7 +248,7 @@ class PatternResultStore:
     def load(self, pattern: str, patient_id: str) -> StoredPatternResult:
         """Load one patient's saved result."""
         output_path = get_patient_pattern_result_output_path(
-            self.query_config_path,
+            self.config_path,
             pattern,
             patient_id,
         )
@@ -257,7 +257,7 @@ class PatternResultStore:
 
     def iter_pattern_results(self, pattern: str) -> Iterator[StoredPatternResult]:
         """Yield all saved results for the given pattern."""
-        pattern_dir = get_pattern_result_output_dir(self.query_config_path, pattern)
+        pattern_dir = get_pattern_result_output_dir(self.config_path, pattern)
         if not pattern_dir.exists():
             return
 
@@ -268,10 +268,10 @@ class PatternResultStore:
 
 def save_pattern_result(
     result: dict[str, Any],
-    query_config_path: str | Path,
+    config_path: str | Path,
 ) -> Path:
     """Save a single patient pattern result using the default store."""
-    return PatternResultStore(query_config_path).save(result)
+    return PatternResultStore(config_path).save(result)
 
 
 def _normalize_required_string(value: object, field_name: str) -> str:

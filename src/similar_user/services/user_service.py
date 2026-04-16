@@ -207,7 +207,7 @@ class UserService:
         self._log_training_context(training_context)
 
         split_settings = load_query_settings(
-            self.kg_repository.query_config_path
+            self.kg_repository.config_path
         ).training_date_split
         if len(ordered_dates) < split_settings.min_training_dates:
             LOGGER.warning(

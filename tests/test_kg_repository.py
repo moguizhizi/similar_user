@@ -1219,7 +1219,7 @@ class KgRepositoryTest(unittest.TestCase):
                 limit=0,
             )
 
-    def test_recommend_graph_path_limit_uses_query_yaml(self) -> None:
+    def test_recommend_graph_path_limit_uses_config_yaml(self) -> None:
         repository = KgRepository(client=Mock())
 
         result = repository.recommend_graph_path_limit(
@@ -1243,7 +1243,7 @@ class KgRepositoryTest(unittest.TestCase):
 
     def test_recommend_graph_path_limit_uses_p2_div_g_strategy(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             config_path.write_text(
                 "\n".join(
                     [
@@ -1257,7 +1257,7 @@ class KgRepositoryTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            repository = KgRepository(client=Mock(), query_config_path=config_path)
+            repository = KgRepository(client=Mock(), config_path=config_path)
 
             result = repository.recommend_graph_path_limit(
                 total_paths=100,
@@ -1269,7 +1269,7 @@ class KgRepositoryTest(unittest.TestCase):
 
     def test_recommend_graph_path_limit_returns_zero_limit_when_g_count_is_zero(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             config_path.write_text(
                 "\n".join(
                     [
@@ -1283,7 +1283,7 @@ class KgRepositoryTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            repository = KgRepository(client=Mock(), query_config_path=config_path)
+            repository = KgRepository(client=Mock(), config_path=config_path)
 
             result = repository.recommend_graph_path_limit(
                 total_paths=100,
@@ -1304,7 +1304,7 @@ class KgRepositoryTest(unittest.TestCase):
 
     def test_recommend_graph_path_limit_rejects_unsupported_limit_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             config_path.write_text(
                 "\n".join(
                     [
@@ -1317,14 +1317,14 @@ class KgRepositoryTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            repository = KgRepository(client=Mock(), query_config_path=config_path)
+            repository = KgRepository(client=Mock(), config_path=config_path)
 
             with self.assertRaisesRegex(ValueError, "Unsupported max_limit_source"):
                 repository.recommend_graph_path_limit(total_paths=10, g_count=1, p2_count=1)
 
     def test_recommend_graph_path_limit_rejects_unsupported_per_g_strategy(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             config_path.write_text(
                 "\n".join(
                     [
@@ -1338,7 +1338,7 @@ class KgRepositoryTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            repository = KgRepository(client=Mock(), query_config_path=config_path)
+            repository = KgRepository(client=Mock(), config_path=config_path)
 
             with self.assertRaisesRegex(ValueError, "Unsupported per_g_strategy"):
                 repository.recommend_graph_path_limit(

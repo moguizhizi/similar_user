@@ -28,7 +28,7 @@ from similar_user.domain.path_models import (
 from similar_user.utils.logger import get_logger
 
 from scripts.score_patient_pattern_result import (
-    DEFAULT_QUERY_CONFIG_PATH,
+    DEFAULT_CONFIG_PATH,
     score_patient_pattern_result,
 )
 
@@ -56,11 +56,6 @@ def parse_args() -> argparse.Namespace:
         default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         help="Pattern name used to locate the saved result.",
     )
-    parser.add_argument(
-        "--query-config",
-        default=str(DEFAULT_QUERY_CONFIG_PATH),
-        help="Path to the query YAML config file.",
-    )
     return parser.parse_args()
 
 
@@ -68,15 +63,14 @@ def build_similar_user_candidates(
     patient_id: str,
     *,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-    query_config_path: str | Path = DEFAULT_QUERY_CONFIG_PATH,
 ) -> dict[str, Any]:
     """Aggregate ranked candidate users from top-k scored paths."""
-    ranking_settings = load_query_settings(query_config_path).candidate_ranking
+    ranking_settings = load_query_settings(DEFAULT_CONFIG_PATH).candidate_ranking
 
     scored_result = score_patient_pattern_result(
         patient_id,
         pattern=pattern,
-        query_config_path=query_config_path,
+        config_path=DEFAULT_CONFIG_PATH,
         top_k=ranking_settings.path_top_k,
     )
     return aggregate_candidates_from_scored_paths(
@@ -266,7 +260,6 @@ def main() -> int:
         result = build_similar_user_candidates(
             args.patient_id,
             pattern=args.pattern,
-            query_config_path=args.query_config,
         )
     except Exception as exc:
         LOGGER.exception("Build similar user candidates failed: %s", exc)

@@ -18,7 +18,7 @@ from src.similar_user.utils.pattern_storage import (
 class PatternStorageTest(unittest.TestCase):
     def test_get_pattern_result_output_dir_uses_yaml_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             config_path.write_text(
                 "\n".join(
                     [
@@ -48,7 +48,7 @@ class PatternStorageTest(unittest.TestCase):
 
     def test_get_patient_pattern_result_output_path_uses_bucketed_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
             config_path.write_text(
                 "\n".join(
@@ -83,7 +83,7 @@ class PatternStorageTest(unittest.TestCase):
 
     def test_save_pattern_result_overwrites_same_patient_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
             config_path.write_text(
                 "\n".join(
@@ -140,7 +140,7 @@ class PatternStorageTest(unittest.TestCase):
 
     def test_iter_pattern_results_reads_multiple_patient_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
             config_path.write_text(
                 "\n".join(

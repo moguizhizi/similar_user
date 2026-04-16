@@ -222,7 +222,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
     def test_build_similar_user_candidates_uses_scored_top_k_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
             config_path.write_text(
                 "\n".join(
@@ -309,10 +309,11 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             }
             save_pattern_result(result, config_path)
 
-            candidates = build_similar_user_candidates(
-                "30010096",
-                query_config_path=config_path,
-            )
+            with patch(
+                "scripts.build_similar_user_candidates.DEFAULT_CONFIG_PATH",
+                config_path,
+            ):
+                candidates = build_similar_user_candidates("30010096")
 
         self.assertEqual(candidates["candidate_count"], 2)
         self.assertEqual(candidates["retrieval_context"]["split_training_date"], "2022-01-13")
@@ -320,9 +321,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(candidates["candidates"][0]["match_count"], 2)
         self.assertEqual(candidates["candidates"][1]["patient_id"], "20113563")
 
-    def test_build_similar_user_candidates_reads_top_k_from_query_config(self) -> None:
+    def test_build_similar_user_candidates_reads_top_k_from_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "query.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             config_path.write_text(
                 "\n".join(
                     [
@@ -364,13 +365,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 ],
             }
             with patch(
+                "scripts.build_similar_user_candidates.DEFAULT_CONFIG_PATH",
+                config_path,
+            ), patch(
                 "scripts.build_similar_user_candidates.score_patient_pattern_result",
                 return_value=scored_result,
             ) as mock_score:
-                candidates = build_similar_user_candidates(
-                    "30010096",
-                    query_config_path=config_path,
-                )
+                candidates = build_similar_user_candidates("30010096")
 
         self.assertEqual(candidates["path_top_k"], 2)
         self.assertEqual(candidates["candidate_top_k"], 1)
@@ -379,7 +380,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_score.assert_called_once_with(
             "30010096",
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            query_config_path=config_path,
+            config_path=config_path,
             top_k=2,
         )
 
@@ -409,7 +410,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_parse_args.return_value = Mock(
             patient_id="30010096",
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            query_config="config/settings.yaml",
         )
         mock_build_candidates.return_value = expected
 

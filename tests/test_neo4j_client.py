@@ -18,7 +18,7 @@ from src.similar_user.data_access.neo4j_client import Neo4jClient
 class LoadNeo4jSettingsTest(unittest.TestCase):
     def test_load_neo4j_settings_from_yaml(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "neo4j.yaml"
+            config_path = Path(temp_dir) / "settings.yaml"
             config_path.write_text(
                 "\n".join(
                     [
@@ -135,7 +135,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         mock_client = Mock()
         mock_from_config.return_value.__enter__.return_value = mock_client
         mock_repository = Mock()
-        mock_repository.query_config_path = "config/settings.yaml"
+        mock_repository.config_path = "config/settings.yaml"
         mock_service = Mock()
         mock_service.get_patient_pattern_paths.return_value = {
             "patient_id": "30010096",
@@ -165,7 +165,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         )
         mock_repository_cls.assert_called_once_with(
             client=mock_client,
-            query_config_path=Path("config/settings.yaml"),
+            config_path=Path("config/settings.yaml"),
         )
         mock_service_cls.assert_called_once_with(kg_repository=mock_repository)
         mock_service.get_patient_pattern_paths.assert_called_once_with("30010096")

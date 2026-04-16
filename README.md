@@ -84,6 +84,41 @@ similar_user/
 - `POST /query`
   用于提交 Cypher 查询并返回结果，适合本地调试。
 
+## 脚本用法
+
+以下脚本默认读取 `config/settings.yaml`。需要临时指定另一份统一配置文件时，支持 `--config` 的脚本可以传入配置路径。
+
+```bash
+# 验证 Neo4j 连接
+python scripts/debug_query.py
+
+# 运行固定模式路径检索并保存离线结果
+python scripts/debug_patient_pattern_paths.py <patient_id>
+python scripts/debug_patient_pattern_paths.py <patient_id> --config config/settings.yaml
+
+# 对已保存的固定模式路径打分
+python scripts/score_patient_pattern_result.py <patient_id>
+python scripts/score_patient_pattern_result.py <patient_id> --config config/settings.yaml
+python scripts/score_patient_pattern_result.py <patient_id> --path-index 0
+python scripts/score_patient_pattern_result.py <patient_id> --top-k 20
+
+# 读取已保存的固定模式路径结果
+python scripts/read_patient_pattern_result.py <patient_id>
+python scripts/read_patient_pattern_result.py <patient_id> --config config/settings.yaml
+
+# 从配置的 path_top_k / candidate_top_k 构建候选相似用户
+python scripts/build_similar_user_candidates.py <patient_id>
+```
+
+`build_similar_user_candidates.py` 固定读取 `config/settings.yaml` 中的 `query.candidate_ranking`，不提供命令行覆盖入口；如需调整候选排序范围，直接修改 YAML：
+
+```yaml
+query:
+  candidate_ranking:
+    path_top_k: 50
+    candidate_top_k: 10
+```
+
 ## 目录说明
 
 - `config/`：统一 YAML 配置和配置加载入口
