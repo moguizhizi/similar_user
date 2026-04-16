@@ -16,6 +16,7 @@ from ..domain.path_models import (
     PatientTasksetDiseaseTasksetPatientPath,
     PatientTasksetSymptomTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
+    PatientTasksetUnknownTasksetPatientPath,
 )
 
 
@@ -143,6 +144,7 @@ class StoredPatternResult:
         PatientTasksetTaskGameTaskTasksetPatientPath
         | PatientTasksetDiseaseTasksetPatientPath
         | PatientTasksetSymptomTasksetPatientPath
+        | PatientTasksetUnknownTasksetPatientPath
     ]:
         """Convert stored raw path rows to typed domain path objects."""
         pattern = PathPattern(self.pattern)
@@ -152,6 +154,8 @@ class StoredPatternResult:
             path_cls = PatientTasksetDiseaseTasksetPatientPath
         elif pattern == PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT:
             path_cls = PatientTasksetSymptomTasksetPatientPath
+        elif pattern == PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT:
+            path_cls = PatientTasksetUnknownTasksetPatientPath
         else:
             raise ValueError(f"Unsupported stored pattern: {self.pattern}")
 
