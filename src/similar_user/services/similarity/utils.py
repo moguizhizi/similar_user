@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from typing import Any
 
 
 def calculate_game_series_features(scores: Sequence[object]) -> dict[str, float | int]:
@@ -96,6 +97,67 @@ def calculate_set_same_score(
         "candidate_same_component": candidate_same_component,
         "score": score,
     }
+
+
+def calculate_common_game_score_correlation(
+    records: Sequence[dict[str, Any]],
+) -> dict[str, object]:
+    """Calculate Pearson correlation from common-game score series records."""
+    common_games: list[str] = []
+    source_vector: list[float] = []
+    candidate_vector: list[float] = []
+
+    for record in records:
+        game = record.get("game")
+        scores_p1 = record.get("scores_p1")
+        scores_p2 = record.get("scores_p2")
+        if not isinstance(scores_p1, Sequence) or isinstance(scores_p1, (str, bytes)):
+            continue
+        if not isinstance(scores_p2, Sequence) or isinstance(scores_p2, (str, bytes)):
+            continue
+
+        try:
+            source_score = calculate_game_composite_score(scores_p1)
+            candidate_score = calculate_game_composite_score(scores_p2)
+        except ValueError:
+            continue
+
+        common_games.append("" if game is None else str(game))
+        source_vector.append(source_score)
+        candidate_vector.append(candidate_score)
+
+    return {
+        "common_games": common_games,
+        "source_vector": source_vector,
+        "candidate_vector": candidate_vector,
+        "valid_game_count": len(common_games),
+        "correlation": calculate_pearson_correlation(source_vector, candidate_vector),
+    }
+
+
+def calculate_pearson_correlation(
+    vector_a: Sequence[float],
+    vector_b: Sequence[float],
+) -> float | None:
+    """Calculate Pearson correlation for two same-length vectors."""
+    if len(vector_a) != len(vector_b):
+        raise ValueError("vector_a and vector_b must have the same length.")
+    if len(vector_a) < 2:
+        return None
+
+    mean_a = sum(vector_a) / len(vector_a)
+    mean_b = sum(vector_b) / len(vector_b)
+    numerator = sum(
+        (value_a - mean_a) * (value_b - mean_b)
+        for value_a, value_b in zip(vector_a, vector_b)
+    )
+    denominator_a = math.sqrt(sum((value_a - mean_a) ** 2 for value_a in vector_a))
+    denominator_b = math.sqrt(sum((value_b - mean_b) ** 2 for value_b in vector_b))
+    denominator = denominator_a * denominator_b
+    if denominator == 0:
+        return None
+
+    return numerator / denominator
 
 
 def _coerce_game_set(games: Sequence[object]) -> set[str]:

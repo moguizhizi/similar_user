@@ -5,9 +5,11 @@ from __future__ import annotations
 import unittest
 
 from src.similar_user.services.similarity.utils import (
+    calculate_common_game_score_correlation,
     calculate_game_composite_score,
     calculate_game_series_features,
     calculate_game_similarity_with_diversity_score,
+    calculate_pearson_correlation,
     calculate_set_same_score,
 )
 
@@ -168,6 +170,105 @@ class SimilarityUtilsTest(unittest.TestCase):
         self.assertEqual(result["source_only_count"], 0)
         self.assertEqual(result["candidate_only_count"], 1)
         self.assertAlmostEqual(float(result["score"]), 0.0)
+
+    def test_calculate_pearson_correlation_returns_linear_correlation(self) -> None:
+        self.assertAlmostEqual(
+            calculate_pearson_correlation([1.0, 2.0, 3.0], [2.0, 4.0, 6.0]),
+            1.0,
+        )
+        self.assertAlmostEqual(
+            calculate_pearson_correlation([1.0, 2.0, 3.0], [6.0, 4.0, 2.0]),
+            -1.0,
+        )
+
+    def test_calculate_pearson_correlation_returns_none_when_not_enough_data(
+        self,
+    ) -> None:
+        self.assertIsNone(calculate_pearson_correlation([1.0], [1.0]))
+
+    def test_calculate_pearson_correlation_returns_none_for_zero_variance(self) -> None:
+        self.assertIsNone(calculate_pearson_correlation([1.0, 1.0], [2.0, 3.0]))
+
+    def test_calculate_pearson_correlation_rejects_different_lengths(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "vector_a and vector_b must have the same length.",
+        ):
+            calculate_pearson_correlation([1.0, 2.0], [1.0])
+
+    def test_calculate_common_game_score_correlation_uses_query_records(self) -> None:
+        result = calculate_common_game_score_correlation(
+            [
+                {
+                    "game": "打怪物",
+                    "scores_p1": ["80", "90"],
+                    "scores_p2": ["82", "92"],
+                },
+                {
+                    "game": "真假句辨别",
+                    "scores_p1": ["90", "100"],
+                    "scores_p2": ["93", "103"],
+                },
+                {
+                    "game": "空间搜索",
+                    "scores_p1": ["100", "110"],
+                    "scores_p2": ["104", "114"],
+                },
+            ]
+        )
+
+        self.assertEqual(result["common_games"], ["打怪物", "真假句辨别", "空间搜索"])
+        self.assertEqual(result["valid_game_count"], 3)
+        self.assertEqual(result["source_vector"], [85.5, 95.5, 105.5])
+        self.assertEqual(result["candidate_vector"], [87.5, 98.5, 109.5])
+        self.assertAlmostEqual(float(result["correlation"]), 1.0)
+
+    def test_calculate_common_game_score_correlation_skips_invalid_records(self) -> None:
+        result = calculate_common_game_score_correlation(
+            [
+                {
+                    "game": "打怪物",
+                    "scores_p1": ["80", "90"],
+                    "scores_p2": ["82", "92"],
+                },
+                {
+                    "game": "坏数据",
+                    "scores_p1": [],
+                    "scores_p2": ["82", "92"],
+                },
+                {
+                    "game": "非序列",
+                    "scores_p1": "80",
+                    "scores_p2": ["82", "92"],
+                },
+            ]
+        )
+
+        self.assertEqual(result["common_games"], ["打怪物"])
+        self.assertEqual(result["valid_game_count"], 1)
+        self.assertIsNone(result["correlation"])
+
+    def test_calculate_common_game_score_correlation_returns_none_for_zero_variance(
+        self,
+    ) -> None:
+        result = calculate_common_game_score_correlation(
+            [
+                {
+                    "game": "打怪物",
+                    "scores_p1": ["90"],
+                    "scores_p2": ["80"],
+                },
+                {
+                    "game": "真假句辨别",
+                    "scores_p1": ["90"],
+                    "scores_p2": ["100"],
+                },
+            ]
+        )
+
+        self.assertEqual(result["source_vector"], [90.0, 90.0])
+        self.assertEqual(result["candidate_vector"], [80.0, 100.0])
+        self.assertIsNone(result["correlation"])
 
 
 if __name__ == "__main__":
