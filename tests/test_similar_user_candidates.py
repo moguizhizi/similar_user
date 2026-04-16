@@ -311,8 +311,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
             candidates = build_similar_user_candidates(
                 "30010096",
-                path_top_k=3,
-                candidate_top_k=2,
                 query_config_path=config_path,
             )
 
@@ -410,8 +408,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         }
         mock_parse_args.return_value = Mock(
             patient_id="30010096",
-            path_top_k=5,
-            candidate_top_k=2,
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             query_config="config/settings.yaml",
         )

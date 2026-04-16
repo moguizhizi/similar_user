@@ -129,12 +129,6 @@ query:
     candidate_top_k: 10  # 最终返回多少个候选相似用户
 ```
 
-如需临时覆盖配置值，也可以在脚本命令中传入：
-
-```bash
-python scripts/build_similar_user_candidates.py <patient_id> --path-top-k 100 --candidate-top-k 20
-```
-
 ## 特定模式路径主流程
 
 下面这段流程用于说明：当程序需要获取某个患者在固定模式下的路径时，可以如何利用患者训练日期、统计查询和路径查询进行编排。
