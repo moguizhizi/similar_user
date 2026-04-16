@@ -18,11 +18,12 @@ similar_user/
 ├── logs/
 │   └── similar_user.log        # 默认日志文件
 ├── scripts/
-│   ├── debug_patient_pattern_paths.py  # 调试固定模式路径查询
-│   ├── debug_query.py          # 直接连接 Neo4j 并执行验证查询
-│   ├── read_patient_pattern_result.py  # 读取本地离线保存的路径结果
-│   ├── run_api.py              # 启动本地 HTTP 调试服务
-│   └── score_patient_pattern_result.py # 对离线保存的路径结果打分
+│   ├── build_similar_user_candidates.py  # 从 top-k 评分路径构建候选相似用户
+│   ├── debug_patient_pattern_paths.py    # 调试固定模式路径查询
+│   ├── debug_query.py                    # 直接连接 Neo4j 并执行验证查询
+│   ├── read_patient_pattern_result.py    # 读取本地离线保存的路径结果
+│   ├── run_api.py                        # 启动本地 HTTP 调试服务
+│   └── score_patient_pattern_result.py   # 对离线保存的路径结果打分
 ├── src/similar_user/
 │   ├── api/
 │   │   ├── app.py              # 最小 HTTP 服务，提供 /health/neo4j 和 /query
@@ -30,9 +31,13 @@ similar_user/
 │   │   │   └── user_routes.py  # 用户查询路由
 │   │   └── schemas.py          # 请求与响应结构
 │   ├── data_access/
-│   │   ├── cypher_queries.py   # Cypher 查询定义
-│   │   ├── kg_repository.py    # 图谱读取仓储
-│   │   └── neo4j_client.py     # Neo4j 驱动封装
+│   │   ├── cypher_queries/              # 按主题拆分的 Cypher 查询定义
+│   │   │   ├── __init__.py              # 查询常量导出入口
+│   │   │   ├── patient_dates.py         # 患者训练日期、游戏与常模分查询
+│   │   │   ├── pattern_paths.py         # 固定模式路径查询
+│   │   │   └── pattern_statistics.py    # 固定模式路径统计查询
+│   │   ├── kg_repository.py             # 图谱读取仓储
+│   │   └── neo4j_client.py              # Neo4j 驱动封装
 │   ├── domain/
 │   │   ├── graph_schema.py     # 固定路径模式定义
 │   │   ├── item.py             # TaskInstanceSet / TaskInstance / Game 节点模型
@@ -41,8 +46,12 @@ similar_user/
 │   ├── pipelines/              # 构图、同步、相似度计算等批处理入口
 │   ├── services/
 │   │   ├── path_scoring.py     # 固定模式路径规则打分
-│   │   ├── user_service.py     # 用户查询服务
-│   │   └── similarity/         # 相似度服务实现
+│   │   ├── similarity/         # 相似度服务实现
+│   │   │   ├── base.py         # 相似度计算基础接口
+│   │   │   ├── embedding.py    # Embedding 相似度方法占位
+│   │   │   ├── graph_similarity.py      # 图谱相似度方法占位
+│   │   │   └── utils.py        # 相似度辅助计算
+│   │   └── user_service.py     # 用户查询服务
 │   └── utils/
 │       ├── logger.py           # 日志工具
 │       ├── metrics.py          # 指标工具
@@ -54,11 +63,13 @@ similar_user/
 │   ├── test_kg_repository.py   # 图谱仓储测试
 │   ├── test_logger.py          # 日志工具测试
 │   ├── test_neo4j_client.py    # Neo4j 客户端测试
-│   ├── test_path_scoring.py    # 路径打分测试
-│   ├── test_pattern_storage.py # 离线存储测试
+│   ├── test_path_scoring.py              # 路径打分测试
+│   ├── test_pattern_storage.py           # 离线存储测试
 │   ├── test_read_patient_pattern_result.py # 离线读取脚本测试
-│   └── test_user_service.py    # 用户服务测试
-├── pyproject.toml              # 项目依赖与 pytest 配置
+│   ├── test_similar_user_candidates.py   # 候选相似用户构建测试
+│   ├── test_similarity_utils.py          # 相似度辅助计算测试
+│   └── test_user_service.py              # 用户服务测试
+├── pyproject.toml              # 项目依赖声明与打包配置
 └── README.md
 ```
 
