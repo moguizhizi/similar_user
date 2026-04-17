@@ -80,19 +80,20 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 },
             ]
         )
-        mock_user_service.get_patient_distinct_games_by_end_date = Mock(
-            side_effect=lambda patient_id, end_date: [
-                {"g": {"id": "348", "name": "真假句辨别"}},
-                {"g": {"id": "777", "name": "空间搜索"}},
-            ]
-            if patient_id == "20113563"
-            else [
-                {"g": {"id": "348", "name": "真假句辨别"}},
-                {"g": {"id": "999", "name": "打怪物"}},
-            ]
-            if patient_id == "30010096"
-            else [
-                {"g": {"id": "348", "name": "真假句辨别"}},
+        mock_user_service.get_patient_game_set_comparison_by_end_date = Mock(
+            side_effect=lambda primary, comparison, end_date: [
+                {
+                    "games1": [
+                        {"id": "348", "name": "真假句辨别"},
+                        {"id": "999", "name": "打怪物"},
+                    ],
+                    "games2": [
+                        {"id": "348", "name": "真假句辨别"},
+                        {"id": "777", "name": "空间搜索"},
+                    ]
+                    if comparison == "20113563"
+                    else [{"id": "348", "name": "真假句辨别"}],
+                }
             ]
         )
         mock_user_service.get_patient_disease_set_comparison_by_end_date = Mock(
@@ -165,7 +166,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date.call_count,
             2,
         )
-        self.assertEqual(mock_user_service.get_patient_distinct_games_by_end_date.call_count, 4)
+        self.assertEqual(
+            mock_user_service.get_patient_game_set_comparison_by_end_date.call_count,
+            2,
+        )
         self.assertEqual(
             mock_user_service.get_patient_disease_set_comparison_by_end_date.call_count,
             2,
