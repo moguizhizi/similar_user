@@ -9,10 +9,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from scripts.build_similar_user_candidates import (
-    aggregate_candidates_from_scored_paths,
     build_similar_user_candidates,
     main,
 )
+from similar_user.services.similarity import SimilarUserCandidateService
 from similar_user.utils.pattern_storage import save_pattern_result
 
 
@@ -41,6 +41,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "path_count": 3,
             "scored_path_count": 3,
+            "retrieval_context": {"split_training_date": "2022-01-13"},
             "scores": [
                 {
                     "path_index": 2,
@@ -59,22 +60,50 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 },
             ],
         }
+        mock_user_service = Mock()
+        mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date = Mock(
+            side_effect=lambda primary, comparison, end_date: [
+                {
+                    "game": "打怪物",
+                    "scores_p1": ["80"],
+                    "scores_p2": ["80" if comparison == "20113563" else "100"],
+                },
+                {
+                    "game": "真假句辨别",
+                    "scores_p1": ["90"],
+                    "scores_p2": ["90"],
+                },
+                {
+                    "game": "空间搜索",
+                    "scores_p1": ["100"],
+                    "scores_p2": ["100" if comparison == "20113563" else "80"],
+                },
+            ]
+        )
 
-        result = aggregate_candidates_from_scored_paths(
+        result = SimilarUserCandidateService(
+            user_service=mock_user_service
+        ).aggregate_candidates_from_scored_paths(
             scored_result,
             path_top_k=3,
             candidate_top_k=3,
         )
 
-        self.assertEqual(result["retrieval_context"]["split_training_date"], None)
+        self.assertEqual(result["retrieval_context"]["split_training_date"], "2022-01-13")
         self.assertEqual(result["candidate_count"], 2)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
+        self.assertAlmostEqual(result["candidates"][0]["candidate_score"], 1.0)
         self.assertEqual(result["candidates"][0]["best_score"], 95.0)
         self.assertEqual(result["candidates"][1]["patient_id"], "20113562")
+        self.assertAlmostEqual(result["candidates"][1]["candidate_score"], -1.0)
         self.assertEqual(result["candidates"][1]["match_count"], 2)
         self.assertEqual(result["candidates"][1]["path_indices"], [1, 2])
         self.assertEqual(result["candidates"][1]["best_score"], 90.0)
         self.assertEqual(result["candidates"][1]["avg_score"], 89.0)
+        self.assertEqual(
+            mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date.call_count,
+            2,
+        )
 
     def test_aggregate_candidates_from_scored_paths_raises_for_unsupported_pattern(self) -> None:
         scored_result = {
@@ -86,7 +115,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(ValueError, "Unsupported pattern"):
-            aggregate_candidates_from_scored_paths(
+            SimilarUserCandidateService().aggregate_candidates_from_scored_paths(
                 scored_result,
                 path_top_k=1,
                 candidate_top_k=1,
@@ -126,6 +155,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "path_count": 3,
             "scored_path_count": 3,
+            "retrieval_context": {"split_training_date": "2022-01-13"},
             "scores": [
                 {
                     "path_index": 0,
@@ -144,8 +174,23 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 },
             ],
         }
+        score_by_candidate = {
+            "20113562": ["100", "90", "80"],
+            "20113563": ["80", "90", "100"],
+            "20113564": ["80", "90", "100"],
+        }
+        mock_user_service = Mock()
+        mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date = Mock(
+            side_effect=lambda primary, comparison, end_date: [
+                {"game": "打怪物", "scores_p1": ["80"], "scores_p2": [score_by_candidate[comparison][0]]},
+                {"game": "真假句辨别", "scores_p1": ["90"], "scores_p2": [score_by_candidate[comparison][1]]},
+                {"game": "空间搜索", "scores_p1": ["100"], "scores_p2": [score_by_candidate[comparison][2]]},
+            ]
+        )
 
-        result = aggregate_candidates_from_scored_paths(
+        result = SimilarUserCandidateService(
+            user_service=mock_user_service
+        ).aggregate_candidates_from_scored_paths(
             scored_result,
             path_top_k=3,
             candidate_top_k=2,
@@ -156,7 +201,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["candidate_count"], 2)
         self.assertEqual(
             [candidate["patient_id"] for candidate in result["candidates"]],
-            ["20113562", "20113563"],
+            ["20113563", "20113564"],
         )
 
     def test_aggregate_candidates_from_scored_paths_validates_top_k_values(self) -> None:
@@ -169,13 +214,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(ValueError, "path_top_k"):
-            aggregate_candidates_from_scored_paths(
+            SimilarUserCandidateService().aggregate_candidates_from_scored_paths(
                 scored_result,
                 path_top_k=0,
                 candidate_top_k=1,
             )
         with self.assertRaisesRegex(ValueError, "candidate_top_k"):
-            aggregate_candidates_from_scored_paths(
+            SimilarUserCandidateService().aggregate_candidates_from_scored_paths(
                 scored_result,
                 path_top_k=1,
                 candidate_top_k=0,
@@ -210,7 +255,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ],
         }
 
-        result = aggregate_candidates_from_scored_paths(
+        result = SimilarUserCandidateService().aggregate_candidates_from_scored_paths(
             scored_result,
             path_top_k=2,
             candidate_top_k=2,
@@ -312,7 +357,36 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             with patch(
                 "scripts.build_similar_user_candidates.DEFAULT_CONFIG_PATH",
                 config_path,
-            ):
+            ), patch(
+                "scripts.build_similar_user_candidates.Neo4jClient.from_config",
+            ) as mock_from_config, patch(
+                "scripts.build_similar_user_candidates.UserService",
+            ) as mock_user_service_cls:
+                mock_client_context = Mock()
+                mock_client_context.__enter__ = Mock(return_value=Mock())
+                mock_client_context.__exit__ = Mock(return_value=None)
+                mock_from_config.return_value = mock_client_context
+                mock_user_service = Mock()
+                mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date.side_effect = (
+                    lambda primary, comparison, end_date: [
+                        {
+                            "game": "打怪物",
+                            "scores_p1": ["80"],
+                            "scores_p2": ["80" if comparison == "20113562" else "100"],
+                        },
+                        {
+                            "game": "真假句辨别",
+                            "scores_p1": ["90"],
+                            "scores_p2": ["90"],
+                        },
+                        {
+                            "game": "空间搜索",
+                            "scores_p1": ["100"],
+                            "scores_p2": ["100" if comparison == "20113562" else "80"],
+                        },
+                    ]
+                )
+                mock_user_service_cls.return_value = mock_user_service
                 candidates = build_similar_user_candidates("30010096")
 
         self.assertEqual(candidates["candidate_count"], 2)
@@ -368,9 +442,25 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "scripts.build_similar_user_candidates.DEFAULT_CONFIG_PATH",
                 config_path,
             ), patch(
+                "scripts.build_similar_user_candidates.Neo4jClient.from_config",
+            ) as mock_from_config, patch(
+                "scripts.build_similar_user_candidates.UserService",
+            ) as mock_user_service_cls, patch(
                 "scripts.build_similar_user_candidates.score_patient_pattern_result",
                 return_value=scored_result,
             ) as mock_score:
+                mock_client_context = Mock()
+                mock_client_context.__enter__ = Mock(return_value=Mock())
+                mock_client_context.__exit__ = Mock(return_value=None)
+                mock_from_config.return_value = mock_client_context
+                mock_user_service = Mock()
+                mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date.side_effect = (
+                    lambda primary, comparison, end_date: [
+                        {"game": "打怪物", "scores_p1": ["80"], "scores_p2": ["80"]},
+                        {"game": "真假句辨别", "scores_p1": ["90"], "scores_p2": ["90"]},
+                    ]
+                )
+                mock_user_service_cls.return_value = mock_user_service
                 candidates = build_similar_user_candidates("30010096")
 
         self.assertEqual(candidates["path_top_k"], 2)
