@@ -209,33 +209,26 @@ class SimilarUserCandidateService:
             "diseases2",
         )
 
-        source_symptoms = _extract_node_keys(
-            self.user_service.get_patient_distinct_symptoms_by_end_date(
-                primary_patient_id,
-                end_date,
-            ),
-            "sym",
+        symptom_rows = self.user_service.get_patient_symptom_set_comparison_by_end_date(
+            primary_patient_id,
+            candidate_patient_id,
+            end_date,
         )
-        candidate_symptoms = _extract_node_keys(
-            self.user_service.get_patient_distinct_symptoms_by_end_date(
-                candidate_patient_id,
-                end_date,
-            ),
-            "sym",
+        source_symptoms, candidate_symptoms = _extract_node_comparison_keys(
+            symptom_rows,
+            "symptoms1",
+            "symptoms2",
         )
-        source_unknowns = _extract_node_keys(
-            self.user_service.get_patient_distinct_unknowns_by_end_date(
-                primary_patient_id,
-                end_date,
-            ),
-            "un",
+
+        unknown_rows = self.user_service.get_patient_unknown_set_comparison_by_end_date(
+            primary_patient_id,
+            candidate_patient_id,
+            end_date,
         )
-        candidate_unknowns = _extract_node_keys(
-            self.user_service.get_patient_distinct_unknowns_by_end_date(
-                candidate_patient_id,
-                end_date,
-            ),
-            "un",
+        source_unknowns, candidate_unknowns = _extract_node_comparison_keys(
+            unknown_rows,
+            "unknowns1",
+            "unknowns2",
         )
 
         return {

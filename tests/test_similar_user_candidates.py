@@ -106,18 +106,24 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 }
             ]
         )
-        mock_user_service.get_patient_distinct_symptoms_by_end_date = Mock(
-            side_effect=lambda patient_id, end_date: [{"sym": {"id": "S1", "name": "症状1"}}]
-            if patient_id == "30010096"
-            else [
-                {"sym": {"id": "S1", "name": "症状1"}},
-                {"sym": {"id": "S2", "name": "症状2"}},
+        mock_user_service.get_patient_symptom_set_comparison_by_end_date = Mock(
+            side_effect=lambda primary, comparison, end_date: [
+                {
+                    "symptoms1": [{"id": "S1", "name": "症状1"}],
+                    "symptoms2": [
+                        {"id": "S1", "name": "症状1"},
+                        {"id": "S2", "name": "症状2"},
+                    ],
+                }
             ]
         )
-        mock_user_service.get_patient_distinct_unknowns_by_end_date = Mock(
-            side_effect=lambda patient_id, end_date: [{"un": {"id": "U1", "name": "其他1"}}]
-            if patient_id == "30010096"
-            else [{"un": {"id": "U2", "name": "其他2"}}]
+        mock_user_service.get_patient_unknown_set_comparison_by_end_date = Mock(
+            side_effect=lambda primary, comparison, end_date: [
+                {
+                    "unknowns1": [{"id": "U1", "name": "其他1"}],
+                    "unknowns2": [{"id": "U2", "name": "其他2"}],
+                }
+            ]
         )
 
         result = SimilarUserCandidateService(
@@ -162,6 +168,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(mock_user_service.get_patient_distinct_games_by_end_date.call_count, 4)
         self.assertEqual(
             mock_user_service.get_patient_disease_set_comparison_by_end_date.call_count,
+            2,
+        )
+        self.assertEqual(
+            mock_user_service.get_patient_symptom_set_comparison_by_end_date.call_count,
+            2,
+        )
+        self.assertEqual(
+            mock_user_service.get_patient_unknown_set_comparison_by_end_date.call_count,
             2,
         )
 
