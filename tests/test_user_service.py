@@ -88,6 +88,74 @@ class UserServiceTest(unittest.TestCase):
             "2022-05-22",
         )
 
+    def test_get_patient_game_set_comparison_by_start_date_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_game_set_comparison_by_start_date.return_value = [
+            {
+                "games1": [{"id": "42", "name": "打怪物"}],
+                "games2": [{"id": "84", "name": "真假句辨别"}],
+            }
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_game_set_comparison_by_start_date(
+            "40",
+            "20121011",
+            "2022-05-01",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "games1": [{"id": "42", "name": "打怪物"}],
+                    "games2": [{"id": "84", "name": "真假句辨别"}],
+                }
+            ],
+        )
+        mock_repository.get_patient_game_set_comparison_by_start_date.assert_called_once_with(
+            "40",
+            "20121011",
+            "2022-05-01",
+        )
+
+    def test_get_patient_game_set_comparison_by_date_range_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_game_set_comparison_by_date_range.return_value = [
+            {
+                "games1": [{"id": "42", "name": "打怪物"}],
+                "games2": [{"id": "84", "name": "真假句辨别"}],
+            }
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_game_set_comparison_by_date_range(
+            "40",
+            "20121011",
+            "2022-05-01",
+            "2022-05-22",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "games1": [{"id": "42", "name": "打怪物"}],
+                    "games2": [{"id": "84", "name": "真假句辨别"}],
+                }
+            ],
+        )
+        mock_repository.get_patient_game_set_comparison_by_date_range.assert_called_once_with(
+            "40",
+            "20121011",
+            "2022-05-01",
+            "2022-05-22",
+        )
+
     def test_get_patient_game_norm_score_series_comparison_by_end_date_delegates_to_repository(
         self,
     ) -> None:
