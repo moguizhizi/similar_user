@@ -9,7 +9,9 @@ from unittest.mock import Mock
 
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
+    PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
@@ -566,6 +568,151 @@ class KgRepositoryTest(unittest.TestCase):
             repository.get_patient_disease_set_comparison_by_end_date(
                 "40",
                 "20121011",
+                "   ",
+            )
+
+    def test_get_patient_disease_set_comparison_by_start_date(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "diseases1": [{"id": "AU_DIS_0001", "name": "阿尔茨海默病"}],
+                "diseases2": [{"id": "AU_DIS_0002", "name": "轻度认知障碍"}],
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_disease_set_comparison_by_start_date(
+            " 40 ",
+            " 20121011 ",
+            " 2022-05-01 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "diseases1": [{"id": "AU_DIS_0001", "name": "阿尔茨海默病"}],
+                    "diseases2": [{"id": "AU_DIS_0002", "name": "轻度认知障碍"}],
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
+            parameters={
+                "primary_patient_id": "40",
+                "comparison_patient_id": "20121011",
+                "start_date": "2022-05-01",
+            },
+        )
+
+    def test_get_patient_disease_set_comparison_by_start_date_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "primary_patient_id must be a non-empty string.",
+        ):
+            repository.get_patient_disease_set_comparison_by_start_date(
+                "   ",
+                "20121011",
+                "2022-05-01",
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "comparison_patient_id must be a non-empty string.",
+        ):
+            repository.get_patient_disease_set_comparison_by_start_date(
+                "40",
+                "   ",
+                "2022-05-01",
+            )
+
+        with self.assertRaisesRegex(ValueError, "start_date must be a non-empty string."):
+            repository.get_patient_disease_set_comparison_by_start_date(
+                "40",
+                "20121011",
+                "   ",
+            )
+
+    def test_get_patient_disease_set_comparison_by_date_range(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "diseases1": [{"id": "AU_DIS_0001", "name": "阿尔茨海默病"}],
+                "diseases2": [{"id": "AU_DIS_0002", "name": "轻度认知障碍"}],
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_disease_set_comparison_by_date_range(
+            " 40 ",
+            " 20121011 ",
+            " 2022-05-01 ",
+            " 2022-05-22 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "diseases1": [{"id": "AU_DIS_0001", "name": "阿尔茨海默病"}],
+                    "diseases2": [{"id": "AU_DIS_0002", "name": "轻度认知障碍"}],
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+            parameters={
+                "primary_patient_id": "40",
+                "comparison_patient_id": "20121011",
+                "start_date": "2022-05-01",
+                "end_date": "2022-05-22",
+            },
+        )
+
+    def test_get_patient_disease_set_comparison_by_date_range_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "primary_patient_id must be a non-empty string.",
+        ):
+            repository.get_patient_disease_set_comparison_by_date_range(
+                "   ",
+                "20121011",
+                "2022-05-01",
+                "2022-05-22",
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "comparison_patient_id must be a non-empty string.",
+        ):
+            repository.get_patient_disease_set_comparison_by_date_range(
+                "40",
+                "   ",
+                "2022-05-01",
+                "2022-05-22",
+            )
+
+        with self.assertRaisesRegex(ValueError, "start_date must be a non-empty string."):
+            repository.get_patient_disease_set_comparison_by_date_range(
+                "40",
+                "20121011",
+                "   ",
+                "2022-05-22",
+            )
+
+        with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
+            repository.get_patient_disease_set_comparison_by_date_range(
+                "40",
+                "20121011",
+                "2022-05-01",
                 "   ",
             )
 
