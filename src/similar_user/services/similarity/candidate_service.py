@@ -161,17 +161,15 @@ class SimilarUserCandidateService:
             **common_game_score_correlation,
             "correlation": candidate_score,
         }
-        source_games = _extract_game_keys(
-            self.user_service.get_patient_distinct_games_by_end_date(
-                primary_patient_id.strip(),
-                end_date,
-            )
+        game_rows = self.user_service.get_patient_game_set_comparison_by_end_date(
+            primary_patient_id.strip(),
+            candidate_patient_id.strip(),
+            end_date,
         )
-        candidate_games = _extract_game_keys(
-            self.user_service.get_patient_distinct_games_by_end_date(
-                candidate_patient_id.strip(),
-                end_date,
-            )
+        source_games, candidate_games = _extract_node_comparison_keys(
+            game_rows,
+            "games1",
+            "games2",
         )
         game_similarity_with_diversity_score = _round_numeric_values(
             calculate_game_similarity_with_diversity_score(

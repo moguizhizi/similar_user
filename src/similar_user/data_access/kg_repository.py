@@ -25,6 +25,7 @@ from .cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
@@ -103,6 +104,20 @@ class KgRepository:
                 "patient_id": normalized_patient_id,
                 "end_date": normalized_end_date,
             },
+        )
+
+    def get_patient_game_set_comparison_by_end_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return game sets for two patients up to and including an end date."""
+        return self._run_patient_pair_query_by_end_date(
+            query=PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
+            primary_patient_id=primary_patient_id,
+            comparison_patient_id=comparison_patient_id,
+            end_date=end_date,
         )
 
     def get_patient_game_norm_score_series_comparison_by_end_date(
