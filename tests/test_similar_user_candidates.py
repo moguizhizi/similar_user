@@ -95,13 +95,16 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 {"g": {"id": "348", "name": "真假句辨别"}},
             ]
         )
-        mock_user_service.get_patient_distinct_diseases_by_end_date = Mock(
-            side_effect=lambda patient_id, end_date: [
-                {"dis": {"id": "D1", "name": "疾病1"}},
-                {"dis": {"id": "D2", "name": "疾病2"}},
+        mock_user_service.get_patient_disease_set_comparison_by_end_date = Mock(
+            side_effect=lambda primary, comparison, end_date: [
+                {
+                    "diseases1": [
+                        {"id": "D1", "name": "疾病1"},
+                        {"id": "D2", "name": "疾病2"},
+                    ],
+                    "diseases2": [{"id": "D1", "name": "疾病1"}],
+                }
             ]
-            if patient_id == "30010096"
-            else [{"dis": {"id": "D1", "name": "疾病1"}}]
         )
         mock_user_service.get_patient_distinct_symptoms_by_end_date = Mock(
             side_effect=lambda patient_id, end_date: [{"sym": {"id": "S1", "name": "症状1"}}]
@@ -157,6 +160,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             2,
         )
         self.assertEqual(mock_user_service.get_patient_distinct_games_by_end_date.call_count, 4)
+        self.assertEqual(
+            mock_user_service.get_patient_disease_set_comparison_by_end_date.call_count,
+            2,
+        )
 
     def test_aggregate_candidates_from_scored_paths_raises_for_unsupported_pattern(self) -> None:
         scored_result = {

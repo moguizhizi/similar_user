@@ -198,19 +198,15 @@ class SimilarUserCandidateService:
         end_date: str,
     ) -> dict[str, object]:
         """Calculate disease, symptom, and unknown set-same scores."""
-        source_diseases = _extract_node_keys(
-            self.user_service.get_patient_distinct_diseases_by_end_date(
-                primary_patient_id,
-                end_date,
-            ),
-            "dis",
+        disease_rows = self.user_service.get_patient_disease_set_comparison_by_end_date(
+            primary_patient_id,
+            candidate_patient_id,
+            end_date,
         )
-        candidate_diseases = _extract_node_keys(
-            self.user_service.get_patient_distinct_diseases_by_end_date(
-                candidate_patient_id,
-                end_date,
-            ),
-            "dis",
+        source_diseases, candidate_diseases = _extract_node_comparison_keys(
+            disease_rows,
+            "diseases1",
+            "diseases2",
         )
 
         source_symptoms = _extract_node_keys(
@@ -341,6 +337,39 @@ def _extract_node_keys(rows: object, node_key: str) -> list[str]:
         if not isinstance(row, dict):
             continue
         node = row.get(node_key)
+        if not isinstance(node, dict):
+            continue
+        for key in ("id", "name"):
+            value = node.get(key)
+            if isinstance(value, str) and value.strip():
+                node_keys.append(value.strip())
+                break
+    return node_keys
+
+
+def _extract_node_comparison_keys(
+    rows: object,
+    source_key: str,
+    candidate_key: str,
+) -> tuple[list[str], list[str]]:
+    """Extract stable node keys from one paired node-set comparison row."""
+    if not isinstance(rows, list) or not rows:
+        return [], []
+    first_row = rows[0]
+    if not isinstance(first_row, dict):
+        return [], []
+    return (
+        _extract_node_list_keys(first_row.get(source_key)),
+        _extract_node_list_keys(first_row.get(candidate_key)),
+    )
+
+
+def _extract_node_list_keys(nodes: object) -> list[str]:
+    """Extract stable node keys from a collected node list."""
+    node_keys: list[str] = []
+    if not isinstance(nodes, list):
+        return node_keys
+    for node in nodes:
         if not isinstance(node, dict):
             continue
         for key in ("id", "name"):

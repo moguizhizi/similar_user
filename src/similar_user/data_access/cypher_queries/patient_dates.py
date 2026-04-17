@@ -159,6 +159,30 @@ WHERE
 RETURN DISTINCT dis
 """.strip()
 
+PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY = """
+MATCH (p1:Patient {id: $primary_patient_id})
+--(s1:TaskInstanceSet)
+--(dis1:Disease)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) <= date($end_date)
+
+WITH collect(DISTINCT dis1) AS diseases1
+
+MATCH (p2:Patient {id: $comparison_patient_id})
+--(s2:TaskInstanceSet)
+--(dis2:Disease)
+
+WHERE
+    s2.`训练日期` IS NOT NULL AND
+    date(s2.`训练日期`) <= date($end_date)
+
+RETURN
+    diseases1,
+    collect(DISTINCT dis2) AS diseases2
+""".strip()
+
 PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY = """
 MATCH (p:Patient {id: $patient_id})
 --(s1:TaskInstanceSet)
