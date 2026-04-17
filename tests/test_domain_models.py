@@ -9,6 +9,7 @@ from src.similar_user.domain import (
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
     TASK_INSTANCE_ACTIVITY_VALUES,
     TASK_INSTANCE_RESULT_VALUES,
     TASK_INSTANCE_SET_EDUCATION_VALUES,
@@ -19,6 +20,7 @@ from src.similar_user.domain import (
     PatientTasksetDiseaseTasksetPatientPath,
     PatientTasksetSymptomTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
+    PatientTasksetUnknownTasksetPatientPath,
     PatternPathResult,
     SymptomNode,
     TaskInstanceNode,
@@ -40,6 +42,10 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(
             PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
             PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT.value,
+        )
+        self.assertEqual(
+            PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
+            PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT.value,
         )
 
     def test_patient_taskset_task_game_task_taskset_patient_path_can_be_built(
@@ -180,6 +186,66 @@ class DomainModelsTest(unittest.TestCase):
             PatientTasksetSymptomTasksetPatientPath.from_dict(
                 {
                     "pattern": PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
+                    "row": {
+                        "p": {"id": "40"},
+                        "s1": {"id": "40_20220401"},
+                        "s2": {"id": "20102799_20230123"},
+                        "p2": {"id": "20102799"},
+                    },
+                }
+            )
+
+    def test_patient_taskset_unknown_taskset_patient_path_can_be_built(self) -> None:
+        path = PatientTasksetUnknownTasksetPatientPath(
+            pattern=PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
+            p=PatientNode(id="40", name="患者_40", 性别="女"),
+            s1=TaskInstanceSetNode(id="40_20220401", 训练日期="2022-04-01"),
+            un=UnknownNode(id="AU_UNKOWN_0005", name="儿童相关-其他"),
+            s2=TaskInstanceSetNode(id="20102799_20230123", 训练日期="2023-01-23"),
+            p2=PatientNode(id="20102799", name="患者_20102799", 性别="女"),
+        )
+        result = PatternPathResult(
+            patient_id="40",
+            pattern=PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
+            paths=[path],
+        )
+
+        self.assertEqual(
+            result.pattern,
+            PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
+        )
+        self.assertEqual(result.paths[0].un.name, "儿童相关-其他")
+
+    def test_patient_taskset_unknown_taskset_patient_path_can_be_built_from_dict(
+        self,
+    ) -> None:
+        path = PatientTasksetUnknownTasksetPatientPath.from_dict(
+            {
+                "pattern": PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
+                "row": {
+                    "p": {"id": "40", "name": "患者_40", "性别": "女"},
+                    "s1": {"id": "40_20220401", "训练日期": "2022-04-01"},
+                    "un": {"id": "AU_UNKOWN_0005", "name": "儿童相关-其他"},
+                    "s2": {"id": "20102799_20230123", "训练日期": "2023-01-23"},
+                    "p2": {"id": "20102799", "name": "患者_20102799", "性别": "女"},
+                },
+            }
+        )
+
+        self.assertEqual(path.pattern, PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT)
+        self.assertEqual(path.p.id, "40")
+        self.assertEqual(path.un.id, "AU_UNKOWN_0005")
+        self.assertEqual(path.un.name, "儿童相关-其他")
+        self.assertEqual(path.s2.训练日期, "2023-01-23")
+        self.assertEqual(path.p2.id, "20102799")
+
+    def test_patient_taskset_unknown_taskset_patient_path_rejects_missing_unknown(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(ValueError, "un must be a mapping"):
+            PatientTasksetUnknownTasksetPatientPath.from_dict(
+                {
+                    "pattern": PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
                     "row": {
                         "p": {"id": "40"},
                         "s1": {"id": "40_20220401"},

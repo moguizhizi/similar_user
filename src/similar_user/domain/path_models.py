@@ -12,6 +12,7 @@ from .item import (
     TASK_INSTANCE_RESULT_VALUES,
     DiseaseNode,
     SymptomNode,
+    UnknownNode,
     TaskActivityValue,
     EducationValue,
     TASK_INSTANCE_SET_EDUCATION_VALUES,
@@ -122,6 +123,37 @@ class PatientTasksetSymptomTasksetPatientPath:
 
 
 @dataclass(frozen=True)
+class PatientTasksetUnknownTasksetPatientPath:
+    """The P-S-UN-S-P fixed graph path model."""
+
+    pattern: PathPattern
+    p: PatientNode
+    s1: TaskInstanceSetNode
+    un: UnknownNode
+    s2: TaskInstanceSetNode
+    p2: PatientNode
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+    ) -> PatientTasksetUnknownTasksetPatientPath:
+        """Build a typed path from a stored path row."""
+        row = data.get("row") if isinstance(data.get("row"), dict) else data
+        if not isinstance(row, dict):
+            raise ValueError("path data must contain a mapping row.")
+
+        return cls(
+            pattern=_coerce_path_pattern(data.get("pattern")),
+            p=_build_patient_node(row.get("p"), "p"),
+            s1=_build_task_instance_set_node(row.get("s1"), "s1"),
+            un=_build_unknown_node(row.get("un"), "un"),
+            s2=_build_task_instance_set_node(row.get("s2"), "s2"),
+            p2=_build_patient_node(row.get("p2"), "p2"),
+        )
+
+
+@dataclass(frozen=True)
 class PatternPathResult:
     """A patient-scoped collection of paths for one fixed pattern."""
 
@@ -131,6 +163,7 @@ class PatternPathResult:
         PatientTasksetTaskGameTaskTasksetPatientPath
         | PatientTasksetDiseaseTasksetPatientPath
         | PatientTasksetSymptomTasksetPatientPath
+        | PatientTasksetUnknownTasksetPatientPath
     ]
 
 
@@ -199,6 +232,12 @@ def _build_symptom_node(value: object, field_name: str) -> SymptomNode:
     """Build a symptom node from raw JSON content."""
     data = _require_mapping(value, field_name)
     return SymptomNode.from_dict(data)
+
+
+def _build_unknown_node(value: object, field_name: str) -> UnknownNode:
+    """Build an unknown-category node from raw JSON content."""
+    data = _require_mapping(value, field_name)
+    return UnknownNode.from_dict(data)
 
 
 def _require_mapping(value: object, field_name: str) -> dict[str, Any]:

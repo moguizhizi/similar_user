@@ -4,6 +4,7 @@ from .graph_schema import (
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
     PathPattern,
 )
 from .item import (
@@ -26,6 +27,7 @@ from .path_models import (
     PatientTasksetDiseaseTasksetPatientPath,
     PatientTasksetSymptomTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
+    PatientTasksetUnknownTasksetPatientPath,
     PatternPathResult,
 )
 from .user import PatientNode
@@ -36,11 +38,13 @@ __all__ = [
     "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
     "PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT",
     "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+    "PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT",
     "PathPattern",
     "PatientNode",
     "PatientTasksetDiseaseTasksetPatientPath",
     "PatientTasksetSymptomTasksetPatientPath",
     "PatientTasksetTaskGameTaskTasksetPatientPath",
+    "PatientTasksetUnknownTasksetPatientPath",
     "PatternPathResult",
     "EducationValue",
     "TaskActivityValue",
