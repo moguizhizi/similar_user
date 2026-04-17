@@ -25,7 +25,9 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
@@ -169,6 +171,76 @@ class KgRepositoryTest(unittest.TestCase):
             parameters={
                 "primary_patient_id": "40",
                 "comparison_patient_id": "20121011",
+                "end_date": "2022-05-22",
+            },
+        )
+
+    def test_get_patient_game_set_comparison_by_start_date(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "games1": [{"id": "42", "name": "打怪物"}],
+                "games2": [{"id": "84", "name": "真假句辨别"}],
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_game_set_comparison_by_start_date(
+            " 40 ",
+            " 20121011 ",
+            " 2022-05-01 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "games1": [{"id": "42", "name": "打怪物"}],
+                    "games2": [{"id": "84", "name": "真假句辨别"}],
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
+            parameters={
+                "primary_patient_id": "40",
+                "comparison_patient_id": "20121011",
+                "start_date": "2022-05-01",
+            },
+        )
+
+    def test_get_patient_game_set_comparison_by_date_range(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "games1": [{"id": "42", "name": "打怪物"}],
+                "games2": [{"id": "84", "name": "真假句辨别"}],
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_game_set_comparison_by_date_range(
+            " 40 ",
+            " 20121011 ",
+            " 2022-05-01 ",
+            " 2022-05-22 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "games1": [{"id": "42", "name": "打怪物"}],
+                    "games2": [{"id": "84", "name": "真假句辨别"}],
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+            parameters={
+                "primary_patient_id": "40",
+                "comparison_patient_id": "20121011",
+                "start_date": "2022-05-01",
                 "end_date": "2022-05-22",
             },
         )
