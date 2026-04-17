@@ -9,6 +9,7 @@ from pathlib import Path
 from config.settings import GraphPathLimitSettings, load_query_settings
 
 from .cypher_queries import (
+    PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
@@ -255,6 +256,30 @@ class KgRepository:
             query=PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_disease_set_comparison_by_end_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return disease sets for two patients up to and including an end date."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
                 "end_date": normalized_end_date,
             },
         )

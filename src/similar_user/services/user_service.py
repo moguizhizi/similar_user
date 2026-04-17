@@ -137,6 +137,19 @@ class UserService:
             end_date,
         )
 
+    def get_patient_disease_set_comparison_by_end_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return disease sets for two patients up to and including an end date."""
+        return self.kg_repository.get_patient_disease_set_comparison_by_end_date(
+            primary_patient_id,
+            comparison_patient_id,
+            end_date,
+        )
+
     def get_patient_distinct_diseases_by_start_date(
         self,
         patient_id: str,
