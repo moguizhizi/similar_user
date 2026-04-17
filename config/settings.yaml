@@ -4,6 +4,14 @@ neo4j:
   password: "password"
   database: "neo4j"
 
+llm:
+  base_url: "http://localhost:8000"
+  api_key: ""
+  model: "qwen3_5"
+  timeout: 60
+  max_retries: 3
+  backoff_factor: 1.5
+
 query:
   graph_path_limit:
     per_g_strategy: "band"

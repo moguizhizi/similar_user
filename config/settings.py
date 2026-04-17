@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,18 @@ class CandidateRankingSettings:
 
 
 @dataclass(frozen=True)
+class LlmSettings:
+    """Connection settings for an OpenAI-compatible chat-completions service."""
+
+    base_url: str
+    model: str
+    api_key: str | None = None
+    timeout: int = 60
+    max_retries: int = 3
+    backoff_factor: float = 1.5
+
+
+@dataclass(frozen=True)
 class QuerySettings:
     """Query-related tuning settings."""
 
@@ -113,6 +126,54 @@ def load_neo4j_settings(config_path: str | Path) -> Neo4jSettings:
         username=str(data["username"]),
         password=str(data["password"]),
         database=str(data.get("database", "neo4j")),
+    )
+
+
+def load_llm_settings(config_path: str | Path) -> LlmSettings:
+    """Load OpenAI-compatible LLM settings from YAML."""
+    data = _extract_config_section(load_yaml_config(config_path), "llm")
+
+    base_url = data.get("base_url")
+    model = data.get("model")
+    if not isinstance(base_url, str) or not base_url.strip():
+        raise ValueError("llm base_url must be a non-empty string.")
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError("llm model must be a non-empty string.")
+
+    timeout = data.get("timeout", 60)
+    max_retries = data.get("max_retries", 3)
+    backoff_factor = data.get("backoff_factor", 1.5)
+
+    if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
+        raise ValueError("llm timeout must be a positive integer.")
+    if (
+        not isinstance(max_retries, int)
+        or isinstance(max_retries, bool)
+        or max_retries <= 0
+    ):
+        raise ValueError("llm max_retries must be a positive integer.")
+    if not isinstance(backoff_factor, (int, float)) or isinstance(
+        backoff_factor,
+        bool,
+    ):
+        raise ValueError("llm backoff_factor must be a non-negative number.")
+    if float(backoff_factor) < 0:
+        raise ValueError("llm backoff_factor must be a non-negative number.")
+
+    configured_api_key = data.get("api_key")
+    api_key = os.getenv("SIMILAR_USER_LLM_API_KEY")
+    if api_key is None and isinstance(configured_api_key, str):
+        api_key = configured_api_key
+    if api_key is not None:
+        api_key = api_key.strip() or None
+
+    return LlmSettings(
+        base_url=base_url.strip(),
+        model=model.strip(),
+        api_key=api_key,
+        timeout=timeout,
+        max_retries=max_retries,
+        backoff_factor=float(backoff_factor),
     )
 
 
