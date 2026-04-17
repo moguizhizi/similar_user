@@ -76,7 +76,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 {
                     "game": "空间搜索",
                     "scores_p1": ["100"],
-                    "scores_p2": ["100" if comparison == "20113563" else "80"],
+                    "scores_p2": ["95" if comparison == "20113563" else "80"],
                 },
             ]
         )
@@ -92,7 +92,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["retrieval_context"]["split_training_date"], "2022-01-13")
         self.assertEqual(result["candidate_count"], 2)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
-        self.assertAlmostEqual(result["candidates"][0]["candidate_score"], 1.0)
+        self.assertEqual(result["candidates"][0]["candidate_score"], 0.982)
         self.assertEqual(result["candidates"][0]["best_score"], 95.0)
         self.assertEqual(result["candidates"][1]["patient_id"], "20113562")
         self.assertAlmostEqual(result["candidates"][1]["candidate_score"], -1.0)

@@ -149,10 +149,14 @@ class SimilarUserCandidateService:
         common_game_score_correlation = calculate_common_game_score_correlation(records)
         correlation = common_game_score_correlation.get("correlation")
         candidate_score = (
-            float(correlation)
+            round(float(correlation), 3)
             if isinstance(correlation, (int, float))
             else None
         )
+        common_game_score_correlation = {
+            **common_game_score_correlation,
+            "correlation": candidate_score,
+        }
         return candidate_score, {
             "common_game_score_correlation": common_game_score_correlation,
         }
