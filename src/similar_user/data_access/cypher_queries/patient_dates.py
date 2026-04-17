@@ -122,6 +122,30 @@ WHERE
 RETURN DISTINCT sym
 """.strip()
 
+PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY = """
+MATCH (p1:Patient {id: $primary_patient_id})
+--(s1:TaskInstanceSet)
+--(sym1:Symptom)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) <= date($end_date)
+
+WITH collect(DISTINCT sym1) AS symptoms1
+
+MATCH (p2:Patient {id: $comparison_patient_id})
+--(s2:TaskInstanceSet)
+--(sym2:Symptom)
+
+WHERE
+    s2.`训练日期` IS NOT NULL AND
+    date(s2.`训练日期`) <= date($end_date)
+
+RETURN
+    symptoms1,
+    collect(DISTINCT sym2) AS symptoms2
+""".strip()
+
 PATIENT_DISTINCT_SYMPTOMS_BY_START_DATE_QUERY = """
 MATCH (p:Patient {id: $patient_id})
 --(s1:TaskInstanceSet)
@@ -132,6 +156,30 @@ WHERE
     date(s1.`训练日期`) >= date($start_date)
 
 RETURN DISTINCT sym
+""".strip()
+
+PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY = """
+MATCH (p1:Patient {id: $primary_patient_id})
+--(s1:TaskInstanceSet)
+--(sym1:Symptom)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date)
+
+WITH collect(DISTINCT sym1) AS symptoms1
+
+MATCH (p2:Patient {id: $comparison_patient_id})
+--(s2:TaskInstanceSet)
+--(sym2:Symptom)
+
+WHERE
+    s2.`训练日期` IS NOT NULL AND
+    date(s2.`训练日期`) >= date($start_date)
+
+RETURN
+    symptoms1,
+    collect(DISTINCT sym2) AS symptoms2
 """.strip()
 
 PATIENT_DISTINCT_SYMPTOMS_BY_DATE_RANGE_QUERY = """
@@ -145,6 +193,32 @@ WHERE
     date(s1.`训练日期`) <= date($end_date)
 
 RETURN DISTINCT sym
+""".strip()
+
+PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY = """
+MATCH (p1:Patient {id: $primary_patient_id})
+--(s1:TaskInstanceSet)
+--(sym1:Symptom)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) <= date($end_date)
+
+WITH collect(DISTINCT sym1) AS symptoms1
+
+MATCH (p2:Patient {id: $comparison_patient_id})
+--(s2:TaskInstanceSet)
+--(sym2:Symptom)
+
+WHERE
+    s2.`训练日期` IS NOT NULL AND
+    date(s2.`训练日期`) >= date($start_date) AND
+    date(s2.`训练日期`) <= date($end_date)
+
+RETURN
+    symptoms1,
+    collect(DISTINCT sym2) AS symptoms2
 """.strip()
 
 PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY = """
@@ -270,6 +344,30 @@ WHERE
 RETURN DISTINCT un
 """.strip()
 
+PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY = """
+MATCH (p1:Patient {id: $primary_patient_id})
+--(s1:TaskInstanceSet)
+--(un1:Unknown)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) <= date($end_date)
+
+WITH collect(DISTINCT un1) AS unknowns1
+
+MATCH (p2:Patient {id: $comparison_patient_id})
+--(s2:TaskInstanceSet)
+--(un2:Unknown)
+
+WHERE
+    s2.`训练日期` IS NOT NULL AND
+    date(s2.`训练日期`) <= date($end_date)
+
+RETURN
+    unknowns1,
+    collect(DISTINCT un2) AS unknowns2
+""".strip()
+
 PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY = """
 MATCH (p:Patient {id: $patient_id})
 --(s1:TaskInstanceSet)
@@ -280,6 +378,30 @@ WHERE
     date(s1.`训练日期`) >= date($start_date)
 
 RETURN DISTINCT un
+""".strip()
+
+PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY = """
+MATCH (p1:Patient {id: $primary_patient_id})
+--(s1:TaskInstanceSet)
+--(un1:Unknown)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date)
+
+WITH collect(DISTINCT un1) AS unknowns1
+
+MATCH (p2:Patient {id: $comparison_patient_id})
+--(s2:TaskInstanceSet)
+--(un2:Unknown)
+
+WHERE
+    s2.`训练日期` IS NOT NULL AND
+    date(s2.`训练日期`) >= date($start_date)
+
+RETURN
+    unknowns1,
+    collect(DISTINCT un2) AS unknowns2
 """.strip()
 
 PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY = """
@@ -293,6 +415,32 @@ WHERE
     date(s1.`训练日期`) <= date($end_date)
 
 RETURN DISTINCT un
+""".strip()
+
+PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY = """
+MATCH (p1:Patient {id: $primary_patient_id})
+--(s1:TaskInstanceSet)
+--(un1:Unknown)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) <= date($end_date)
+
+WITH collect(DISTINCT un1) AS unknowns1
+
+MATCH (p2:Patient {id: $comparison_patient_id})
+--(s2:TaskInstanceSet)
+--(un2:Unknown)
+
+WHERE
+    s2.`训练日期` IS NOT NULL AND
+    date(s2.`训练日期`) >= date($start_date) AND
+    date(s2.`训练日期`) <= date($end_date)
+
+RETURN
+    unknowns1,
+    collect(DISTINCT un2) AS unknowns2
 """.strip()
 
 PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY = """

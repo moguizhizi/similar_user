@@ -26,7 +26,13 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+    PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
+    PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+    PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -459,6 +465,70 @@ class KgRepositoryTest(unittest.TestCase):
                 "2022-01-01",
                 "   ",
             )
+
+    def test_get_patient_symptom_set_comparison_queries(self) -> None:
+        cases = [
+            (
+                "get_patient_symptom_set_comparison_by_end_date",
+                PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
+                (" 40 ", " 20121011 ", " 2022-05-22 "),
+                {
+                    "primary_patient_id": "40",
+                    "comparison_patient_id": "20121011",
+                    "end_date": "2022-05-22",
+                },
+            ),
+            (
+                "get_patient_symptom_set_comparison_by_start_date",
+                PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
+                (" 40 ", " 20121011 ", " 2022-05-01 "),
+                {
+                    "primary_patient_id": "40",
+                    "comparison_patient_id": "20121011",
+                    "start_date": "2022-05-01",
+                },
+            ),
+            (
+                "get_patient_symptom_set_comparison_by_date_range",
+                PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+                (" 40 ", " 20121011 ", " 2022-05-01 ", " 2022-05-22 "),
+                {
+                    "primary_patient_id": "40",
+                    "comparison_patient_id": "20121011",
+                    "start_date": "2022-05-01",
+                    "end_date": "2022-05-22",
+                },
+            ),
+        ]
+
+        for method_name, query, args, parameters in cases:
+            with self.subTest(method_name=method_name):
+                mock_client = Mock()
+                mock_client.run_query.return_value = [
+                    {
+                        "symptoms1": [{"id": "AU_SYM_0007", "name": "睡眠障碍"}],
+                        "symptoms2": [{"id": "AU_SYM_0012", "name": "注意力不集中"}],
+                    }
+                ]
+                repository = KgRepository(client=mock_client)
+
+                result = getattr(repository, method_name)(*args)
+
+                self.assertEqual(
+                    result,
+                    [
+                        {
+                            "symptoms1": [{"id": "AU_SYM_0007", "name": "睡眠障碍"}],
+                            "symptoms2": [
+                                {"id": "AU_SYM_0012", "name": "注意力不集中"}
+                            ],
+                        }
+                    ],
+                )
+                mock_client.run_query.assert_called_once_with(
+                    query=query,
+                    parameters=parameters,
+                )
 
     def test_get_patient_distinct_diseases_by_end_date(self) -> None:
         mock_client = Mock()
@@ -934,6 +1004,72 @@ class KgRepositoryTest(unittest.TestCase):
                 "2022-01-01",
                 "   ",
             )
+
+    def test_get_patient_unknown_set_comparison_queries(self) -> None:
+        cases = [
+            (
+                "get_patient_unknown_set_comparison_by_end_date",
+                PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
+                (" 40 ", " 20121011 ", " 2022-05-22 "),
+                {
+                    "primary_patient_id": "40",
+                    "comparison_patient_id": "20121011",
+                    "end_date": "2022-05-22",
+                },
+            ),
+            (
+                "get_patient_unknown_set_comparison_by_start_date",
+                PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
+                (" 40 ", " 20121011 ", " 2022-05-01 "),
+                {
+                    "primary_patient_id": "40",
+                    "comparison_patient_id": "20121011",
+                    "start_date": "2022-05-01",
+                },
+            ),
+            (
+                "get_patient_unknown_set_comparison_by_date_range",
+                PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+                (" 40 ", " 20121011 ", " 2022-05-01 ", " 2022-05-22 "),
+                {
+                    "primary_patient_id": "40",
+                    "comparison_patient_id": "20121011",
+                    "start_date": "2022-05-01",
+                    "end_date": "2022-05-22",
+                },
+            ),
+        ]
+
+        for method_name, query, args, parameters in cases:
+            with self.subTest(method_name=method_name):
+                mock_client = Mock()
+                mock_client.run_query.return_value = [
+                    {
+                        "unknowns1": [{"id": "AU_UNK_0001", "name": "其他异常表现"}],
+                        "unknowns2": [{"id": "AU_UNK_0002", "name": "待分类表现"}],
+                    }
+                ]
+                repository = KgRepository(client=mock_client)
+
+                result = getattr(repository, method_name)(*args)
+
+                self.assertEqual(
+                    result,
+                    [
+                        {
+                            "unknowns1": [
+                                {"id": "AU_UNK_0001", "name": "其他异常表现"}
+                            ],
+                            "unknowns2": [
+                                {"id": "AU_UNK_0002", "name": "待分类表现"}
+                            ],
+                        }
+                    ],
+                )
+                mock_client.run_query.assert_called_once_with(
+                    query=query,
+                    parameters=parameters,
+                )
 
     def test_dated_randomized_path_by_end_date_query_keeps_date_order_constraint(
         self,

@@ -26,7 +26,13 @@ from .cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+    PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
+    PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+    PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
@@ -202,6 +208,30 @@ class KgRepository:
             },
         )
 
+    def get_patient_symptom_set_comparison_by_end_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return symptom sets for two patients up to and including an end date."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
     def get_patient_distinct_symptoms_by_start_date(
         self,
         patient_id: str,
@@ -217,6 +247,30 @@ class KgRepository:
             query=PATIENT_DISTINCT_SYMPTOMS_BY_START_DATE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+            },
+        )
+
+    def get_patient_symptom_set_comparison_by_start_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return symptom sets for two patients from a start date."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
                 "start_date": normalized_start_date,
             },
         )
@@ -238,6 +292,33 @@ class KgRepository:
             query=PATIENT_DISTINCT_SYMPTOMS_BY_DATE_RANGE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_symptom_set_comparison_by_date_range(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return symptom sets for two patients within a date range."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
                 "start_date": normalized_start_date,
                 "end_date": normalized_end_date,
             },
@@ -397,6 +478,30 @@ class KgRepository:
             },
         )
 
+    def get_patient_unknown_set_comparison_by_end_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return unknown-category sets for two patients up to and including an end date."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
     def get_patient_distinct_unknowns_by_start_date(
         self,
         patient_id: str,
@@ -412,6 +517,30 @@ class KgRepository:
             query=PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+            },
+        )
+
+    def get_patient_unknown_set_comparison_by_start_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return unknown-category sets for two patients from a start date."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
                 "start_date": normalized_start_date,
             },
         )
@@ -433,6 +562,33 @@ class KgRepository:
             query=PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_unknown_set_comparison_by_date_range(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return unknown-category sets for two patients within a date range."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
                 "start_date": normalized_start_date,
                 "end_date": normalized_end_date,
             },
