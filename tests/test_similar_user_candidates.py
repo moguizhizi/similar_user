@@ -95,6 +95,27 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 {"g": {"id": "348", "name": "真假句辨别"}},
             ]
         )
+        mock_user_service.get_patient_distinct_diseases_by_end_date = Mock(
+            side_effect=lambda patient_id, end_date: [
+                {"dis": {"id": "D1", "name": "疾病1"}},
+                {"dis": {"id": "D2", "name": "疾病2"}},
+            ]
+            if patient_id == "30010096"
+            else [{"dis": {"id": "D1", "name": "疾病1"}}]
+        )
+        mock_user_service.get_patient_distinct_symptoms_by_end_date = Mock(
+            side_effect=lambda patient_id, end_date: [{"sym": {"id": "S1", "name": "症状1"}}]
+            if patient_id == "30010096"
+            else [
+                {"sym": {"id": "S1", "name": "症状1"}},
+                {"sym": {"id": "S2", "name": "症状2"}},
+            ]
+        )
+        mock_user_service.get_patient_distinct_unknowns_by_end_date = Mock(
+            side_effect=lambda patient_id, end_date: [{"un": {"id": "U1", "name": "其他1"}}]
+            if patient_id == "30010096"
+            else [{"un": {"id": "U2", "name": "其他2"}}]
+        )
 
         result = SimilarUserCandidateService(
             user_service=mock_user_service
@@ -111,6 +132,18 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(
             result["candidates"][0]["score_details"]["game_similarity_with_diversity_score"]["score"],
             0.25,
+        )
+        self.assertEqual(
+            result["candidates"][0]["score_details"]["set_same_scores"]["disease"]["score"],
+            0.5,
+        )
+        self.assertEqual(
+            result["candidates"][0]["score_details"]["set_same_scores"]["symptom"]["score"],
+            0.5,
+        )
+        self.assertEqual(
+            result["candidates"][0]["score_details"]["set_same_scores"]["unknown"]["score"],
+            0.0,
         )
         self.assertEqual(result["candidates"][0]["best_score"], 95.0)
         self.assertEqual(result["candidates"][1]["patient_id"], "20113562")

@@ -12,6 +12,7 @@ from ..user_service import UserService
 from .utils import (
     calculate_common_game_score_correlation,
     calculate_game_similarity_with_diversity_score,
+    calculate_set_same_score,
 )
 
 
@@ -178,9 +179,79 @@ class SimilarUserCandidateService:
                 candidate_games,
             )
         )
+        set_same_scores = self._calculate_set_same_scores(
+            primary_patient_id=primary_patient_id.strip(),
+            candidate_patient_id=candidate_patient_id.strip(),
+            end_date=end_date,
+        )
         return candidate_score, {
             "common_game_score_correlation": common_game_score_correlation,
             "game_similarity_with_diversity_score": game_similarity_with_diversity_score,
+            "set_same_scores": set_same_scores,
+        }
+
+    def _calculate_set_same_scores(
+        self,
+        *,
+        primary_patient_id: str,
+        candidate_patient_id: str,
+        end_date: str,
+    ) -> dict[str, object]:
+        """Calculate disease, symptom, and unknown set-same scores."""
+        source_diseases = _extract_node_keys(
+            self.user_service.get_patient_distinct_diseases_by_end_date(
+                primary_patient_id,
+                end_date,
+            ),
+            "dis",
+        )
+        candidate_diseases = _extract_node_keys(
+            self.user_service.get_patient_distinct_diseases_by_end_date(
+                candidate_patient_id,
+                end_date,
+            ),
+            "dis",
+        )
+
+        source_symptoms = _extract_node_keys(
+            self.user_service.get_patient_distinct_symptoms_by_end_date(
+                primary_patient_id,
+                end_date,
+            ),
+            "sym",
+        )
+        candidate_symptoms = _extract_node_keys(
+            self.user_service.get_patient_distinct_symptoms_by_end_date(
+                candidate_patient_id,
+                end_date,
+            ),
+            "sym",
+        )
+        source_unknowns = _extract_node_keys(
+            self.user_service.get_patient_distinct_unknowns_by_end_date(
+                primary_patient_id,
+                end_date,
+            ),
+            "un",
+        )
+        candidate_unknowns = _extract_node_keys(
+            self.user_service.get_patient_distinct_unknowns_by_end_date(
+                candidate_patient_id,
+                end_date,
+            ),
+            "un",
+        )
+
+        return {
+            "disease": _round_numeric_values(
+                calculate_set_same_score(source_diseases, candidate_diseases)
+            ),
+            "symptom": _round_numeric_values(
+                calculate_set_same_score(source_symptoms, candidate_symptoms)
+            ),
+            "unknown": _round_numeric_values(
+                calculate_set_same_score(source_unknowns, candidate_unknowns)
+            ),
         }
 
 
@@ -258,17 +329,26 @@ def _candidate_score_sort_value(value: object) -> float:
 
 def _extract_game_keys(rows: list[dict[str, object]]) -> list[str]:
     """Extract stable game keys from distinct-game query rows."""
-    game_keys: list[str] = []
+    return _extract_node_keys(rows, "g")
+
+
+def _extract_node_keys(rows: object, node_key: str) -> list[str]:
+    """Extract stable node keys from distinct-node query rows."""
+    node_keys: list[str] = []
+    if not isinstance(rows, list):
+        return node_keys
     for row in rows:
-        game = row.get("g")
-        if not isinstance(game, dict):
+        if not isinstance(row, dict):
+            continue
+        node = row.get(node_key)
+        if not isinstance(node, dict):
             continue
         for key in ("id", "name"):
-            value = game.get(key)
+            value = node.get(key)
             if isinstance(value, str) and value.strip():
-                game_keys.append(value.strip())
+                node_keys.append(value.strip())
                 break
-    return game_keys
+    return node_keys
 
 
 def _round_numeric_values(value: object) -> object:
