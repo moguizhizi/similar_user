@@ -80,6 +80,21 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 },
             ]
         )
+        mock_user_service.get_patient_distinct_games_by_end_date = Mock(
+            side_effect=lambda patient_id, end_date: [
+                {"g": {"id": "348", "name": "真假句辨别"}},
+                {"g": {"id": "777", "name": "空间搜索"}},
+            ]
+            if patient_id == "20113563"
+            else [
+                {"g": {"id": "348", "name": "真假句辨别"}},
+                {"g": {"id": "999", "name": "打怪物"}},
+            ]
+            if patient_id == "30010096"
+            else [
+                {"g": {"id": "348", "name": "真假句辨别"}},
+            ]
+        )
 
         result = SimilarUserCandidateService(
             user_service=mock_user_service
@@ -93,6 +108,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["candidate_count"], 2)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
         self.assertEqual(result["candidates"][0]["candidate_score"], 0.982)
+        self.assertEqual(
+            result["candidates"][0]["score_details"]["game_similarity_with_diversity_score"]["score"],
+            0.25,
+        )
         self.assertEqual(result["candidates"][0]["best_score"], 95.0)
         self.assertEqual(result["candidates"][1]["patient_id"], "20113562")
         self.assertAlmostEqual(result["candidates"][1]["candidate_score"], -1.0)
@@ -104,6 +123,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date.call_count,
             2,
         )
+        self.assertEqual(mock_user_service.get_patient_distinct_games_by_end_date.call_count, 4)
 
     def test_aggregate_candidates_from_scored_paths_raises_for_unsupported_pattern(self) -> None:
         scored_result = {
@@ -186,6 +206,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 {"game": "真假句辨别", "scores_p1": ["90"], "scores_p2": [score_by_candidate[comparison][1]]},
                 {"game": "空间搜索", "scores_p1": ["100"], "scores_p2": [score_by_candidate[comparison][2]]},
             ]
+        )
+        mock_user_service.get_patient_distinct_games_by_end_date = Mock(
+            return_value=[{"g": {"id": "348", "name": "真假句辨别"}}]
         )
 
         result = SimilarUserCandidateService(
@@ -386,6 +409,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                         },
                     ]
                 )
+                mock_user_service.get_patient_distinct_games_by_end_date.return_value = [
+                    {"g": {"id": "348", "name": "真假句辨别"}}
+                ]
                 mock_user_service_cls.return_value = mock_user_service
                 candidates = build_similar_user_candidates("30010096")
 
@@ -460,6 +486,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                         {"game": "真假句辨别", "scores_p1": ["90"], "scores_p2": ["90"]},
                     ]
                 )
+                mock_user_service.get_patient_distinct_games_by_end_date.return_value = [
+                    {"g": {"id": "348", "name": "真假句辨别"}}
+                ]
                 mock_user_service_cls.return_value = mock_user_service
                 candidates = build_similar_user_candidates("30010096")
 

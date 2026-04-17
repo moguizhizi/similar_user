@@ -9,7 +9,10 @@ from typing import Any
 from ...domain.graph_schema import PathPattern
 from ...domain.path_models import PatientTasksetTaskGameTaskTasksetPatientPath
 from ..user_service import UserService
-from .utils import calculate_common_game_score_correlation
+from .utils import (
+    calculate_common_game_score_correlation,
+    calculate_game_similarity_with_diversity_score,
+)
 
 
 @dataclass(frozen=True)
@@ -157,8 +160,27 @@ class SimilarUserCandidateService:
             **common_game_score_correlation,
             "correlation": candidate_score,
         }
+        source_games = _extract_game_keys(
+            self.user_service.get_patient_distinct_games_by_end_date(
+                primary_patient_id.strip(),
+                end_date,
+            )
+        )
+        candidate_games = _extract_game_keys(
+            self.user_service.get_patient_distinct_games_by_end_date(
+                candidate_patient_id.strip(),
+                end_date,
+            )
+        )
+        game_similarity_with_diversity_score = _round_numeric_values(
+            calculate_game_similarity_with_diversity_score(
+                source_games,
+                candidate_games,
+            )
+        )
         return candidate_score, {
             "common_game_score_correlation": common_game_score_correlation,
+            "game_similarity_with_diversity_score": game_similarity_with_diversity_score,
         }
 
 
@@ -232,6 +254,32 @@ def _build_domain_path_from_scored_path(
 def _candidate_score_sort_value(value: object) -> float:
     """Return the only value used for candidate sorting."""
     return float(value) if isinstance(value, (int, float)) else float("-inf")
+
+
+def _extract_game_keys(rows: list[dict[str, object]]) -> list[str]:
+    """Extract stable game keys from distinct-game query rows."""
+    game_keys: list[str] = []
+    for row in rows:
+        game = row.get("g")
+        if not isinstance(game, dict):
+            continue
+        for key in ("id", "name"):
+            value = game.get(key)
+            if isinstance(value, str) and value.strip():
+                game_keys.append(value.strip())
+                break
+    return game_keys
+
+
+def _round_numeric_values(value: object) -> object:
+    """Round float values in nested score details for compact output."""
+    if isinstance(value, float):
+        return round(value, 3)
+    if isinstance(value, dict):
+        return {key: _round_numeric_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_round_numeric_values(item) for item in value]
+    return value
 
 
 def _extract_total_score(scored_path: dict[str, Any]) -> float | None:
