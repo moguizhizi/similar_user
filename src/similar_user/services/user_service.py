@@ -102,6 +102,19 @@ class UserService:
             end_date,
         )
 
+    def get_patient_symptom_set_comparison_by_end_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return symptom sets for two patients up to and including an end date."""
+        return self.kg_repository.get_patient_symptom_set_comparison_by_end_date(
+            primary_patient_id,
+            comparison_patient_id,
+            end_date,
+        )
+
     def get_patient_distinct_symptoms_by_start_date(
         self,
         patient_id: str,
@@ -110,6 +123,19 @@ class UserService:
         """Return distinct symptoms for one patient from a start date."""
         return self.kg_repository.get_patient_distinct_symptoms_by_start_date(
             patient_id,
+            start_date,
+        )
+
+    def get_patient_symptom_set_comparison_by_start_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return symptom sets for two patients from a start date."""
+        return self.kg_repository.get_patient_symptom_set_comparison_by_start_date(
+            primary_patient_id,
+            comparison_patient_id,
             start_date,
         )
 
@@ -122,6 +148,21 @@ class UserService:
         """Return distinct symptoms for one patient within a date range."""
         return self.kg_repository.get_patient_distinct_symptoms_by_date_range(
             patient_id,
+            start_date,
+            end_date,
+        )
+
+    def get_patient_symptom_set_comparison_by_date_range(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return symptom sets for two patients within a date range."""
+        return self.kg_repository.get_patient_symptom_set_comparison_by_date_range(
+            primary_patient_id,
+            comparison_patient_id,
             start_date,
             end_date,
         )
@@ -213,6 +254,19 @@ class UserService:
             end_date,
         )
 
+    def get_patient_unknown_set_comparison_by_end_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return unknown-category sets for two patients up to and including an end date."""
+        return self.kg_repository.get_patient_unknown_set_comparison_by_end_date(
+            primary_patient_id,
+            comparison_patient_id,
+            end_date,
+        )
+
     def get_patient_distinct_unknowns_by_start_date(
         self,
         patient_id: str,
@@ -221,6 +275,19 @@ class UserService:
         """Return distinct unknown-category nodes for one patient from a start date."""
         return self.kg_repository.get_patient_distinct_unknowns_by_start_date(
             patient_id,
+            start_date,
+        )
+
+    def get_patient_unknown_set_comparison_by_start_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return unknown-category sets for two patients from a start date."""
+        return self.kg_repository.get_patient_unknown_set_comparison_by_start_date(
+            primary_patient_id,
+            comparison_patient_id,
             start_date,
         )
 
@@ -233,6 +300,21 @@ class UserService:
         """Return distinct unknown-category nodes for one patient within a date range."""
         return self.kg_repository.get_patient_distinct_unknowns_by_date_range(
             patient_id,
+            start_date,
+            end_date,
+        )
+
+    def get_patient_unknown_set_comparison_by_date_range(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return unknown-category sets for two patients within a date range."""
+        return self.kg_repository.get_patient_unknown_set_comparison_by_date_range(
+            primary_patient_id,
+            comparison_patient_id,
             start_date,
             end_date,
         )

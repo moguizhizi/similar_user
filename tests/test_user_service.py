@@ -222,6 +222,50 @@ class UserServiceTest(unittest.TestCase):
             "2022-01-13",
         )
 
+    def test_get_patient_symptom_set_comparison_queries_delegate_to_repository(
+        self,
+    ) -> None:
+        cases = [
+            (
+                "get_patient_symptom_set_comparison_by_end_date",
+                ("40", "20121011", "2022-05-22"),
+            ),
+            (
+                "get_patient_symptom_set_comparison_by_start_date",
+                ("40", "20121011", "2022-05-01"),
+            ),
+            (
+                "get_patient_symptom_set_comparison_by_date_range",
+                ("40", "20121011", "2022-05-01", "2022-05-22"),
+            ),
+        ]
+
+        for method_name, args in cases:
+            with self.subTest(method_name=method_name):
+                mock_repository = Mock()
+                getattr(mock_repository, method_name).return_value = [
+                    {
+                        "symptoms1": [{"id": "AU_SYM_0007", "name": "睡眠障碍"}],
+                        "symptoms2": [{"id": "AU_SYM_0012", "name": "注意力不集中"}],
+                    }
+                ]
+                service = UserService(kg_repository=mock_repository)
+
+                result = getattr(service, method_name)(*args)
+
+                self.assertEqual(
+                    result,
+                    [
+                        {
+                            "symptoms1": [{"id": "AU_SYM_0007", "name": "睡眠障碍"}],
+                            "symptoms2": [
+                                {"id": "AU_SYM_0012", "name": "注意力不集中"}
+                            ],
+                        }
+                    ],
+                )
+                getattr(mock_repository, method_name).assert_called_once_with(*args)
+
     def test_get_patient_distinct_diseases_by_end_date_delegates_to_repository(
         self,
     ) -> None:
@@ -464,6 +508,52 @@ class UserServiceTest(unittest.TestCase):
             "2022-01-01",
             "2022-01-13",
         )
+
+    def test_get_patient_unknown_set_comparison_queries_delegate_to_repository(
+        self,
+    ) -> None:
+        cases = [
+            (
+                "get_patient_unknown_set_comparison_by_end_date",
+                ("40", "20121011", "2022-05-22"),
+            ),
+            (
+                "get_patient_unknown_set_comparison_by_start_date",
+                ("40", "20121011", "2022-05-01"),
+            ),
+            (
+                "get_patient_unknown_set_comparison_by_date_range",
+                ("40", "20121011", "2022-05-01", "2022-05-22"),
+            ),
+        ]
+
+        for method_name, args in cases:
+            with self.subTest(method_name=method_name):
+                mock_repository = Mock()
+                getattr(mock_repository, method_name).return_value = [
+                    {
+                        "unknowns1": [{"id": "AU_UNK_0001", "name": "其他异常表现"}],
+                        "unknowns2": [{"id": "AU_UNK_0002", "name": "待分类表现"}],
+                    }
+                ]
+                service = UserService(kg_repository=mock_repository)
+
+                result = getattr(service, method_name)(*args)
+
+                self.assertEqual(
+                    result,
+                    [
+                        {
+                            "unknowns1": [
+                                {"id": "AU_UNK_0001", "name": "其他异常表现"}
+                            ],
+                            "unknowns2": [
+                                {"id": "AU_UNK_0002", "name": "待分类表现"}
+                            ],
+                        }
+                    ],
+                )
+                getattr(mock_repository, method_name).assert_called_once_with(*args)
 
     @patch("src.similar_user.services.user_service.LOGGER")
     def test_get_patient_pattern_paths_returns_empty_payload_when_no_training_dates(
