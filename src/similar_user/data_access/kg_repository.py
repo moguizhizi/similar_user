@@ -9,7 +9,9 @@ from pathlib import Path
 from config.settings import GraphPathLimitSettings, load_query_settings
 
 from .cypher_queries import (
+    PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
@@ -280,6 +282,57 @@ class KgRepository:
             parameters={
                 "primary_patient_id": normalized_primary_patient_id,
                 "comparison_patient_id": normalized_comparison_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_disease_set_comparison_by_start_date(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return disease sets for two patients from a start date."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
+                "start_date": normalized_start_date,
+            },
+        )
+
+    def get_patient_disease_set_comparison_by_date_range(
+        self,
+        primary_patient_id: str,
+        comparison_patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return disease sets for two patients within a date range."""
+        normalized_primary_patient_id = primary_patient_id.strip()
+        normalized_comparison_patient_id = comparison_patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_primary_patient_id:
+            raise ValueError("primary_patient_id must be a non-empty string.")
+        if not normalized_comparison_patient_id:
+            raise ValueError("comparison_patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+            parameters={
+                "primary_patient_id": normalized_primary_patient_id,
+                "comparison_patient_id": normalized_comparison_patient_id,
+                "start_date": normalized_start_date,
                 "end_date": normalized_end_date,
             },
         )
