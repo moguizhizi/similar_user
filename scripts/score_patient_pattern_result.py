@@ -1,4 +1,22 @@
-"""Score saved patient pattern paths with a rule-based scorer."""
+"""Score saved patient pattern paths.
+
+这个脚本处在“path 生成”和“候选用户聚合”之间：
+
+1. `scripts/debug_patient_pattern_paths.py` 或 pipeline 先从 Neo4j 生成并保存某个患者的 paths。
+2. 本脚本从本地 JSON 存储读取这些 paths，用 `PathScorer` 给每条 path 打分。
+3. 下游 `scripts/build_similar_user_candidates.py` 会读取这里的评分结果，按 top-k path
+   去重候选用户，再计算 candidate_score。
+
+它不会重新查 Neo4j 生成 path，也不会直接推荐 task；它只负责“给已保存 path 排序/筛选”。
+
+常用执行方式：
+
+    python scripts/score_patient_pattern_result.py 40 --top-k 50
+
+调试单条 path：
+
+    python scripts/score_patient_pattern_result.py 40 --path-index 0
+"""
 
 from __future__ import annotations
 
@@ -108,11 +126,19 @@ def score_patient_pattern_result(
             scored_paths = scored_paths[:top_k]
 
     retrieval_context = stored_result.retrieval_context
-    split_training_date = None
+    base_date = None
+    path_window = None
+    legacy_split_training_date = None
     if isinstance(retrieval_context, dict):
+        raw_base_date = retrieval_context.get("base_date")
+        if isinstance(raw_base_date, str) and raw_base_date.strip():
+            base_date = raw_base_date.strip()
+        raw_path_window = retrieval_context.get("path_window")
+        if isinstance(raw_path_window, dict):
+            path_window = raw_path_window
         raw_split_training_date = retrieval_context.get("split_training_date")
         if isinstance(raw_split_training_date, str) and raw_split_training_date.strip():
-            split_training_date = raw_split_training_date.strip()
+            legacy_split_training_date = raw_split_training_date.strip()
 
     result = {
         "patient_id": stored_result.patient_id,
@@ -120,12 +146,13 @@ def score_patient_pattern_result(
         "path_count": len(domain_paths),
         "scored_path_count": len(scored_paths),
         "retrieval_context": {
-            "split_training_date": split_training_date,
-            "path_scope": (
-                f"当前评分结果中的 paths 来自训练日期小于等于 {split_training_date} 的检索集合"
-                if split_training_date is not None
-                else "当前评分结果中的 paths 来自已保存的检索集合"
+            "base_date": base_date,
+            "path_window": path_window,
+            "score_end_date": _extract_score_end_date(
+                path_window,
+                legacy_split_training_date,
             ),
+            "path_scope": _build_path_scope(path_window, legacy_split_training_date),
         },
         "scores": scored_paths,
     }
@@ -136,6 +163,39 @@ def score_patient_pattern_result(
         result["scored_path_count"],
     )
     return result
+
+
+def _extract_score_end_date(
+    path_window: dict[str, object] | None,
+    legacy_split_training_date: str | None,
+) -> str | None:
+    """Extract the end date used by downstream candidate scoring."""
+    if isinstance(path_window, dict):
+        raw_end_date = path_window.get("end_date")
+        if isinstance(raw_end_date, str) and raw_end_date.strip():
+            return raw_end_date.strip()
+    return legacy_split_training_date
+
+
+def _build_path_scope(
+    path_window: dict[str, object] | None,
+    legacy_split_training_date: str | None,
+) -> str:
+    """Build a concise human-readable scope for scored paths."""
+    if isinstance(path_window, dict):
+        start_date = path_window.get("start_date")
+        end_date = path_window.get("end_date")
+        if start_date is not None and end_date is not None:
+            return (
+                "当前评分结果中的 paths 来自训练日期 "
+                f">= {start_date} 且 < {end_date} 的检索集合"
+            )
+    if legacy_split_training_date is not None:
+        return (
+            "当前评分结果中的 paths 来自历史 split 语义下训练日期 "
+            f"< {legacy_split_training_date} 的检索集合"
+        )
+    return "当前评分结果中的 paths 来自已保存的检索集合"
 
 
 def main() -> int:
