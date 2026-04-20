@@ -67,6 +67,41 @@ class UserService:
             end_date,
         )
 
+    def get_patient_games_by_end_date(
+        self,
+        patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return game rows for one patient up to and including an end date."""
+        return self.kg_repository.get_patient_games_by_end_date(
+            patient_id,
+            end_date,
+        )
+
+    def get_patient_games_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return game rows for one patient from a start date."""
+        return self.kg_repository.get_patient_games_by_start_date(
+            patient_id,
+            start_date,
+        )
+
+    def get_patient_games_by_date_range(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return game rows for one patient within a date range."""
+        return self.kg_repository.get_patient_games_by_date_range(
+            patient_id,
+            start_date,
+            end_date,
+        )
+
     def get_patient_game_set_comparison_by_end_date(
         self,
         primary_patient_id: str,
@@ -517,6 +552,26 @@ class UserService:
             return []
 
         return [str(value) for value in ordered_dates]
+
+    def get_patient_training_task_history(
+        self,
+        patient_id: str,
+    ) -> list[dict[str, object]]:
+        """Return dated task-instance and game rows for one patient."""
+        return self.kg_repository.get_patient_training_task_history(patient_id)
+
+    def get_patient_training_task_history_by_date_window(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return task history in a left-closed, right-open date window."""
+        return self.kg_repository.get_patient_training_task_history_by_date_window(
+            patient_id,
+            start_date,
+            end_date,
+        )
 
     def _load_dated_statistics(
         self,

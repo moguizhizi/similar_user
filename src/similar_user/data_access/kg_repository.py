@@ -28,6 +28,9 @@ from .cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_GAMES_BY_DATE_RANGE_QUERY,
+    PATIENT_GAMES_BY_END_DATE_QUERY,
+    PATIENT_GAMES_BY_START_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -46,6 +49,8 @@ from .cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
     PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
+    PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+    PATIENT_TRAINING_TASK_HISTORY_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
@@ -146,6 +151,66 @@ class KgRepository:
 
         return self.client.run_query(
             query=PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_games_by_end_date(
+        self,
+        patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return game rows for one patient up to and including an end date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_GAMES_BY_END_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_games_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return game rows for one patient from a start date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_GAMES_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+            },
+        )
+
+    def get_patient_games_by_date_range(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return game rows for one patient within a date range."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_GAMES_BY_DATE_RANGE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -605,6 +670,42 @@ class KgRepository:
         return self.client.run_query(
             query=PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
             parameters={"patient_id": normalized_patient_id},
+        )
+
+    def get_patient_training_task_history(
+        self,
+        patient_id: str,
+    ) -> list[dict[str, object]]:
+        """Return dated task-instance and game rows for one patient."""
+        normalized_patient_id = patient_id.strip()
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_TRAINING_TASK_HISTORY_QUERY,
+            parameters={"patient_id": normalized_patient_id},
+        )
+
+    def get_patient_training_task_history_by_date_window(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return task history in a left-closed, right-open date window."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        return self.client.run_query(
+            query=PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+                "end_date": normalized_end_date,
+            },
         )
 
     def get_patient_task_set_task_game_task_set_patient_pattern_statistics(

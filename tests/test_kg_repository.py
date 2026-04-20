@@ -27,6 +27,9 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_GAMES_BY_DATE_RANGE_QUERY,
+    PATIENT_GAMES_BY_END_DATE_QUERY,
+    PATIENT_GAMES_BY_START_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -39,6 +42,8 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
+    PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+    PATIENT_TRAINING_TASK_HISTORY_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
@@ -194,6 +199,92 @@ class KgRepositoryTest(unittest.TestCase):
         )
         mock_client.run_query.assert_called_once_with(
             query=PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-13",
+                "end_date": "2022-05-22",
+            },
+        )
+
+    def test_get_patient_games_by_end_date_keeps_duplicate_rows(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"g": {"id": "42", "name": "打怪物"}},
+            {"g": {"id": "42", "name": "打怪物"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_games_by_end_date(
+            " 30010096 ",
+            " 2022-01-13 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {"g": {"id": "42", "name": "打怪物"}},
+                {"g": {"id": "42", "name": "打怪物"}},
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_GAMES_BY_END_DATE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_patient_games_by_start_date_keeps_duplicate_rows(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"g": {"id": "42", "name": "打怪物"}},
+            {"g": {"id": "42", "name": "打怪物"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_games_by_start_date(
+            " 30010096 ",
+            " 2022-01-13 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {"g": {"id": "42", "name": "打怪物"}},
+                {"g": {"id": "42", "name": "打怪物"}},
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_GAMES_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-13",
+            },
+        )
+
+    def test_get_patient_games_by_date_range_keeps_duplicate_rows(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"g": {"id": "42", "name": "打怪物"}},
+            {"g": {"id": "42", "name": "打怪物"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_games_by_date_range(
+            " 30010096 ",
+            " 2022-01-13 ",
+            " 2022-05-22 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {"g": {"id": "42", "name": "打怪物"}},
+                {"g": {"id": "42", "name": "打怪物"}},
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_GAMES_BY_DATE_RANGE_QUERY,
             parameters={
                 "patient_id": "30010096",
                 "start_date": "2022-01-13",
@@ -1307,6 +1398,100 @@ class KgRepositoryTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
             repository.get_patient_task_instance_set_ordered_training_dates("   ")
+
+    def test_get_patient_training_task_history(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "trainingDate": "2022-01-13",
+                "i": {"id": "i-1", "任务类型": "专属"},
+                "g": {"id": "42", "name": "打怪物"},
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_training_task_history(" 30010096 ")
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "trainingDate": "2022-01-13",
+                    "i": {"id": "i-1", "任务类型": "专属"},
+                    "g": {"id": "42", "name": "打怪物"},
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TRAINING_TASK_HISTORY_QUERY,
+            parameters={"patient_id": "30010096"},
+        )
+
+    def test_get_patient_training_task_history_rejects_blank_patient_id(self) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_training_task_history("   ")
+
+    def test_get_patient_training_task_history_by_date_window(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "trainingDate": "2022-05-21",
+                "g": {"id": "42", "name": "打怪物"},
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_training_task_history_by_date_window(
+            " 30010096 ",
+            " 2022-05-20 ",
+            " 2022-05-22 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "trainingDate": "2022-05-21",
+                    "g": {"id": "42", "name": "打怪物"},
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-05-20",
+                "end_date": "2022-05-22",
+            },
+        )
+
+    def test_get_patient_training_task_history_by_date_window_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_training_task_history_by_date_window(
+                "   ",
+                "2022-05-20",
+                "2022-05-22",
+            )
+
+        with self.assertRaisesRegex(ValueError, "start_date must be a non-empty string."):
+            repository.get_patient_training_task_history_by_date_window(
+                "30010096",
+                "   ",
+                "2022-05-22",
+            )
+
+        with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
+            repository.get_patient_training_task_history_by_date_window(
+                "30010096",
+                "2022-05-20",
+                "   ",
+            )
 
     def test_get_patient_task_set_task_game_task_set_patient_pattern_statistics(
         self,
