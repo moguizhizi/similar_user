@@ -49,6 +49,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Use existing saved paths and only run scoring plus candidate ranking.",
     )
+    parser.add_argument(
+        "--full-output",
+        action="store_true",
+        help="Log the full pipeline result instead of the compact summary.",
+    )
     return parser.parse_args()
 
 
@@ -106,6 +111,52 @@ def _summarize_path_result(path_result: dict[str, object]) -> dict[str, object]:
     }
 
 
+def summarize_pipeline_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Build the compact pipeline output used by default CLI logging."""
+    candidate_result = result.get("candidate_result")
+    candidate_summary: dict[str, Any] | None = None
+    if isinstance(candidate_result, dict):
+        candidate_summary = {
+            "patient_id": candidate_result.get("patient_id"),
+            "pattern": candidate_result.get("pattern"),
+            "path_top_k": candidate_result.get("path_top_k"),
+            "candidate_top_k": candidate_result.get("candidate_top_k"),
+            "path_count": candidate_result.get("path_count"),
+            "scored_path_count": candidate_result.get("scored_path_count"),
+            "split_training_date": _extract_split_training_date(candidate_result),
+            "candidate_count": candidate_result.get("candidate_count"),
+            "candidate_ids": _extract_candidate_ids(candidate_result.get("candidates")),
+        }
+
+    return {
+        "patient_id": result.get("patient_id"),
+        "pattern": result.get("pattern"),
+        "config_path": result.get("config_path"),
+        "skip_path_build": result.get("skip_path_build"),
+        "path_generation": result.get("path_generation"),
+        "candidate_summary": candidate_summary,
+    }
+
+
+def _extract_split_training_date(candidate_result: dict[str, Any]) -> object:
+    retrieval_context = candidate_result.get("retrieval_context")
+    if not isinstance(retrieval_context, dict):
+        return None
+    return retrieval_context.get("split_training_date")
+
+
+def _extract_candidate_ids(candidates: object) -> list[object]:
+    if not isinstance(candidates, list):
+        return []
+
+    candidate_ids: list[object] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        candidate_ids.append(candidate.get("patient_id"))
+    return candidate_ids
+
+
 def main() -> int:
     """Run the full pipeline and log the JSON result."""
     args = parse_args()
@@ -124,7 +175,8 @@ def main() -> int:
         )
         return 1
 
-    LOGGER.info(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    output = result if args.full_output else summarize_pipeline_result(result)
+    LOGGER.info(json.dumps(output, ensure_ascii=False, indent=2, default=str))
     return 0
 
 
