@@ -10,6 +10,8 @@
 |---|---|---|---|---|
 | 查询患者从某日期开始的训练日期与游戏集合 | `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | `patient_dates.py` | `patient_id`, `start_date` | `trainingDate`, `games` |
 | 查询患者截止某日期的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY` | `patient_dates.py` | `patient_id`, `end_date` | `g` |
+| 查询患者从某日期开始的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY` | `patient_dates.py` | `patient_id`, `start_date` | `g` |
+| 查询患者日期区间内的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY` | `patient_dates.py` | `patient_id`, `start_date`, `end_date` | `g` |
 
 ### 两个患者的集合比较
 
@@ -61,6 +63,8 @@ Patient -- TaskInstanceSet -- TaskInstance -- Game -- TaskInstance -- TaskInstan
 |---|---|---|---|
 | `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的训练日期与游戏集合 | `patient_id`, `start_date` | `trainingDate`, `games` |
 | `PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY` | 查询患者截止某日期的去重游戏 | `patient_id`, `end_date` | `g` |
+| `PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重游戏 | `patient_id`, `start_date` | `g` |
+| `PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY` | 查询患者日期区间内的去重游戏 | `patient_id`, `start_date`, `end_date` | `g` |
 | `PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY` | 截止某日期比较两个患者的游戏集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `games1`, `games2` |
 | `PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY` | 从某日期开始比较两个患者的游戏集合 | `primary_patient_id`, `comparison_patient_id`, `start_date` | `games1`, `games2` |
 | `PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY` | 在日期区间内比较两个患者的游戏集合 | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `games1`, `games2` |
