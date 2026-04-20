@@ -735,7 +735,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
-            full_output=False,
+            output_level="ids",
         )
         mock_run_pipeline.return_value = expected
 
@@ -775,7 +775,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
-            full_output=True,
+            output_level="full",
         )
         mock_run_pipeline.return_value = expected
 
@@ -784,6 +784,45 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         mock_logger.info.assert_called_once_with(
             json.dumps(expected, ensure_ascii=False, indent=2, default=str)
+        )
+
+    @patch("scripts.run_similar_user_pipeline.LOGGER")
+    @patch("scripts.run_similar_user_pipeline.parse_args")
+    @patch("scripts.run_similar_user_pipeline.run_similar_user_pipeline")
+    def test_pipeline_main_logs_score_summary_when_requested(
+        self,
+        mock_run_pipeline: Mock,
+        mock_parse_args: Mock,
+        mock_logger: Mock,
+    ) -> None:
+        expected = {
+            "patient_id": "30010096",
+            "candidate_result": {
+                "candidate_count": 1,
+                "candidates": [
+                    {"patient_id": "20113562", "candidate_score": 2.232}
+                ],
+            },
+        }
+        mock_parse_args.return_value = Mock(
+            patient_id="30010096",
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            config="config/settings.yaml",
+            skip_path_build=False,
+            output_level="scores",
+        )
+        mock_run_pipeline.return_value = expected
+
+        exit_code = pipeline_main()
+
+        self.assertEqual(exit_code, 0)
+        mock_logger.info.assert_called_once_with(
+            json.dumps(
+                summarize_pipeline_result(expected, output_level="scores"),
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            )
         )
 
     def test_summarize_pipeline_result_keeps_only_candidate_summary(self) -> None:
@@ -860,6 +899,33 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             summary["candidate_summary"]["candidate_ids"],
             ["20113562", "20113563", "20113564"],
         )
+
+    def test_summarize_pipeline_result_can_include_candidate_scores(self) -> None:
+        result = {
+            "patient_id": "40",
+            "candidate_result": {
+                "candidate_count": 2,
+                "candidates": [
+                    {
+                        "patient_id": "20113562",
+                        "candidate_score": 2.2,
+                        "score_details": {"large": "payload"},
+                    },
+                    {"patient_id": "20113563", "candidate_score": 2.1},
+                ],
+            },
+        }
+
+        summary = summarize_pipeline_result(result, output_level="scores")
+
+        self.assertEqual(
+            summary["candidate_summary"]["candidates"],
+            [
+                {"patient_id": "20113562", "candidate_score": 2.2},
+                {"patient_id": "20113563", "candidate_score": 2.1},
+            ],
+        )
+        self.assertNotIn("candidate_ids", summary["candidate_summary"])
 
 
 if __name__ == "__main__":
