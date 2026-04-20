@@ -12,6 +12,10 @@ from scripts.build_similar_user_candidates import (
     build_similar_user_candidates,
     main,
 )
+from scripts.run_similar_user_pipeline import (
+    main as pipeline_main,
+    run_similar_user_pipeline,
+)
 from similar_user.services.similarity import SimilarUserCandidateService
 from similar_user.utils.pattern_storage import save_pattern_result
 
@@ -591,12 +595,133 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_parse_args.return_value = Mock(
             patient_id="30010096",
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            config="config/settings.yaml",
         )
         mock_build_candidates.return_value = expected
 
         exit_code = main()
 
         self.assertEqual(exit_code, 0)
+        mock_logger.info.assert_called_once_with(
+            json.dumps(expected, ensure_ascii=False, indent=2, default=str)
+        )
+        mock_build_candidates.assert_called_once_with(
+            "30010096",
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            config_path="config/settings.yaml",
+        )
+
+    @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
+    @patch("scripts.run_similar_user_pipeline.run_patient_pattern_path_flow")
+    def test_run_similar_user_pipeline_builds_paths_then_candidates(
+        self,
+        mock_run_path_flow: Mock,
+        mock_build_candidates: Mock,
+    ) -> None:
+        path_result = {
+            "patient_id": "30010096",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "training_date_count": 5,
+            "retrieval_context": {
+                "split_training_date": "2022-01-13",
+                "paths": [{"row": {}}],
+            },
+        }
+        candidate_result = {
+            "patient_id": "30010096",
+            "candidate_count": 1,
+            "candidates": [{"patient_id": "20113562"}],
+        }
+        mock_run_path_flow.return_value = path_result
+        mock_build_candidates.return_value = candidate_result
+
+        result = run_similar_user_pipeline(
+            "30010096",
+            config_path="config/custom.yaml",
+        )
+
+        self.assertEqual(
+            result["path_generation"],
+            {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "training_date_count": 5,
+                "split_training_date": "2022-01-13",
+                "path_count": 1,
+            },
+        )
+        self.assertEqual(result["candidate_result"], candidate_result)
+        self.assertFalse(result["skip_path_build"])
+        mock_run_path_flow.assert_called_once_with(
+            "30010096",
+            config_path="config/custom.yaml",
+        )
+        mock_build_candidates.assert_called_once_with(
+            "30010096",
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            config_path="config/custom.yaml",
+        )
+
+    @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
+    @patch("scripts.run_similar_user_pipeline.run_patient_pattern_path_flow")
+    def test_run_similar_user_pipeline_can_skip_path_build(
+        self,
+        mock_run_path_flow: Mock,
+        mock_build_candidates: Mock,
+    ) -> None:
+        candidate_result = {
+            "patient_id": "30010096",
+            "candidate_count": 1,
+            "candidates": [{"patient_id": "20113562"}],
+        }
+        mock_build_candidates.return_value = candidate_result
+
+        result = run_similar_user_pipeline(
+            "30010096",
+            config_path="config/custom.yaml",
+            skip_path_build=True,
+        )
+
+        self.assertIsNone(result["path_generation"])
+        self.assertEqual(result["candidate_result"], candidate_result)
+        self.assertTrue(result["skip_path_build"])
+        mock_run_path_flow.assert_not_called()
+        mock_build_candidates.assert_called_once_with(
+            "30010096",
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            config_path="config/custom.yaml",
+        )
+
+    @patch("scripts.run_similar_user_pipeline.LOGGER")
+    @patch("scripts.run_similar_user_pipeline.parse_args")
+    @patch("scripts.run_similar_user_pipeline.run_similar_user_pipeline")
+    def test_pipeline_main_logs_result(
+        self,
+        mock_run_pipeline: Mock,
+        mock_parse_args: Mock,
+        mock_logger: Mock,
+    ) -> None:
+        expected = {
+            "patient_id": "30010096",
+            "candidate_result": {"candidate_count": 1},
+        }
+        mock_parse_args.return_value = Mock(
+            patient_id="30010096",
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            config="config/settings.yaml",
+            skip_path_build=False,
+        )
+        mock_run_pipeline.return_value = expected
+
+        exit_code = pipeline_main()
+
+        self.assertEqual(exit_code, 0)
+        mock_run_pipeline.assert_called_once_with(
+            "30010096",
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            config_path="config/settings.yaml",
+            skip_path_build=False,
+        )
         mock_logger.info.assert_called_once_with(
             json.dumps(expected, ensure_ascii=False, indent=2, default=str)
         )

@@ -77,6 +77,8 @@ similar_user/
   用于直接验证 `config/settings.yaml` 中的 Neo4j 连接是否可用。
 - `python scripts/run_api.py --host 127.0.0.1 --port 8010`
   启动本地 HTTP 服务。
+- `python scripts/run_similar_user_pipeline.py <patient_id>`
+  一键执行固定模式 path 检索保存、path 打分和候选相似用户聚合排序。
 - `python scripts/build_similar_user_candidates.py <patient_id>`
   按 `config/settings.yaml` 中的 `query.candidate_ranking.path_top_k` 先保留高分 path 作为证据来源，再按 `query.candidate_ranking.candidate_top_k` 返回排序后的候选相似用户。
 - `GET /health/neo4j`
@@ -91,6 +93,11 @@ similar_user/
 ```bash
 # 验证 Neo4j 连接
 python scripts/debug_query.py
+
+# 从 path 生成到候选用户生成的一键主流程
+python scripts/run_similar_user_pipeline.py <patient_id>
+python scripts/run_similar_user_pipeline.py <patient_id> --config config/settings.yaml
+python scripts/run_similar_user_pipeline.py <patient_id> --skip-path-build
 
 # 运行固定模式路径检索并保存离线结果
 python scripts/debug_patient_pattern_paths.py <patient_id>
@@ -108,9 +115,12 @@ python scripts/read_patient_pattern_result.py <patient_id> --config config/setti
 
 # 从配置的 path_top_k / candidate_top_k 构建候选相似用户
 python scripts/build_similar_user_candidates.py <patient_id>
+python scripts/build_similar_user_candidates.py <patient_id> --config config/settings.yaml
 ```
 
-`build_similar_user_candidates.py` 固定读取 `config/settings.yaml` 中的 `query.candidate_ranking`，不提供命令行覆盖入口；如需调整候选排序范围，直接修改 YAML：
+`run_similar_user_pipeline.py` 默认会先重新生成并保存固定模式 path，再读取保存结果打分并生成候选用户。如果已经有可用的离线路径结果，可以使用 `--skip-path-build` 跳过 path 检索。
+
+`build_similar_user_candidates.py` 读取配置文件中的 `query.candidate_ranking`；如需调整候选排序范围，直接修改 YAML：
 
 ```yaml
 query:

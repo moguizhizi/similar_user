@@ -45,6 +45,11 @@ def parse_args() -> argparse.Namespace:
         default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         help="Pattern name used to locate the saved result.",
     )
+    parser.add_argument(
+        "--config",
+        default=str(DEFAULT_CONFIG_PATH),
+        help="Path to the YAML config file.",
+    )
     return parser.parse_args()
 
 
@@ -52,19 +57,24 @@ def build_similar_user_candidates(
     patient_id: str,
     *,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    config_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Aggregate ranked candidate users from top-k scored paths."""
-    ranking_settings = load_query_settings(DEFAULT_CONFIG_PATH).candidate_ranking
+    resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
+    ranking_settings = load_query_settings(resolved_config_path).candidate_ranking
 
-    with Neo4jClient.from_config(DEFAULT_CONFIG_PATH) as client:
+    with Neo4jClient.from_config(resolved_config_path) as client:
         user_service = UserService(
-            kg_repository=KgRepository(client=client, config_path=DEFAULT_CONFIG_PATH)
+            kg_repository=KgRepository(
+                client=client,
+                config_path=Path(resolved_config_path),
+            )
         )
         candidate_service = SimilarUserCandidateService(user_service=user_service)
         scored_result = score_patient_pattern_result(
             patient_id,
             pattern=pattern,
-            config_path=DEFAULT_CONFIG_PATH,
+            config_path=resolved_config_path,
             top_k=ranking_settings.path_top_k,
         )
         return candidate_service.aggregate_candidates_from_scored_paths(
@@ -81,6 +91,7 @@ def main() -> int:
         result = build_similar_user_candidates(
             args.patient_id,
             pattern=args.pattern,
+            config_path=args.config,
         )
     except Exception as exc:
         LOGGER.exception("Build similar user candidates failed: %s", exc)
