@@ -36,9 +36,15 @@ def parse_args() -> argparse.Namespace:
         help="Path to the Neo4j YAML config file.",
     )
     parser.add_argument(
-        "--undated",
-        action="store_true",
-        help="Use undated statistics instead of the dated split flow.",
+        "--base-date",
+        required=True,
+        help="Exclusive window end date used to build paths, for example 2022-05-22.",
+    )
+    parser.add_argument(
+        "--window-days",
+        type=int,
+        required=True,
+        help="Number of days before base_date included in path retrieval.",
     )
     return parser.parse_args()
 
@@ -47,30 +53,32 @@ def run_patient_pattern_path_flow(
     patient_id: str,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     *,
-    use_dated_statistics: bool = True,
+    base_date: str,
+    window_days: int,
 ) -> dict[str, object]:
     """Connect to Neo4j and run the patient pattern path orchestration."""
     LOGGER.info(
-        "Starting patient pattern path flow: patient_id=%s, use_dated_statistics=%s, config_path=%s",
+        "Starting patient pattern path flow: patient_id=%s, base_date=%s, window_days=%s, config_path=%s",
         patient_id,
-        use_dated_statistics,
+        base_date,
+        window_days,
         config_path,
     )
     with Neo4jClient.from_config(config_path) as client:
         repository = KgRepository(client=client, config_path=Path(config_path))
         service = UserService(kg_repository=repository)
-        if not use_dated_statistics:
-            LOGGER.warning(
-                "Undated statistics mode is no longer supported; falling back to the dated split flow: patient_id=%s",
-                patient_id,
-            )
-        result = service.get_patient_pattern_paths(patient_id)
-        output_path = save_pattern_result(result, repository.config_path)
-        LOGGER.info(
-            "Completed patient pattern path flow: patient_id=%s, training_date_count=%s, path_count=%s, output_path=%s",
+        result = service.get_patient_pattern_paths(
             patient_id,
-            result.get("training_date_count"),
-            len((result.get("retrieval_context") or {}).get("paths", [])),
+            base_date=base_date,
+            window_days=window_days,
+        )
+        output_path = save_pattern_result(result, repository.config_path)
+        retrieval_context = result.get("retrieval_context") or {}
+        LOGGER.info(
+            "Completed patient pattern path flow: patient_id=%s, path_window=%s, path_count=%s, output_path=%s",
+            patient_id,
+            retrieval_context.get("path_window"),
+            len(retrieval_context.get("paths", [])),
             output_path,
         )
         return result
@@ -83,7 +91,8 @@ def main() -> int:
         run_patient_pattern_path_flow(
             args.patient_id,
             config_path=args.config,
-            use_dated_statistics=not args.undated,
+            base_date=args.base_date,
+            window_days=args.window_days,
         )
     except Exception as exc:
         LOGGER.exception(
