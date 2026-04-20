@@ -11,11 +11,11 @@
 
 常用执行方式：
 
-    python scripts/score_patient_pattern_result.py 40 --top-k 50
+    python scripts/score_patient_pattern_paths.py 40 --top-k 50
 
 调试单条 path：
 
-    python scripts/score_patient_pattern_result.py 40 --path-index 0
+    python scripts/score_patient_pattern_paths.py 40 --path-index 0
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def score_patient_pattern_result(
+def score_patient_pattern_paths(
     patient_id: str,
     *,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
@@ -86,7 +86,7 @@ def score_patient_pattern_result(
 ) -> dict[str, object]:
     """Load a saved patient result and score its domain paths."""
     LOGGER.debug(
-        "Scoring patient pattern result: patient_id=%s, pattern=%s, path_index=%s, top_k=%s, config_path=%s",
+        "Scoring patient pattern paths: patient_id=%s, pattern=%s, path_index=%s, top_k=%s, config_path=%s",
         patient_id,
         pattern,
         path_index,
@@ -202,7 +202,7 @@ def main() -> int:
     """Score saved patient pattern paths and log JSON output."""
     args = parse_args()
     try:
-        result = score_patient_pattern_result(
+        result = score_patient_pattern_paths(
             args.patient_id,
             pattern=args.pattern,
             config_path=args.config,
@@ -210,7 +210,7 @@ def main() -> int:
             top_k=args.top_k,
         )
     except Exception as exc:
-        LOGGER.exception("Score patient pattern result failed: %s", exc)
+        LOGGER.exception("Score patient pattern paths failed: %s", exc)
         return 1
 
     LOGGER.info(json.dumps(result, ensure_ascii=False, indent=2, default=str))
