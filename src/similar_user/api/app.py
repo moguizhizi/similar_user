@@ -26,12 +26,14 @@ def build_neo4j_health_payload(
                 "RETURN 1 AS ok, 'neo4j connected' AS message"
             )
     except Exception as exc:
+        LOGGER.warning("Neo4j health check failed: config_path=%s, error=%s", config_path, exc)
         return {
             "status": "error",
             "database": "neo4j",
             "detail": str(exc),
         }, HTTPStatus.SERVICE_UNAVAILABLE
 
+    LOGGER.debug("Neo4j health check succeeded: config_path=%s", config_path)
     return {
         "status": "ok",
         "database": "neo4j",
@@ -88,11 +90,23 @@ def build_query_payload(
                 database=database,
             )
     except Exception as exc:
+        LOGGER.warning(
+            "Cypher query request failed: database=%s, parameter_keys=%s, error=%s",
+            database,
+            sorted(parameters.keys()),
+            exc,
+        )
         return {
             "status": "error",
             "detail": str(exc),
         }, HTTPStatus.BAD_REQUEST
 
+    LOGGER.debug(
+        "Cypher query request completed: database=%s, parameter_keys=%s, row_count=%s",
+        database,
+        sorted(parameters.keys()),
+        len(records),
+    )
     return {
         "status": "ok",
         "result": records,

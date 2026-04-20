@@ -612,13 +612,16 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             config_path="config/settings.yaml",
         )
 
+    @patch("scripts.run_similar_user_pipeline.time.perf_counter")
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
     @patch("scripts.run_similar_user_pipeline.run_patient_pattern_path_flow")
     def test_run_similar_user_pipeline_builds_paths_then_candidates(
         self,
         mock_run_path_flow: Mock,
         mock_build_candidates: Mock,
+        mock_perf_counter: Mock,
     ) -> None:
+        mock_perf_counter.side_effect = [10.0, 12.345]
         path_result = {
             "patient_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
@@ -653,6 +656,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         )
         self.assertEqual(result["candidate_result"], candidate_result)
         self.assertFalse(result["skip_path_build"])
+        self.assertEqual(result["elapsed_seconds"], 2.345)
         mock_run_path_flow.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
@@ -707,6 +711,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "config_path": "config/settings.yaml",
             "skip_path_build": False,
+            "elapsed_seconds": 2.345,
             "path_generation": None,
             "candidate_result": {
                 "patient_id": "30010096",
@@ -831,6 +836,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "config_path": "config/settings.yaml",
             "skip_path_build": False,
+            "elapsed_seconds": 2.345,
             "path_generation": {
                 "training_date_count": 8,
                 "split_training_date": "2022-05-22",
@@ -879,6 +885,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "candidate_ids": ["20113562"],
             },
         )
+        self.assertEqual(summary["elapsed_seconds"], 2.345)
 
     def test_summarize_pipeline_result_includes_all_candidate_ids(self) -> None:
         result = {

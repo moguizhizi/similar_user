@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,14 @@ def run_similar_user_pipeline(
 ) -> dict[str, Any]:
     """Run path retrieval, scoring, and candidate ranking as one workflow."""
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
+    started_at = time.perf_counter()
+    LOGGER.debug(
+        "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, config_path=%s",
+        patient_id,
+        pattern,
+        skip_path_build,
+        resolved_config_path,
+    )
     path_generation = None
     if not skip_path_build:
         path_result = run_patient_pattern_path_flow(
@@ -80,14 +89,22 @@ def run_similar_user_pipeline(
         pattern=pattern,
         config_path=resolved_config_path,
     )
-    return {
+    result = {
         "patient_id": patient_id,
         "pattern": pattern,
         "config_path": str(resolved_config_path),
         "skip_path_build": skip_path_build,
+        "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         "path_generation": path_generation,
         "candidate_result": candidate_result,
     }
+    LOGGER.debug(
+        "Completed similar-user pipeline: patient_id=%s, candidate_count=%s, elapsed_seconds=%s",
+        patient_id,
+        candidate_result.get("candidate_count"),
+        result["elapsed_seconds"],
+    )
+    return result
 
 
 def _summarize_path_result(path_result: dict[str, object]) -> dict[str, object]:
@@ -144,6 +161,7 @@ def summarize_pipeline_result(
         "pattern": result.get("pattern"),
         "config_path": result.get("config_path"),
         "skip_path_build": result.get("skip_path_build"),
+        "elapsed_seconds": result.get("elapsed_seconds"),
         "path_generation": result.get("path_generation"),
         "candidate_summary": candidate_summary,
     }
