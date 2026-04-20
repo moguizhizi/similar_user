@@ -131,7 +131,7 @@ class SimilarUserCandidateService:
         candidate_patient_id: object,
         end_date: str | None,
     ) -> tuple[float | None, dict[str, Any]]:
-        """Calculate candidate score from common-game norm-score correlation."""
+        """Calculate candidate score from correlation, set sameness, and game diversity."""
         if (
             self.user_service is None
             or not isinstance(primary_patient_id, str)
@@ -152,14 +152,14 @@ class SimilarUserCandidateService:
         )
         common_game_score_correlation = calculate_common_game_score_correlation(records)
         correlation = common_game_score_correlation.get("correlation")
-        candidate_score = (
+        correlation_score = (
             round(float(correlation), 3)
             if isinstance(correlation, (int, float))
             else None
         )
         common_game_score_correlation = {
             **common_game_score_correlation,
-            "correlation": candidate_score,
+            "correlation": correlation_score,
         }
         game_rows = self.user_service.get_patient_game_set_comparison_by_end_date(
             primary_patient_id.strip(),
@@ -181,6 +181,17 @@ class SimilarUserCandidateService:
             primary_patient_id=primary_patient_id.strip(),
             candidate_patient_id=candidate_patient_id.strip(),
             end_date=end_date,
+        )
+        game_similarity_score = game_similarity_with_diversity_score.get("score")
+        set_same_score = set_same_scores.get("score")
+        candidate_score = (
+            round(correlation_score + game_similarity_score + set_same_score, 3)
+            if (
+                correlation_score is not None
+                and isinstance(game_similarity_score, (int, float))
+                and isinstance(set_same_score, (int, float))
+            )
+            else None
         )
         return candidate_score, {
             "common_game_score_correlation": common_game_score_correlation,
@@ -229,7 +240,7 @@ class SimilarUserCandidateService:
             "unknowns2",
         )
 
-        return {
+        set_same_scores = {
             "disease": _round_numeric_values(
                 calculate_set_same_score(source_diseases, candidate_diseases)
             ),
@@ -240,6 +251,18 @@ class SimilarUserCandidateService:
                 calculate_set_same_score(source_unknowns, candidate_unknowns)
             ),
         }
+        set_same_scores["score"] = round(
+            sum(
+                score_detail["score"]
+                for score_detail in set_same_scores.values()
+                if (
+                    isinstance(score_detail, dict)
+                    and isinstance(score_detail.get("score"), (int, float))
+                )
+            ),
+            3,
+        )
+        return set_same_scores
 
 
 def _build_scored_domain_paths(scored_result: dict[str, Any]) -> list[ScoredDomainPath]:
