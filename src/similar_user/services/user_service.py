@@ -37,7 +37,7 @@ class UserService:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct games for one patient up to and including an end date."""
+        """Return distinct games for one patient before an end date."""
         return self.kg_repository.get_patient_distinct_games_by_end_date(
             patient_id,
             end_date,
@@ -72,7 +72,7 @@ class UserService:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return game rows for one patient up to and including an end date."""
+        """Return game rows for one patient before an end date."""
         return self.kg_repository.get_patient_games_by_end_date(
             patient_id,
             end_date,
@@ -108,7 +108,7 @@ class UserService:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return game sets for two patients up to and including an end date."""
+        """Return game sets for two patients before an end date."""
         return self.kg_repository.get_patient_game_set_comparison_by_end_date(
             primary_patient_id,
             comparison_patient_id,
@@ -149,7 +149,7 @@ class UserService:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return game-level norm-score series for two patients up to an end date."""
+        """Return game-level norm-score series for two patients before an end date."""
         return self.kg_repository.get_patient_game_norm_score_series_comparison_by_end_date(
             primary_patient_id,
             comparison_patient_id,
@@ -172,7 +172,7 @@ class UserService:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct task instances for one patient up to and including an end date."""
+        """Return distinct task instances for one patient before an end date."""
         return self.kg_repository.get_patient_distinct_task_instances_by_end_date(
             patient_id,
             end_date,
@@ -196,7 +196,7 @@ class UserService:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct symptoms for one patient up to and including an end date."""
+        """Return distinct symptoms for one patient before an end date."""
         return self.kg_repository.get_patient_distinct_symptoms_by_end_date(
             patient_id,
             end_date,
@@ -208,7 +208,7 @@ class UserService:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return symptom sets for two patients up to and including an end date."""
+        """Return symptom sets for two patients before an end date."""
         return self.kg_repository.get_patient_symptom_set_comparison_by_end_date(
             primary_patient_id,
             comparison_patient_id,
@@ -272,7 +272,7 @@ class UserService:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct diseases for one patient up to and including an end date."""
+        """Return distinct diseases for one patient before an end date."""
         return self.kg_repository.get_patient_distinct_diseases_by_end_date(
             patient_id,
             end_date,
@@ -284,7 +284,7 @@ class UserService:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return disease sets for two patients up to and including an end date."""
+        """Return disease sets for two patients before an end date."""
         return self.kg_repository.get_patient_disease_set_comparison_by_end_date(
             primary_patient_id,
             comparison_patient_id,
@@ -348,7 +348,7 @@ class UserService:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct unknown-category nodes for one patient up to and including an end date."""
+        """Return distinct unknown-category nodes for one patient before an end date."""
         return self.kg_repository.get_patient_distinct_unknowns_by_end_date(
             patient_id,
             end_date,
@@ -360,7 +360,7 @@ class UserService:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return unknown-category sets for two patients up to and including an end date."""
+        """Return unknown-category sets for two patients before an end date."""
         return self.kg_repository.get_patient_unknown_set_comparison_by_end_date(
             primary_patient_id,
             comparison_patient_id,

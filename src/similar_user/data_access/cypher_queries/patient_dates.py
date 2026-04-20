@@ -28,7 +28,7 @@ MATCH (p:Patient {id: $patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT g
 """.strip()
@@ -55,7 +55,7 @@ MATCH (p:Patient {id: $patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT g
 """.strip()
@@ -68,7 +68,7 @@ MATCH (p:Patient {id: $patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN g
 """.strip()
@@ -95,7 +95,7 @@ MATCH (p:Patient {id: $patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN g
 """.strip()
@@ -108,7 +108,7 @@ MATCH (p1:Patient {id: $primary_patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 WITH collect(DISTINCT g1) AS games1
 
@@ -119,7 +119,7 @@ MATCH (p2:Patient {id: $comparison_patient_id})
 
 WHERE
     s2.`训练日期` IS NOT NULL AND
-    date(s2.`训练日期`) <= date($end_date)
+    date(s2.`训练日期`) < date($end_date)
 
 WITH
     games1,
@@ -169,7 +169,7 @@ MATCH (p1:Patient {id: $primary_patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 WITH collect(DISTINCT g1) AS games1
 
@@ -181,7 +181,7 @@ MATCH (p2:Patient {id: $comparison_patient_id})
 WHERE
     s2.`训练日期` IS NOT NULL AND
     date(s2.`训练日期`) >= date($start_date) AND
-    date(s2.`训练日期`) <= date($end_date)
+    date(s2.`训练日期`) < date($end_date)
 
 WITH
     games1,
@@ -202,7 +202,7 @@ MATCH
 WHERE
     i1.`常模分` IS NOT NULL AND
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 WITH g, i1.`常模分` AS score1, date(s1.`训练日期`) AS d1
 ORDER BY g.name, d1
@@ -218,7 +218,7 @@ MATCH
 WHERE
     i2.`常模分` IS NOT NULL AND
     s2.`训练日期` IS NOT NULL AND
-    date(s2.`训练日期`) <= date($end_date)
+    date(s2.`训练日期`) < date($end_date)
 
 WITH g, scores_p1, i2.`常模分` AS score2, date(s2.`训练日期`) AS d2
 ORDER BY g.name, d2
@@ -251,7 +251,7 @@ MATCH (p:Patient {id: $patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT i1
 """.strip()
@@ -264,7 +264,7 @@ MATCH (p:Patient {id: $patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT i1
 """.strip()
@@ -276,7 +276,7 @@ MATCH (p:Patient {id: $patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT sym
 """.strip()
@@ -288,7 +288,7 @@ MATCH (p1:Patient {id: $primary_patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 WITH collect(DISTINCT sym1) AS symptoms1
 
@@ -298,7 +298,7 @@ MATCH (p2:Patient {id: $comparison_patient_id})
 
 WHERE
     s2.`训练日期` IS NOT NULL AND
-    date(s2.`训练日期`) <= date($end_date)
+    date(s2.`训练日期`) < date($end_date)
 
 RETURN
     symptoms1,
@@ -349,7 +349,7 @@ MATCH (p:Patient {id: $patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT sym
 """.strip()
@@ -362,7 +362,7 @@ MATCH (p1:Patient {id: $primary_patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 WITH collect(DISTINCT sym1) AS symptoms1
 
@@ -373,7 +373,7 @@ MATCH (p2:Patient {id: $comparison_patient_id})
 WHERE
     s2.`训练日期` IS NOT NULL AND
     date(s2.`训练日期`) >= date($start_date) AND
-    date(s2.`训练日期`) <= date($end_date)
+    date(s2.`训练日期`) < date($end_date)
 
 RETURN
     symptoms1,
@@ -387,7 +387,7 @@ MATCH (p:Patient {id: $patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT dis
 """.strip()
@@ -399,7 +399,7 @@ MATCH (p1:Patient {id: $primary_patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 WITH collect(DISTINCT dis1) AS diseases1
 
@@ -409,7 +409,7 @@ MATCH (p2:Patient {id: $comparison_patient_id})
 
 WHERE
     s2.`训练日期` IS NOT NULL AND
-    date(s2.`训练日期`) <= date($end_date)
+    date(s2.`训练日期`) < date($end_date)
 
 RETURN
     diseases1,
@@ -448,7 +448,7 @@ MATCH (p1:Patient {id: $primary_patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 WITH collect(DISTINCT dis1) AS diseases1
 
@@ -459,7 +459,7 @@ MATCH (p2:Patient {id: $comparison_patient_id})
 WHERE
     s2.`训练日期` IS NOT NULL AND
     date(s2.`训练日期`) >= date($start_date) AND
-    date(s2.`训练日期`) <= date($end_date)
+    date(s2.`训练日期`) < date($end_date)
 
 RETURN
     diseases1,
@@ -486,7 +486,7 @@ MATCH (p:Patient {id: $patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT dis
 """.strip()
@@ -498,7 +498,7 @@ MATCH (p:Patient {id: $patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT un
 """.strip()
@@ -510,7 +510,7 @@ MATCH (p1:Patient {id: $primary_patient_id})
 
 WHERE
     s1.`训练日期` IS NOT NULL AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 WITH collect(DISTINCT un1) AS unknowns1
 
@@ -520,7 +520,7 @@ MATCH (p2:Patient {id: $comparison_patient_id})
 
 WHERE
     s2.`训练日期` IS NOT NULL AND
-    date(s2.`训练日期`) <= date($end_date)
+    date(s2.`训练日期`) < date($end_date)
 
 RETURN
     unknowns1,
@@ -571,7 +571,7 @@ MATCH (p:Patient {id: $patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN DISTINCT un
 """.strip()
@@ -584,7 +584,7 @@ MATCH (p1:Patient {id: $primary_patient_id})
 WHERE
     s1.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 WITH collect(DISTINCT un1) AS unknowns1
 
@@ -595,7 +595,7 @@ MATCH (p2:Patient {id: $comparison_patient_id})
 WHERE
     s2.`训练日期` IS NOT NULL AND
     date(s2.`训练日期`) >= date($start_date) AND
-    date(s2.`训练日期`) <= date($end_date)
+    date(s2.`训练日期`) < date($end_date)
 
 RETURN
     unknowns1,

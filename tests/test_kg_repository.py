@@ -1337,13 +1337,13 @@ class KgRepositoryTest(unittest.TestCase):
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
         )
         self.assertIn(
-            "date(s1.`训练日期`) <= date($end_date)",
+            "date(s1.`训练日期`) < date($end_date)",
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
         )
 
     def test_end_date_randomized_path_query_matches_new_contract(self) -> None:
         self.assertIn(
-            "date(s1.`训练日期`) <= date($end_date)",
+            "date(s1.`训练日期`) < date($end_date)",
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
         )
         self.assertNotIn(

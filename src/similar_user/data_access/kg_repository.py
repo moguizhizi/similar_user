@@ -103,7 +103,7 @@ class KgRepository:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct games for one patient up to and including an end date."""
+        """Return distinct games for one patient before an end date."""
         normalized_patient_id = patient_id.strip()
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         if not normalized_patient_id:
@@ -163,7 +163,7 @@ class KgRepository:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return game rows for one patient up to and including an end date."""
+        """Return game rows for one patient before an end date."""
         normalized_patient_id = patient_id.strip()
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         if not normalized_patient_id:
@@ -224,7 +224,7 @@ class KgRepository:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return game sets for two patients up to and including an end date."""
+        """Return game sets for two patients before an end date."""
         return self._run_patient_pair_query_by_end_date(
             query=PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
             primary_patient_id=primary_patient_id,
@@ -268,7 +268,7 @@ class KgRepository:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return game-level norm-score series for two patients up to an end date."""
+        """Return game-level norm-score series for two patients before an end date."""
         normalized_primary_patient_id = primary_patient_id.strip()
         normalized_comparison_patient_id = comparison_patient_id.strip()
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
@@ -310,7 +310,7 @@ class KgRepository:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct task instances for one patient up to and including an end date."""
+        """Return distinct task instances for one patient before an end date."""
         normalized_patient_id = patient_id.strip()
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         if not normalized_patient_id:
@@ -351,7 +351,7 @@ class KgRepository:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct symptoms for one patient up to and including an end date."""
+        """Return distinct symptoms for one patient before an end date."""
         normalized_patient_id = patient_id.strip()
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         if not normalized_patient_id:
@@ -371,7 +371,7 @@ class KgRepository:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return symptom sets for two patients up to and including an end date."""
+        """Return symptom sets for two patients before an end date."""
         return self._run_patient_pair_query_by_end_date(
             query=PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
             primary_patient_id=primary_patient_id,
@@ -455,7 +455,7 @@ class KgRepository:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct diseases for one patient up to and including an end date."""
+        """Return distinct diseases for one patient before an end date."""
         normalized_patient_id = patient_id.strip()
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         if not normalized_patient_id:
@@ -475,7 +475,7 @@ class KgRepository:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return disease sets for two patients up to and including an end date."""
+        """Return disease sets for two patients before an end date."""
         return self._run_patient_pair_query_by_end_date(
             query=PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
             primary_patient_id=primary_patient_id,
@@ -559,7 +559,7 @@ class KgRepository:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return distinct unknown-category nodes for one patient up to and including an end date."""
+        """Return distinct unknown-category nodes for one patient before an end date."""
         normalized_patient_id = patient_id.strip()
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         if not normalized_patient_id:
@@ -579,7 +579,7 @@ class KgRepository:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Return unknown-category sets for two patients up to and including an end date."""
+        """Return unknown-category sets for two patients before an end date."""
         return self._run_patient_pair_query_by_end_date(
             query=PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
             primary_patient_id=primary_patient_id,
@@ -741,7 +741,7 @@ class KgRepository:
         patient_id: str,
         end_date: str,
     ) -> list[dict[str, int]]:
-        """Return dated fixed-pattern statistics constrained up to an end date."""
+        """Return dated fixed-pattern statistics constrained before an end date."""
         normalized_patient_id = patient_id.strip()
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         if not normalized_patient_id:
@@ -854,7 +854,7 @@ class KgRepository:
         per_g: int,
         limit: int,
     ) -> list[dict[str, object]]:
-        """Return randomized fixed-pattern rows constrained up to an end date."""
+        """Return randomized fixed-pattern rows constrained before an end date."""
         normalized_patient_id = patient_id.strip()
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         if not normalized_patient_id:
@@ -952,7 +952,7 @@ class KgRepository:
         comparison_patient_id: str,
         end_date: str,
     ) -> list[dict[str, object]]:
-        """Run a two-patient query constrained up to and including an end date."""
+        """Run a two-patient query constrained before an end date."""
         normalized_primary_patient_id, normalized_comparison_patient_id = (
             self._normalize_patient_pair(primary_patient_id, comparison_patient_id)
         )
