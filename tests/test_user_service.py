@@ -1011,6 +1011,68 @@ class UserServiceTest(unittest.TestCase):
 
         self.assertEqual(result, [])
 
+    def test_get_patient_training_task_history_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_training_task_history.return_value = [
+            {
+                "trainingDate": "2022-01-13",
+                "i": {"id": "i-1", "任务类型": "专属"},
+                "g": {"id": "42", "name": "打怪物"},
+            }
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_training_task_history("30010096")
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "trainingDate": "2022-01-13",
+                    "i": {"id": "i-1", "任务类型": "专属"},
+                    "g": {"id": "42", "name": "打怪物"},
+                }
+            ],
+        )
+        mock_repository.get_patient_training_task_history.assert_called_once_with(
+            "30010096"
+        )
+
+    def test_get_patient_training_task_history_by_date_window_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_training_task_history_by_date_window.return_value = [
+            {
+                "trainingDate": "2022-05-21",
+                "g": {"id": "42", "name": "打怪物"},
+            }
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_training_task_history_by_date_window(
+            "30010096",
+            "2022-05-20",
+            "2022-05-22",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "trainingDate": "2022-05-21",
+                    "g": {"id": "42", "name": "打怪物"},
+                }
+            ],
+        )
+        mock_repository.get_patient_training_task_history_by_date_window.assert_called_once_with(
+            "30010096",
+            "2022-05-20",
+            "2022-05-22",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

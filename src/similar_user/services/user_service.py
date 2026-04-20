@@ -553,6 +553,26 @@ class UserService:
 
         return [str(value) for value in ordered_dates]
 
+    def get_patient_training_task_history(
+        self,
+        patient_id: str,
+    ) -> list[dict[str, object]]:
+        """Return dated task-instance and game rows for one patient."""
+        return self.kg_repository.get_patient_training_task_history(patient_id)
+
+    def get_patient_training_task_history_by_date_window(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return task history in a left-closed, right-open date window."""
+        return self.kg_repository.get_patient_training_task_history_by_date_window(
+            patient_id,
+            start_date,
+            end_date,
+        )
+
     def _load_dated_statistics(
         self,
         patient_id: str,

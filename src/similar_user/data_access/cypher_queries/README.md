@@ -9,6 +9,8 @@
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
 | 查询患者从某日期开始的训练日期与游戏集合 | `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | `patient_dates.py` | `patient_id`, `start_date` | `trainingDate`, `games` |
+| 查询患者训练任务历史明细 | `PATIENT_TRAINING_TASK_HISTORY_QUERY` | `patient_dates.py` | `patient_id` | `trainingDate`, `s`, `i`, `g` |
+| 查询患者左闭右开日期窗口内的游戏历史 | `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | `patient_dates.py` | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
 | 查询患者截止某日期的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY` | `patient_dates.py` | `patient_id`, `end_date` | `g` |
 | 查询患者从某日期开始的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY` | `patient_dates.py` | `patient_id`, `start_date` | `g` |
 | 查询患者日期区间内的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY` | `patient_dates.py` | `patient_id`, `start_date`, `end_date` | `g` |
@@ -65,6 +67,8 @@ Patient -- TaskInstanceSet -- TaskInstance -- Game -- TaskInstance -- TaskInstan
 | Query | 用途 | 主要参数 | 返回 |
 |---|---|---|---|
 | `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的训练日期与游戏集合 | `patient_id`, `start_date` | `trainingDate`, `games` |
+| `PATIENT_TRAINING_TASK_HISTORY_QUERY` | 查询患者训练任务历史明细 | `patient_id` | `trainingDate`, `s`, `i`, `g` |
+| `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | 查询患者左闭右开日期窗口内的游戏历史 | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
 | `PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY` | 查询患者截止某日期的去重游戏 | `patient_id`, `end_date` | `g` |
 | `PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重游戏 | `patient_id`, `start_date` | `g` |
 | `PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY` | 查询患者日期区间内的去重游戏 | `patient_id`, `start_date`, `end_date` | `g` |
