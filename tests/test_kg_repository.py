@@ -27,6 +27,9 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_GAMES_BY_DATE_RANGE_QUERY,
+    PATIENT_GAMES_BY_END_DATE_QUERY,
+    PATIENT_GAMES_BY_START_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -194,6 +197,92 @@ class KgRepositoryTest(unittest.TestCase):
         )
         mock_client.run_query.assert_called_once_with(
             query=PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-13",
+                "end_date": "2022-05-22",
+            },
+        )
+
+    def test_get_patient_games_by_end_date_keeps_duplicate_rows(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"g": {"id": "42", "name": "打怪物"}},
+            {"g": {"id": "42", "name": "打怪物"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_games_by_end_date(
+            " 30010096 ",
+            " 2022-01-13 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {"g": {"id": "42", "name": "打怪物"}},
+                {"g": {"id": "42", "name": "打怪物"}},
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_GAMES_BY_END_DATE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_patient_games_by_start_date_keeps_duplicate_rows(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"g": {"id": "42", "name": "打怪物"}},
+            {"g": {"id": "42", "name": "打怪物"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_games_by_start_date(
+            " 30010096 ",
+            " 2022-01-13 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {"g": {"id": "42", "name": "打怪物"}},
+                {"g": {"id": "42", "name": "打怪物"}},
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_GAMES_BY_START_DATE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-13",
+            },
+        )
+
+    def test_get_patient_games_by_date_range_keeps_duplicate_rows(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"g": {"id": "42", "name": "打怪物"}},
+            {"g": {"id": "42", "name": "打怪物"}},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_games_by_date_range(
+            " 30010096 ",
+            " 2022-01-13 ",
+            " 2022-05-22 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {"g": {"id": "42", "name": "打怪物"}},
+                {"g": {"id": "42", "name": "打怪物"}},
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_GAMES_BY_DATE_RANGE_QUERY,
             parameters={
                 "patient_id": "30010096",
                 "start_date": "2022-01-13",
