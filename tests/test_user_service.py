@@ -55,6 +55,48 @@ class UserServiceTest(unittest.TestCase):
             "2022-01-13",
         )
 
+    def test_get_patient_distinct_games_by_start_date_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_distinct_games_by_start_date.return_value = [
+            {"g": {"id": "42", "name": "打怪物"}}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_distinct_games_by_start_date(
+            "30010096",
+            "2022-01-13",
+        )
+
+        self.assertEqual(result, [{"g": {"id": "42", "name": "打怪物"}}])
+        mock_repository.get_patient_distinct_games_by_start_date.assert_called_once_with(
+            "30010096",
+            "2022-01-13",
+        )
+
+    def test_get_patient_distinct_games_by_date_range_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_distinct_games_by_date_range.return_value = [
+            {"g": {"id": "42", "name": "打怪物"}}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_distinct_games_by_date_range(
+            "30010096",
+            "2022-01-13",
+            "2022-05-22",
+        )
+
+        self.assertEqual(result, [{"g": {"id": "42", "name": "打怪物"}}])
+        mock_repository.get_patient_distinct_games_by_date_range.assert_called_once_with(
+            "30010096",
+            "2022-01-13",
+            "2022-05-22",
+        )
+
     def test_get_patient_game_set_comparison_by_end_date_delegates_to_repository(
         self,
     ) -> None:

@@ -43,6 +43,30 @@ class UserService:
             end_date,
         )
 
+    def get_patient_distinct_games_by_start_date(
+        self,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct games for one patient from a start date."""
+        return self.kg_repository.get_patient_distinct_games_by_start_date(
+            patient_id,
+            start_date,
+        )
+
+    def get_patient_distinct_games_by_date_range(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return distinct games for one patient within a date range."""
+        return self.kg_repository.get_patient_distinct_games_by_date_range(
+            patient_id,
+            start_date,
+            end_date,
+        )
+
     def get_patient_game_set_comparison_by_end_date(
         self,
         primary_patient_id: str,
