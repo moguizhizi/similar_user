@@ -32,6 +32,19 @@ class CypherQueryDocsTest(unittest.TestCase):
             "Cypher query README is missing query constants.",
         )
 
+    def test_end_date_filters_use_exclusive_upper_bound(self) -> None:
+        offending_modules = []
+        for module_path in QUERY_MODULES:
+            text = module_path.read_text(encoding="utf-8")
+            if "<= date($end_date)" in text:
+                offending_modules.append(module_path.name)
+
+        self.assertEqual(
+            offending_modules,
+            [],
+            "Cypher end_date filters should use < date($end_date).",
+        )
+
 
 def _iter_query_constant_names() -> list[str]:
     query_names: list[str] = []

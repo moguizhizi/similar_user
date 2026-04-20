@@ -55,7 +55,7 @@ WHERE
     s1.`训练日期` IS NOT NULL AND
     s2.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date(s2.`训练日期`) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN
     count(*) AS totalPaths,
@@ -102,7 +102,7 @@ WHERE
     s2.`训练日期` IS NOT NULL AND
     date(s1.`训练日期`) >= date(s2.`训练日期`) AND
     date(s1.`训练日期`) >= date($start_date) AND
-    date(s1.`训练日期`) <= date($end_date)
+    date(s1.`训练日期`) < date($end_date)
 
 RETURN
     count(*) AS totalPaths,
