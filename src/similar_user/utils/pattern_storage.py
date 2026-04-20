@@ -18,6 +18,10 @@ from ..domain.path_models import (
     PatientTasksetTaskGameTaskTasksetPatientPath,
     PatientTasksetUnknownTasksetPatientPath,
 )
+from .logger import get_logger
+
+
+LOGGER = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -266,6 +270,13 @@ class PatternResultStore:
             temp_path = Path(temp_file.name)
 
         os.replace(temp_path, output_path)
+        LOGGER.debug(
+            "Saved pattern result: patient_id=%s, pattern=%s, path_count=%s, output_path=%s",
+            normalized_result.patient_id,
+            normalized_result.pattern,
+            len(normalized_result.paths),
+            output_path,
+        )
         return output_path
 
     def load(self, pattern: str, patient_id: str) -> StoredPatternResult:
@@ -276,7 +287,15 @@ class PatternResultStore:
             patient_id,
         )
         with output_path.open("r", encoding="utf-8") as file:
-            return StoredPatternResult.from_dict(json.load(file))
+            result = StoredPatternResult.from_dict(json.load(file))
+        LOGGER.debug(
+            "Loaded pattern result: patient_id=%s, pattern=%s, path_count=%s, input_path=%s",
+            result.patient_id,
+            result.pattern,
+            len(result.paths),
+            output_path,
+        )
+        return result
 
     def iter_pattern_results(self, pattern: str) -> Iterator[StoredPatternResult]:
         """Yield all saved results for the given pattern."""
@@ -286,7 +305,14 @@ class PatternResultStore:
 
         for path in sorted(pattern_dir.rglob("*.json")):
             with path.open("r", encoding="utf-8") as file:
-                yield StoredPatternResult.from_dict(json.load(file))
+                result = StoredPatternResult.from_dict(json.load(file))
+            LOGGER.debug(
+                "Loaded pattern result from iterator: patient_id=%s, pattern=%s, input_path=%s",
+                result.patient_id,
+                result.pattern,
+                path,
+            )
+            yield result
 
 
 def save_pattern_result(

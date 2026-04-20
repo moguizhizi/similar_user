@@ -62,6 +62,14 @@ def build_similar_user_candidates(
     """Aggregate ranked candidate users from top-k scored paths."""
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     ranking_settings = load_query_settings(resolved_config_path).candidate_ranking
+    LOGGER.debug(
+        "Building similar-user candidates: patient_id=%s, pattern=%s, path_top_k=%s, candidate_top_k=%s, config_path=%s",
+        patient_id,
+        pattern,
+        ranking_settings.path_top_k,
+        ranking_settings.candidate_top_k,
+        resolved_config_path,
+    )
 
     with Neo4jClient.from_config(resolved_config_path) as client:
         user_service = UserService(
@@ -77,11 +85,18 @@ def build_similar_user_candidates(
             config_path=resolved_config_path,
             top_k=ranking_settings.path_top_k,
         )
-        return candidate_service.aggregate_candidates_from_scored_paths(
+        result = candidate_service.aggregate_candidates_from_scored_paths(
             scored_result,
             path_top_k=ranking_settings.path_top_k,
             candidate_top_k=ranking_settings.candidate_top_k,
         )
+    LOGGER.debug(
+        "Built similar-user candidates: patient_id=%s, candidate_count=%s, scored_path_count=%s",
+        patient_id,
+        result.get("candidate_count"),
+        result.get("scored_path_count"),
+    )
+    return result
 
 
 def main() -> int:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -50,9 +51,10 @@ def parse_args() -> argparse.Namespace:
         help="Use existing saved paths and only run scoring plus candidate ranking.",
     )
     parser.add_argument(
-        "--full-output",
-        action="store_true",
-        help="Log the full pipeline result instead of the compact summary.",
+        "--output-level",
+        choices=("ids", "scores", "full"),
+        default="ids",
+        help="Output detail level: ids, scores, or full.",
     )
     return parser.parse_args()
 
@@ -66,6 +68,14 @@ def run_similar_user_pipeline(
 ) -> dict[str, Any]:
     """Run path retrieval, scoring, and candidate ranking as one workflow."""
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
+    started_at = time.perf_counter()
+    LOGGER.debug(
+        "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, config_path=%s",
+        patient_id,
+        pattern,
+        skip_path_build,
+        resolved_config_path,
+    )
     path_generation = None
     if not skip_path_build:
         path_result = run_patient_pattern_path_flow(
@@ -79,14 +89,22 @@ def run_similar_user_pipeline(
         pattern=pattern,
         config_path=resolved_config_path,
     )
-    return {
+    result = {
         "patient_id": patient_id,
         "pattern": pattern,
         "config_path": str(resolved_config_path),
         "skip_path_build": skip_path_build,
+        "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         "path_generation": path_generation,
         "candidate_result": candidate_result,
     }
+    LOGGER.debug(
+        "Completed similar-user pipeline: patient_id=%s, candidate_count=%s, elapsed_seconds=%s",
+        patient_id,
+        candidate_result.get("candidate_count"),
+        result["elapsed_seconds"],
+    )
+    return result
 
 
 def _summarize_path_result(path_result: dict[str, object]) -> dict[str, object]:
@@ -111,8 +129,14 @@ def _summarize_path_result(path_result: dict[str, object]) -> dict[str, object]:
     }
 
 
-def summarize_pipeline_result(result: dict[str, Any]) -> dict[str, Any]:
+def summarize_pipeline_result(
+    result: dict[str, Any],
+    *,
+    output_level: str = "ids",
+) -> dict[str, Any]:
     """Build the compact pipeline output used by default CLI logging."""
+    if output_level not in {"ids", "scores"}:
+        raise ValueError(f"Unsupported summary output level: {output_level}.")
     candidate_result = result.get("candidate_result")
     candidate_summary: dict[str, Any] | None = None
     if isinstance(candidate_result, dict):
@@ -125,14 +149,19 @@ def summarize_pipeline_result(result: dict[str, Any]) -> dict[str, Any]:
             "scored_path_count": candidate_result.get("scored_path_count"),
             "split_training_date": _extract_split_training_date(candidate_result),
             "candidate_count": candidate_result.get("candidate_count"),
-            "candidate_ids": _extract_candidate_ids(candidate_result.get("candidates")),
         }
+        candidates = candidate_result.get("candidates")
+        if output_level == "ids":
+            candidate_summary["candidate_ids"] = _extract_candidate_ids(candidates)
+        else:
+            candidate_summary["candidates"] = _extract_candidate_scores(candidates)
 
     return {
         "patient_id": result.get("patient_id"),
         "pattern": result.get("pattern"),
         "config_path": result.get("config_path"),
         "skip_path_build": result.get("skip_path_build"),
+        "elapsed_seconds": result.get("elapsed_seconds"),
         "path_generation": result.get("path_generation"),
         "candidate_summary": candidate_summary,
     }
@@ -157,6 +186,23 @@ def _extract_candidate_ids(candidates: object) -> list[object]:
     return candidate_ids
 
 
+def _extract_candidate_scores(candidates: object) -> list[dict[str, object]]:
+    if not isinstance(candidates, list):
+        return []
+
+    candidate_scores: list[dict[str, object]] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        candidate_scores.append(
+            {
+                "patient_id": candidate.get("patient_id"),
+                "candidate_score": candidate.get("candidate_score"),
+            }
+        )
+    return candidate_scores
+
+
 def main() -> int:
     """Run the full pipeline and log the JSON result."""
     args = parse_args()
@@ -175,7 +221,11 @@ def main() -> int:
         )
         return 1
 
-    output = result if args.full_output else summarize_pipeline_result(result)
+    output = (
+        result
+        if args.output_level == "full"
+        else summarize_pipeline_result(result, output_level=args.output_level)
+    )
     LOGGER.info(json.dumps(output, ensure_ascii=False, indent=2, default=str))
     return 0
 

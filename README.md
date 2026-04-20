@@ -98,7 +98,8 @@ python scripts/debug_query.py
 python scripts/run_similar_user_pipeline.py <patient_id>
 python scripts/run_similar_user_pipeline.py <patient_id> --config config/settings.yaml
 python scripts/run_similar_user_pipeline.py <patient_id> --skip-path-build
-python scripts/run_similar_user_pipeline.py <patient_id> --full-output
+python scripts/run_similar_user_pipeline.py <patient_id> --output-level scores
+python scripts/run_similar_user_pipeline.py <patient_id> --output-level full
 
 # 运行固定模式路径检索并保存离线结果
 python scripts/debug_patient_pattern_paths.py <patient_id>
@@ -119,7 +120,7 @@ python scripts/build_similar_user_candidates.py <patient_id>
 python scripts/build_similar_user_candidates.py <patient_id> --config config/settings.yaml
 ```
 
-`run_similar_user_pipeline.py` 默认会先重新生成并保存固定模式 path，再读取保存结果打分并生成候选用户。如果已经有可用的离线路径结果，可以使用 `--skip-path-build` 跳过 path 检索。脚本默认只输出核心摘要，候选用户仅以 `candidate_ids` 列出全部 `patient_id`。需要查看完整 `candidate_result` 和候选明细时，使用 `--full-output`。
+`run_similar_user_pipeline.py` 默认会先重新生成并保存固定模式 path，再读取保存结果打分并生成候选用户。如果已经有可用的离线路径结果，可以使用 `--skip-path-build` 跳过 path 检索。脚本默认使用 `--output-level ids`，候选用户仅以 `candidate_ids` 列出全部 `patient_id`；使用 `--output-level scores` 时输出 `patient_id` 和 `candidate_score`；使用 `--output-level full` 时输出完整 `candidate_result` 和候选明细。
 
 `build_similar_user_candidates.py` 读取配置文件中的 `query.candidate_ranking`；如需调整候选排序范围，直接修改 YAML：
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from config.settings import GraphPathLimitSettings, load_query_settings
+from ..utils.logger import get_logger
 
 from .cypher_queries import (
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
@@ -50,6 +51,7 @@ from .cypher_queries import (
 from .neo4j_client import Neo4jClient
 
 
+LOGGER = get_logger(__name__)
 DEFAULT_PATH_LIMITS = [500, 1000, 2000, 3000, 5000]
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 
@@ -770,7 +772,21 @@ class KgRepository:
             raise ValueError("p2_count must be a non-negative integer.")
 
         settings = load_query_settings(self.config_path).graph_path_limit
-        return self._recommend_graph_path_limit(total_paths, g_count, p2_count, settings)
+        recommendation = self._recommend_graph_path_limit(
+            total_paths,
+            g_count,
+            p2_count,
+            settings,
+        )
+        LOGGER.debug(
+            "Recommended graph path limit: total_paths=%s, g_count=%s, p2_count=%s, per_g=%s, limit=%s",
+            total_paths,
+            g_count,
+            p2_count,
+            recommendation.per_g,
+            recommendation.limit,
+        )
+        return recommendation
 
     @staticmethod
     def _normalize_required_string(value: str, field_name: str) -> str:

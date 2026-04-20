@@ -8,12 +8,16 @@ from typing import Any
 
 from ...domain.graph_schema import PathPattern
 from ...domain.path_models import PatientTasksetTaskGameTaskTasksetPatientPath
+from ...utils.logger import get_logger
 from ..user_service import UserService
 from .utils import (
     calculate_common_game_score_correlation,
     calculate_game_similarity_with_diversity_score,
     calculate_set_same_score,
 )
+
+
+LOGGER = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,14 @@ class SimilarUserCandidateService:
 
         scored_domain_paths = _build_scored_domain_paths(scored_result)
         split_training_date = _extract_split_training_date(scored_result)
+        LOGGER.debug(
+            "Aggregating similar-user candidates: patient_id=%s, scored_path_count=%s, path_top_k=%s, candidate_top_k=%s, split_training_date=%s",
+            scored_result.get("patient_id"),
+            len(scored_domain_paths),
+            path_top_k,
+            candidate_top_k,
+            split_training_date,
+        )
 
         candidate_buckets: dict[str, dict[str, Any]] = defaultdict(
             lambda: {
@@ -99,6 +111,11 @@ class SimilarUserCandidateService:
             reverse=True,
         )
         candidates = candidates[:candidate_top_k]
+        LOGGER.info(
+            "Aggregated similar-user candidates: patient_id=%s, candidate_count=%s",
+            scored_result.get("patient_id"),
+            len(candidates),
+        )
 
         return {
             "patient_id": scored_result.get("patient_id"),
@@ -140,6 +157,13 @@ class SimilarUserCandidateService:
             or not candidate_patient_id.strip()
             or end_date is None
         ):
+            LOGGER.warning(
+                "Skipped candidate score calculation because required context is missing: primary_patient_id=%s, candidate_patient_id=%s, end_date=%s, has_user_service=%s",
+                primary_patient_id,
+                candidate_patient_id,
+                end_date,
+                self.user_service is not None,
+            )
             return None, {
                 "common_game_score_correlation": None,
                 "reason": "missing user_service or split_training_date",
@@ -192,6 +216,16 @@ class SimilarUserCandidateService:
                 and isinstance(set_same_score, (int, float))
             )
             else None
+        )
+        LOGGER.debug(
+            "Calculated candidate score: primary_patient_id=%s, candidate_patient_id=%s, end_date=%s, correlation=%s, game_similarity=%s, set_same=%s, candidate_score=%s",
+            primary_patient_id.strip(),
+            candidate_patient_id.strip(),
+            end_date,
+            correlation_score,
+            game_similarity_score,
+            set_same_score,
+            candidate_score,
         )
         return candidate_score, {
             "common_game_score_correlation": common_game_score_correlation,

@@ -67,6 +67,14 @@ def score_patient_pattern_result(
     top_k: int | None = None,
 ) -> dict[str, object]:
     """Load a saved patient result and score its domain paths."""
+    LOGGER.debug(
+        "Scoring patient pattern result: patient_id=%s, pattern=%s, path_index=%s, top_k=%s, config_path=%s",
+        patient_id,
+        pattern,
+        path_index,
+        top_k,
+        config_path,
+    )
     stored_result = PatternResultStore(config_path).load(pattern, patient_id)
     domain_paths = stored_result.to_domain_paths()
 
@@ -106,7 +114,7 @@ def score_patient_pattern_result(
         if isinstance(raw_split_training_date, str) and raw_split_training_date.strip():
             split_training_date = raw_split_training_date.strip()
 
-    return {
+    result = {
         "patient_id": stored_result.patient_id,
         "pattern": stored_result.pattern,
         "path_count": len(domain_paths),
@@ -121,6 +129,13 @@ def score_patient_pattern_result(
         },
         "scores": scored_paths,
     }
+    LOGGER.debug(
+        "Scored patient pattern result: patient_id=%s, path_count=%s, scored_path_count=%s",
+        stored_result.patient_id,
+        result["path_count"],
+        result["scored_path_count"],
+    )
+    return result
 
 
 def main() -> int:
