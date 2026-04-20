@@ -15,6 +15,7 @@ from scripts.build_similar_user_candidates import (
 from scripts.run_similar_user_pipeline import (
     main as pipeline_main,
     run_similar_user_pipeline,
+    summarize_pipeline_result,
 )
 from similar_user.services.similarity import SimilarUserCandidateService
 from similar_user.utils.pattern_storage import save_pattern_result
@@ -703,13 +704,38 @@ class SimilarUserCandidatesTest(unittest.TestCase):
     ) -> None:
         expected = {
             "patient_id": "30010096",
-            "candidate_result": {"candidate_count": 1},
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "config_path": "config/settings.yaml",
+            "skip_path_build": False,
+            "path_generation": None,
+            "candidate_result": {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "path_top_k": 50,
+                "candidate_top_k": 10,
+                "path_count": 230,
+                "scored_path_count": 50,
+                "retrieval_context": {"split_training_date": "2022-05-22"},
+                "candidate_count": 1,
+                "candidates": [
+                    {
+                        "patient_id": "20113562",
+                        "candidate_score": 2.232,
+                        "match_count": 3,
+                        "best_score": 95.0,
+                        "avg_score": 90.0,
+                        "path_indices": [0, 2, 4],
+                        "score_details": {"large": "payload"},
+                    }
+                ],
+            },
         }
         mock_parse_args.return_value = Mock(
             patient_id="30010096",
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            full_output=False,
         )
         mock_run_pipeline.return_value = expected
 
@@ -723,7 +749,116 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             skip_path_build=False,
         )
         mock_logger.info.assert_called_once_with(
+            json.dumps(
+                summarize_pipeline_result(expected),
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            )
+        )
+
+    @patch("scripts.run_similar_user_pipeline.LOGGER")
+    @patch("scripts.run_similar_user_pipeline.parse_args")
+    @patch("scripts.run_similar_user_pipeline.run_similar_user_pipeline")
+    def test_pipeline_main_logs_full_result_when_requested(
+        self,
+        mock_run_pipeline: Mock,
+        mock_parse_args: Mock,
+        mock_logger: Mock,
+    ) -> None:
+        expected = {
+            "patient_id": "30010096",
+            "candidate_result": {"candidate_count": 1},
+        }
+        mock_parse_args.return_value = Mock(
+            patient_id="30010096",
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            config="config/settings.yaml",
+            skip_path_build=False,
+            full_output=True,
+        )
+        mock_run_pipeline.return_value = expected
+
+        exit_code = pipeline_main()
+
+        self.assertEqual(exit_code, 0)
+        mock_logger.info.assert_called_once_with(
             json.dumps(expected, ensure_ascii=False, indent=2, default=str)
+        )
+
+    def test_summarize_pipeline_result_keeps_only_candidate_summary(self) -> None:
+        result = {
+            "patient_id": "40",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "config_path": "config/settings.yaml",
+            "skip_path_build": False,
+            "path_generation": {
+                "training_date_count": 8,
+                "split_training_date": "2022-05-22",
+                "path_count": 230,
+            },
+            "candidate_result": {
+                "patient_id": "40",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "path_top_k": 50,
+                "candidate_top_k": 10,
+                "path_count": 230,
+                "scored_path_count": 50,
+                "retrieval_context": {
+                    "split_training_date": "2022-05-22",
+                    "candidate_scope": "long text",
+                },
+                "candidate_count": 1,
+                "candidates": [
+                    {
+                        "patient_id": "20113562",
+                        "candidate_score": 2.232,
+                        "match_count": 3,
+                        "best_score": 95.0,
+                        "avg_score": 90.0,
+                        "path_indices": [0, 2, 4],
+                        "score_details": {"large": "payload"},
+                    }
+                ],
+            },
+        }
+
+        summary = summarize_pipeline_result(result)
+
+        self.assertNotIn("candidate_result", summary)
+        self.assertEqual(
+            summary["candidate_summary"],
+            {
+                "patient_id": "40",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "path_top_k": 50,
+                "candidate_top_k": 10,
+                "path_count": 230,
+                "scored_path_count": 50,
+                "split_training_date": "2022-05-22",
+                "candidate_count": 1,
+                "candidate_ids": ["20113562"],
+            },
+        )
+
+    def test_summarize_pipeline_result_includes_all_candidate_ids(self) -> None:
+        result = {
+            "patient_id": "40",
+            "candidate_result": {
+                "candidate_count": 3,
+                "candidates": [
+                    {"patient_id": "20113562", "candidate_score": 2.2},
+                    {"patient_id": "20113563", "candidate_score": 2.1},
+                    {"patient_id": "20113564", "candidate_score": 2.0},
+                ],
+            },
+        }
+
+        summary = summarize_pipeline_result(result)
+
+        self.assertEqual(
+            summary["candidate_summary"]["candidate_ids"],
+            ["20113562", "20113563", "20113564"],
         )
 
 
