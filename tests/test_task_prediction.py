@@ -13,6 +13,7 @@ from src.similar_user.services.task_prediction import (
     build_candidate_training_tasks,
     build_rule_based_predictions,
     build_similar_user_game_counts,
+    build_similar_user_task_evidence,
     build_target_task_window,
     extract_similar_user_candidates,
     filter_recent_target_repeated_games,
@@ -206,6 +207,44 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertEqual(game_counts[1]["game_id"], "2")
         self.assertEqual(game_counts[1]["count"], 1)
 
+    def test_build_similar_user_task_evidence_returns_scores_and_user_tasks(
+        self,
+    ) -> None:
+        evidence = build_similar_user_task_evidence(
+            [
+                SimilarUserCandidate("201", 2.0),
+                SimilarUserCandidate("202", 1.0),
+            ],
+            {
+                "201": [
+                    {"g": {"id": "1", "name": "任务A"}},
+                    {"g": {"id": "1", "name": "任务A"}},
+                    {"g": {"id": "3", "name": "任务C"}},
+                ],
+                "202": [
+                    {"g": {"id": "2", "name": "任务B"}},
+                    {"g": {"id": "3", "name": "任务C"}},
+                ],
+            },
+            excluded_game_ids={"3"},
+        )
+
+        self.assertEqual(
+            evidence,
+            [
+                {
+                    "patient_id": "201",
+                    "candidate_score": 2.0,
+                    "tasks": [{"game_id": "1", "game_name": "任务A", "count": 2}],
+                },
+                {
+                    "patient_id": "202",
+                    "candidate_score": 1.0,
+                    "tasks": [{"game_id": "2", "game_name": "任务B", "count": 1}],
+                },
+            ],
+        )
+
     def test_filter_recent_target_repeated_games_removes_consecutive_target_tasks(
         self,
     ) -> None:
@@ -284,6 +323,21 @@ class TaskPredictionTest(unittest.TestCase):
             ],
         )
         self.assertEqual(
+            result["similar_user_task_evidence"],
+            [
+                {
+                    "patient_id": "201",
+                    "candidate_score": 2.0,
+                    "tasks": [{"game_id": "1", "game_name": "任务A", "count": 1}],
+                },
+                {
+                    "patient_id": "202",
+                    "candidate_score": 1.0,
+                    "tasks": [{"game_id": "2", "game_name": "任务B", "count": 1}],
+                },
+            ],
+        )
+        self.assertEqual(
             result["candidate_source"]["candidate_task_window"],
             {
                 "base_date": "2022-05-22",
@@ -342,6 +396,16 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertEqual(
             result["similar_user_game_counts"],
             [{"game_id": "2", "game_name": "任务B", "count": 1}],
+        )
+        self.assertEqual(
+            result["similar_user_task_evidence"],
+            [
+                {
+                    "patient_id": "201",
+                    "candidate_score": None,
+                    "tasks": [{"game_id": "2", "game_name": "任务B", "count": 1}],
+                }
+            ],
         )
 
     def test_predict_from_pipeline_result_reads_patient_id_from_candidate_summary(

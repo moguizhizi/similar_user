@@ -74,27 +74,24 @@ class TrainingTaskPredictionService:
             for candidate in candidates
         }
 
-        similar_summaries = [
-            {
-                **summarize_training_history(
-                    candidate.patient_id,
-                    similar_user_histories[candidate.patient_id],
-                    task_window=candidate_task_window,
-                ),
-                "candidate_score": candidate.candidate_score,
-            }
-            for candidate in candidates
-        ]
-
+        repeated_target_game_ids = find_consecutive_target_game_ids(target_history)
         similar_user_game_counts = build_similar_user_game_counts(
             candidates,
             similar_user_histories,
         )
-
-        similar_user_game_counts = filter_recent_target_repeated_games(
+        similar_user_game_counts = filter_game_counts_by_ids(
             similar_user_game_counts,
-            target_history,
+            repeated_target_game_ids,
         )
+        similar_user_task_evidence = build_similar_user_task_evidence(
+            candidates,
+            similar_user_histories,
+            excluded_game_ids=repeated_target_game_ids,
+        )
+
+        print(similar_user_task_evidence)
+
+        exit(0)
 
         candidate_tasks = build_candidate_training_tasks(
             candidates,
@@ -107,8 +104,8 @@ class TrainingTaskPredictionService:
         )
         prompt = build_task_prediction_prompt(
             patient_id=resolved_patient_id,
-            similar_user_summaries=similar_summaries,
             similar_user_game_counts=similar_user_game_counts,
+            similar_user_task_evidence=similar_user_task_evidence,
             candidate_training_tasks=candidate_tasks,
             task_top_k=task_top_k,
         )
@@ -136,8 +133,8 @@ class TrainingTaskPredictionService:
                 ),
                 "candidate_task_window": candidate_task_window,
             },
-            "similar_user_summaries": similar_summaries,
             "similar_user_game_counts": similar_user_game_counts,
+            "similar_user_task_evidence": similar_user_task_evidence,
             "candidate_training_tasks": candidate_tasks,
             "predicted_training_tasks": _resolve_predicted_tasks(
                 llm_prediction,
@@ -366,26 +363,57 @@ def build_similar_user_game_counts(
     similar_user_histories: dict[str, list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
     """Aggregate simple game counts from similar-user histories for prompt input."""
-    game_index: dict[str, dict[str, Any]] = {}
+    rows: list[dict[str, Any]] = []
     for candidate in candidates:
-        rows = similar_user_histories.get(candidate.patient_id, [])
-        for row in rows:
-            game = _normalize_node(row.get("g"))
-            game_id = _normalize_text(game.get("id")) or _normalize_text(
-                game.get("name")
-            )
-            if game_id is None:
-                continue
-            item = game_index.setdefault(
-                game_id,
-                {
-                    "game_id": game_id,
-                    "game_name": _normalize_text(game.get("name")),
-                    "count": 0,
-                },
-            )
-            item["count"] += 1
+        rows.extend(similar_user_histories.get(candidate.patient_id, []))
+    return build_game_counts_from_history(rows)
 
+
+def build_similar_user_task_evidence(
+    candidates: list[SimilarUserCandidate],
+    similar_user_histories: dict[str, list[dict[str, Any]]],
+    *,
+    excluded_game_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Build per-candidate task counts with candidate similarity scores."""
+    evidence: list[dict[str, Any]] = []
+    for candidate in candidates:
+        tasks = build_game_counts_from_history(
+            similar_user_histories.get(candidate.patient_id, []),
+            excluded_game_ids=excluded_game_ids,
+        )
+        evidence.append(
+            {
+                "patient_id": candidate.patient_id,
+                "candidate_score": candidate.candidate_score,
+                "tasks": tasks,
+            }
+        )
+    return evidence
+
+
+def build_game_counts_from_history(
+    history_rows: list[dict[str, Any]],
+    *,
+    excluded_game_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Aggregate simple game counts from task-history rows."""
+    normalized_excluded_game_ids = excluded_game_ids or set()
+    game_index: dict[str, dict[str, Any]] = {}
+    for row in history_rows:
+        game = _normalize_node(row.get("g"))
+        game_id = _normalize_text(game.get("id")) or _normalize_text(game.get("name"))
+        if game_id is None or game_id in normalized_excluded_game_ids:
+            continue
+        item = game_index.setdefault(
+            game_id,
+            {
+                "game_id": game_id,
+                "game_name": _normalize_text(game.get("name")),
+                "count": 0,
+            },
+        )
+        item["count"] += 1
     game_counts = sorted(
         game_index.values(),
         key=lambda item: (
@@ -401,13 +429,23 @@ def filter_recent_target_repeated_games(
     target_history: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Remove games that appear on consecutive target-history dates."""
-    repeated_game_ids = find_consecutive_target_game_ids(target_history)
-    if not repeated_game_ids:
+    return filter_game_counts_by_ids(
+        game_counts,
+        find_consecutive_target_game_ids(target_history),
+    )
+
+
+def filter_game_counts_by_ids(
+    game_counts: list[dict[str, Any]],
+    excluded_game_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Remove game-count rows with IDs in the excluded set."""
+    if not excluded_game_ids:
         return game_counts
     return [
         game_count
         for game_count in game_counts
-        if _normalize_text(game_count.get("game_id")) not in repeated_game_ids
+        if _normalize_text(game_count.get("game_id")) not in excluded_game_ids
     ]
 
 
@@ -471,16 +509,16 @@ def build_rule_based_predictions(
 def build_task_prediction_prompt(
     *,
     patient_id: str,
-    similar_user_summaries: list[dict[str, Any]],
     similar_user_game_counts: list[dict[str, Any]],
+    similar_user_task_evidence: list[dict[str, Any]],
     candidate_training_tasks: list[dict[str, Any]],
     task_top_k: int,
 ) -> str:
     """Build the JSON-first prompt for LLM task prediction."""
     payload = {
         "patient_id": patient_id,
-        "similar_users": similar_user_summaries,
         "similar_user_game_counts": similar_user_game_counts,
+        "similar_user_task_evidence": similar_user_task_evidence,
         "candidate_training_tasks": candidate_training_tasks,
         "output_requirement": {
             "top_k": task_top_k,
