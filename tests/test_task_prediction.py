@@ -15,6 +15,7 @@ from src.similar_user.services.task_prediction import (
     build_similar_user_game_counts,
     build_target_task_window,
     extract_similar_user_candidates,
+    filter_recent_target_repeated_games,
     parse_json_object_from_text,
     parse_date_value,
     summarize_training_history,
@@ -205,6 +206,27 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertEqual(game_counts[1]["game_id"], "2")
         self.assertEqual(game_counts[1]["count"], 1)
 
+    def test_filter_recent_target_repeated_games_removes_consecutive_target_tasks(
+        self,
+    ) -> None:
+        game_counts = [
+            {"game_id": "1", "game_name": "任务A", "count": 3},
+            {"game_id": "2", "game_name": "任务B", "count": 1},
+        ]
+        filtered_counts = filter_recent_target_repeated_games(
+            game_counts,
+            [
+                {"trainingDate": "2022-05-20", "g": {"id": "1", "name": "任务A"}},
+                {"trainingDate": "2022-05-21", "g": {"id": "1", "name": "任务A"}},
+                {"trainingDate": "2022-05-21", "g": {"id": "2", "name": "任务B"}},
+            ],
+        )
+
+        self.assertEqual(
+            filtered_counts,
+            [{"game_id": "2", "game_name": "任务B", "count": 1}],
+        )
+
     def test_build_rule_based_predictions_returns_ranked_tasks(self) -> None:
         predictions = build_rule_based_predictions(
             [
@@ -297,6 +319,38 @@ class TaskPredictionTest(unittest.TestCase):
             "202",
             "2022-05-08",
             "2022-05-22",
+        )
+
+    def test_predict_from_pipeline_result_filters_counts_seen_in_target_two_days(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.side_effect = [
+            [
+                {"trainingDate": "2022-05-20", "g": {"id": "1", "name": "任务A"}},
+                {"trainingDate": "2022-05-21", "g": {"id": "1", "name": "任务A"}},
+            ],
+            [
+                {"trainingDate": "2022-05-09", "g": {"id": "1", "name": "任务A"}},
+                {"trainingDate": "2022-05-10", "g": {"id": "2", "name": "任务B"}},
+            ],
+        ]
+        service = TrainingTaskPredictionService(user_service=user_service)
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": ["201"]},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=2,
+        )
+
+        self.assertEqual(
+            result["similar_user_game_counts"],
+            [{"game_id": "2", "game_name": "任务B", "count": 1}],
         )
 
     def test_predict_from_pipeline_result_reads_patient_id_from_candidate_summary(
