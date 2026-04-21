@@ -1,4 +1,18 @@
-"""Build ranked similar-user candidates from top-k scored paths."""
+"""Build similar-user candidates from scored paths.
+
+这个脚本处在“path 打分”和“训练任务推荐”之间：
+
+1. `scripts/score_patient_pattern_paths.py` 会读取已保存的 paths，并按规则给 path 打分。
+2. 本脚本读取 top-k scored paths，把 path 中出现的 `p2` 患者去重成候选相似用户。
+3. 对每个候选用户继续查询 Neo4j 中的历史画像/游戏表现，计算 candidate_score。
+4. 下游推荐任务流程会使用这里输出的候选用户历史数据。
+
+它不会生成 path，也不会直接预测 task；它只负责“从已评分 path 聚合并排序候选用户”。
+
+常用执行方式：
+
+    python scripts/build_similar_user_candidates.py 40
+"""
 
 from __future__ import annotations
 
@@ -25,9 +39,9 @@ from similar_user.services.similarity.candidate_service import SimilarUserCandid
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 
-from scripts.score_patient_pattern_result import (
+from scripts.score_patient_pattern_paths import (
     DEFAULT_CONFIG_PATH,
-    score_patient_pattern_result,
+    score_patient_pattern_paths,
 )
 
 
@@ -63,7 +77,7 @@ def build_similar_user_candidates(
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     ranking_settings = load_query_settings(resolved_config_path).candidate_ranking
     LOGGER.debug(
-        "Building similar-user candidates: patient_id=%s, pattern=%s, path_top_k=%s, candidate_top_k=%s, config_path=%s",
+        "Building similar-user candidates from scored paths: patient_id=%s, pattern=%s, path_top_k=%s, candidate_top_k=%s, config_path=%s",
         patient_id,
         pattern,
         ranking_settings.path_top_k,
@@ -79,7 +93,7 @@ def build_similar_user_candidates(
             )
         )
         candidate_service = SimilarUserCandidateService(user_service=user_service)
-        scored_result = score_patient_pattern_result(
+        scored_result = score_patient_pattern_paths(
             patient_id,
             pattern=pattern,
             config_path=resolved_config_path,
@@ -91,7 +105,7 @@ def build_similar_user_candidates(
             candidate_top_k=ranking_settings.candidate_top_k,
         )
     LOGGER.debug(
-        "Built similar-user candidates: patient_id=%s, candidate_count=%s, scored_path_count=%s",
+        "Built similar-user candidates from scored paths: patient_id=%s, candidate_count=%s, scored_path_count=%s",
         patient_id,
         result.get("candidate_count"),
         result.get("scored_path_count"),
@@ -109,7 +123,7 @@ def main() -> int:
             config_path=args.config,
         )
     except Exception as exc:
-        LOGGER.exception("Build similar user candidates failed: %s", exc)
+        LOGGER.exception("Build similar user candidates from scored paths failed: %s", exc)
         return 1
 
     LOGGER.info(json.dumps(result, ensure_ascii=False, indent=2, default=str))
