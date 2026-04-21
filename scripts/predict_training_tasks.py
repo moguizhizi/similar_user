@@ -3,7 +3,7 @@
 这个脚本处在相似用户候选生成之后：
 
 1. 读取 `scripts/run_similar_user_pipeline.py` 的 JSON 输出，输入可以来自文件或 stdin。
-2. 根据目标患者、候选相似用户和 `base_date` 前两天的训练任务上下文，构建训练任务推荐输入。
+2. 根据目标患者、候选相似用户和训练任务时间窗上下文，构建训练任务推荐输入。
 3. 默认调用配置中的 LLM 生成预测结果；使用 `--dry-run` 时跳过 LLM，返回确定性的候选任务结果。
 4. 最后按 `--output-level` 输出任务 ID、任务分数或完整预测结果。
 
@@ -11,7 +11,7 @@
 
 常用执行方式：
 
-    python scripts/predict_training_tasks.py --similar-users-file result.json --base-date 2022-05-22
+    python scripts/predict_training_tasks.py --similar-users-file result.json --base-date 2022-05-22 --window-days 14
 """
 
 from __future__ import annotations
@@ -71,6 +71,12 @@ def parse_args() -> argparse.Namespace:
         help="Prediction base date; target tasks use the two days before this date.",
     )
     parser.add_argument(
+        "--window-days",
+        type=int,
+        required=True,
+        help="Number of days before base_date used to query candidate-user tasks.",
+    )
+    parser.add_argument(
         "--task-top-k",
         type=int,
         default=DEFAULT_TASK_TOP_K,
@@ -99,6 +105,7 @@ def run_training_task_prediction(
     pipeline_result: dict[str, Any],
     *,
     base_date: str,
+    window_days: int,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
@@ -120,6 +127,7 @@ def run_training_task_prediction(
         return service.predict_from_pipeline_result(
             pipeline_result,
             base_date=base_date,
+            window_days=window_days,
             task_top_k=task_top_k,
             use_llm=use_llm,
             include_prompt=include_prompt,
@@ -183,6 +191,7 @@ def main() -> int:
         result = run_training_task_prediction(
             pipeline_result,
             base_date=args.base_date,
+            window_days=args.window_days,
             config_path=args.config,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,

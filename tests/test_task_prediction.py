@@ -9,6 +9,7 @@ from unittest.mock import Mock
 from src.similar_user.services.task_prediction import (
     SimilarUserCandidate,
     TrainingTaskPredictionService,
+    build_candidate_task_window,
     build_candidate_training_tasks,
     build_rule_based_predictions,
     build_target_task_window,
@@ -128,6 +129,32 @@ class TaskPredictionTest(unittest.TestCase):
             },
         )
 
+    def test_build_candidate_task_window_uses_requested_days_before_base_date(
+        self,
+    ) -> None:
+        result = build_candidate_task_window("2022-5-22", 14)
+
+        self.assertEqual(
+            result,
+            {
+                "base_date": "2022-05-22",
+                "start_date": "2022-05-08",
+                "end_date": "2022-05-22",
+                "window_days": 14,
+                "includes_base_date": False,
+                "range_semantics": "[start_date, end_date)",
+            },
+        )
+
+    def test_build_candidate_task_window_rejects_non_positive_window_days(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "window_days must be a positive integer, got 0.",
+        ):
+            build_candidate_task_window("2022-05-22", 0)
+
     def test_parse_date_value_rejects_invalid_dates(self) -> None:
         with self.assertRaisesRegex(ValueError, "base_date must be a valid date."):
             parse_date_value("2022-02-31", "base_date")
@@ -169,10 +196,8 @@ class TaskPredictionTest(unittest.TestCase):
 
     def test_predict_from_pipeline_result_uses_pipeline_candidates_without_llm(self) -> None:
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.return_value = [
-            {"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}
-        ]
-        user_service.get_patient_training_task_history.side_effect = [
+        user_service.get_patient_training_task_history_by_date_window.side_effect = [
+            [{"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}],
             [{"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}],
             [{"trainingDate": "2022-01-03", "g": {"id": "2", "name": "任务B"}}],
         ]
@@ -189,12 +214,24 @@ class TaskPredictionTest(unittest.TestCase):
                 },
             },
             base_date="2022-5-22",
+            window_days=14,
             use_llm=False,
             task_top_k=2,
         )
 
         self.assertEqual(result["patient_id"], "40")
         self.assertEqual(result["candidate_source"]["candidate_ids"], ["201", "202"])
+        self.assertEqual(
+            result["candidate_source"]["candidate_task_window"],
+            {
+                "base_date": "2022-05-22",
+                "start_date": "2022-05-08",
+                "end_date": "2022-05-22",
+                "window_days": 14,
+                "includes_base_date": False,
+                "range_semantics": "[start_date, end_date)",
+            },
+        )
         self.assertEqual(
             result["target_history_summary"]["task_window"],
             {
@@ -206,22 +243,28 @@ class TaskPredictionTest(unittest.TestCase):
             },
         )
         self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "1")
-        user_service.get_patient_training_task_history_by_date_window.assert_called_once_with(
+        user_service.get_patient_training_task_history_by_date_window.assert_any_call(
             "40",
             "2022-05-20",
             "2022-05-22",
         )
-        user_service.get_patient_training_task_history.assert_any_call("201")
-        user_service.get_patient_training_task_history.assert_any_call("202")
+        user_service.get_patient_training_task_history_by_date_window.assert_any_call(
+            "201",
+            "2022-05-08",
+            "2022-05-22",
+        )
+        user_service.get_patient_training_task_history_by_date_window.assert_any_call(
+            "202",
+            "2022-05-08",
+            "2022-05-22",
+        )
 
     def test_predict_from_pipeline_result_reads_patient_id_from_candidate_summary(
         self,
     ) -> None:
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.return_value = [
-            {"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}
-        ]
-        user_service.get_patient_training_task_history.side_effect = [
+        user_service.get_patient_training_task_history_by_date_window.side_effect = [
+            [{"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}],
             [{"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}],
         ]
         service = TrainingTaskPredictionService(user_service=user_service)
@@ -234,12 +277,13 @@ class TaskPredictionTest(unittest.TestCase):
                 },
             },
             base_date="2022-05-22",
+            window_days=14,
             use_llm=False,
             task_top_k=1,
         )
 
         self.assertEqual(result["patient_id"], "40")
-        user_service.get_patient_training_task_history_by_date_window.assert_called_once_with(
+        user_service.get_patient_training_task_history_by_date_window.assert_any_call(
             "40",
             "2022-05-20",
             "2022-05-22",
@@ -257,6 +301,7 @@ class TaskPredictionTest(unittest.TestCase):
             service.predict_from_pipeline_result(
                 {"candidate_summary": {"candidate_ids": ["201"]}},
                 base_date="2022-05-22",
+                window_days=14,
                 use_llm=False,
             )
 
@@ -270,6 +315,7 @@ class TaskPredictionTest(unittest.TestCase):
                     "candidate_summary": {"candidate_ids": ["201"]},
                 },
                 base_date="2022-02-31",
+                window_days=14,
                 use_llm=False,
             )
 
