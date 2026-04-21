@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.score_patient_pattern_result import main, score_patient_pattern_result
+from scripts.score_patient_pattern_paths import main, score_patient_pattern_paths
 from src.similar_user.domain import (
     GameNode,
     PathPattern,
@@ -237,7 +237,7 @@ class PathScoringTest(unittest.TestCase):
             "当前path上不足两个g，无法计算两个g之间的相关度，跳过该项",
         )
 
-    def test_score_patient_pattern_result_scores_saved_paths(self) -> None:
+    def test_score_patient_pattern_paths_scores_saved_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
@@ -289,7 +289,7 @@ class PathScoringTest(unittest.TestCase):
             }
             save_pattern_result(result, config_path)
 
-            scored = score_patient_pattern_result(
+            scored = score_patient_pattern_paths(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
@@ -297,10 +297,10 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(scored["path_count"], 1)
         self.assertEqual(scored["scored_path_count"], 1)
-        self.assertEqual(scored["retrieval_context"]["split_training_date"], None)
+        self.assertEqual(scored["retrieval_context"]["score_end_date"], None)
         self.assertGreater(scored["scores"][0]["score"]["total_score"], 90)
 
-    def test_score_patient_pattern_result_returns_top_k_paths(self) -> None:
+    def test_score_patient_pattern_paths_returns_top_k_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
@@ -366,7 +366,7 @@ class PathScoringTest(unittest.TestCase):
             }
             save_pattern_result(result, config_path)
 
-            scored = score_patient_pattern_result(
+            scored = score_patient_pattern_paths(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
@@ -375,11 +375,11 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(scored["path_count"], 2)
         self.assertEqual(scored["scored_path_count"], 1)
-        self.assertEqual(scored["retrieval_context"]["split_training_date"], None)
+        self.assertEqual(scored["retrieval_context"]["score_end_date"], None)
         self.assertEqual(scored["scores"][0]["path_index"], 0)
 
-    @patch("scripts.score_patient_pattern_result.LOGGER")
-    @patch("scripts.score_patient_pattern_result.parse_args")
+    @patch("scripts.score_patient_pattern_paths.LOGGER")
+    @patch("scripts.score_patient_pattern_paths.parse_args")
     def test_main_prints_scored_result(
         self,
         mock_parse_args: Mock,
@@ -435,7 +435,7 @@ class PathScoringTest(unittest.TestCase):
                 ],
             }
             save_pattern_result(result, config_path)
-            expected = score_patient_pattern_result(
+            expected = score_patient_pattern_paths(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
@@ -455,8 +455,8 @@ class PathScoringTest(unittest.TestCase):
             json.dumps(expected, ensure_ascii=False, indent=2, default=str)
         )
 
-    @patch("scripts.score_patient_pattern_result.LOGGER")
-    @patch("scripts.score_patient_pattern_result.parse_args")
+    @patch("scripts.score_patient_pattern_paths.LOGGER")
+    @patch("scripts.score_patient_pattern_paths.parse_args")
     def test_main_logs_error_when_scoring_fails(
         self,
         mock_parse_args: Mock,

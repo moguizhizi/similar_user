@@ -48,6 +48,7 @@ Patient -- TaskInstanceSet -- TaskInstance -- Game -- TaskInstance -- TaskInstan
 | 不限日期随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `patient_id`, `per_g`, `limit` | `row` |
 | 从某日期开始随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | 早于 end_date 随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
+| 在左闭右开日期区间内随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
 | 仅按早于 end_date 约束随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
 
 ### 固定模式 path 统计
@@ -109,6 +110,7 @@ Patient -- TaskInstanceSet -- TaskInstance -- Game -- TaskInstance -- TaskInstan
 | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY` | 不限日期随机抽取固定模式 path | `patient_id`, `per_g`, `limit` | `row` |
 | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY` | 从某日期开始随机抽取固定模式 path | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY` | 早于 end_date 随机抽取固定模式 path | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
+| `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | 在左闭右开日期区间内随机抽取固定模式 path | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
 | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY` | 仅按早于 end_date 约束随机抽取固定模式 path | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
 
 ### `pattern_statistics.py`
