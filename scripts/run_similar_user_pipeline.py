@@ -1,4 +1,17 @@
-"""Run the full similar-user pipeline from path retrieval to candidate ranking."""
+"""Run the full similar-user pipeline from path building to candidate ranking.
+
+这个脚本把相似用户候选生成流程串成一个入口：
+
+1. 默认先调用 `scripts/build_patient_pattern_paths.py`，按时间窗口构建并保存固定模式 paths。
+2. 再调用候选构建逻辑，读取已保存 paths、完成 path 打分，并聚合候选相似用户。
+3. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
+
+如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过第一步，直接基于已有结果打分并构建候选用户。
+
+常用执行方式：
+
+    python scripts/run_similar_user_pipeline.py 40 --base-date 2022-05-22 --window-days 14
+"""
 
 from __future__ import annotations
 
@@ -22,8 +35,8 @@ from similar_user.domain.graph_schema import (
 from similar_user.utils.logger import get_logger
 
 from scripts.build_similar_user_candidates import build_similar_user_candidates
-from scripts.debug_patient_pattern_paths import run_patient_pattern_path_flow
-from scripts.score_patient_pattern_result import DEFAULT_CONFIG_PATH
+from scripts.build_patient_pattern_paths import run_patient_pattern_path_flow
+from scripts.score_patient_pattern_paths import DEFAULT_CONFIG_PATH
 
 
 LOGGER = get_logger(__name__)
@@ -51,6 +64,17 @@ def parse_args() -> argparse.Namespace:
         help="Use existing saved paths and only run scoring plus candidate ranking.",
     )
     parser.add_argument(
+        "--base-date",
+        required=True,
+        help="Exclusive window end date used to build paths, for example 2022-05-22.",
+    )
+    parser.add_argument(
+        "--window-days",
+        type=int,
+        required=True,
+        help="Number of days before base_date included in path retrieval.",
+    )
+    parser.add_argument(
         "--output-level",
         choices=("ids", "scores", "full"),
         default="ids",
@@ -62,6 +86,8 @@ def parse_args() -> argparse.Namespace:
 def run_similar_user_pipeline(
     patient_id: str,
     *,
+    base_date: str,
+    window_days: int,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path | None = None,
     skip_path_build: bool = False,
@@ -70,10 +96,12 @@ def run_similar_user_pipeline(
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     started_at = time.perf_counter()
     LOGGER.debug(
-        "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, config_path=%s",
+        "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, base_date=%s, window_days=%s, config_path=%s",
         patient_id,
         pattern,
         skip_path_build,
+        base_date,
+        window_days,
         resolved_config_path,
     )
     path_generation = None
@@ -81,6 +109,8 @@ def run_similar_user_pipeline(
         path_result = run_patient_pattern_path_flow(
             patient_id,
             config_path=resolved_config_path,
+            base_date=base_date,
+            window_days=window_days,
         )
         path_generation = _summarize_path_result(path_result)
 
@@ -94,6 +124,8 @@ def run_similar_user_pipeline(
         "pattern": pattern,
         "config_path": str(resolved_config_path),
         "skip_path_build": skip_path_build,
+        "base_date": base_date,
+        "window_days": window_days,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         "path_generation": path_generation,
         "candidate_result": candidate_result,
@@ -111,20 +143,19 @@ def _summarize_path_result(path_result: dict[str, object]) -> dict[str, object]:
     """Summarize the saved path result without logging every path row."""
     retrieval_context = path_result.get("retrieval_context")
     paths = []
-    split_training_date = None
+    path_window = None
     if isinstance(retrieval_context, dict):
         raw_paths = retrieval_context.get("paths")
         if isinstance(raw_paths, list):
             paths = raw_paths
-        raw_split_training_date = retrieval_context.get("split_training_date")
-        if isinstance(raw_split_training_date, str) and raw_split_training_date.strip():
-            split_training_date = raw_split_training_date.strip()
+        raw_path_window = retrieval_context.get("path_window")
+        if isinstance(raw_path_window, dict):
+            path_window = raw_path_window
 
     return {
         "patient_id": path_result.get("patient_id"),
         "pattern": path_result.get("pattern"),
-        "training_date_count": path_result.get("training_date_count"),
-        "split_training_date": split_training_date,
+        "path_window": path_window,
         "path_count": len(paths),
     }
 
@@ -147,7 +178,7 @@ def summarize_pipeline_result(
             "candidate_top_k": candidate_result.get("candidate_top_k"),
             "path_count": candidate_result.get("path_count"),
             "scored_path_count": candidate_result.get("scored_path_count"),
-            "split_training_date": _extract_split_training_date(candidate_result),
+            "path_window": _extract_path_window(candidate_result),
             "candidate_count": candidate_result.get("candidate_count"),
         }
         candidates = candidate_result.get("candidates")
@@ -161,17 +192,19 @@ def summarize_pipeline_result(
         "pattern": result.get("pattern"),
         "config_path": result.get("config_path"),
         "skip_path_build": result.get("skip_path_build"),
+        "base_date": result.get("base_date"),
+        "window_days": result.get("window_days"),
         "elapsed_seconds": result.get("elapsed_seconds"),
         "path_generation": result.get("path_generation"),
         "candidate_summary": candidate_summary,
     }
 
 
-def _extract_split_training_date(candidate_result: dict[str, Any]) -> object:
+def _extract_path_window(candidate_result: dict[str, Any]) -> object:
     retrieval_context = candidate_result.get("retrieval_context")
     if not isinstance(retrieval_context, dict):
         return None
-    return retrieval_context.get("split_training_date")
+    return retrieval_context.get("path_window")
 
 
 def _extract_candidate_ids(candidates: object) -> list[object]:
@@ -212,6 +245,8 @@ def main() -> int:
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,
+            base_date=args.base_date,
+            window_days=args.window_days,
         )
     except Exception as exc:
         LOGGER.exception(
