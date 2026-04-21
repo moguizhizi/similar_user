@@ -90,6 +90,12 @@ class TrainingTaskPredictionService:
             }
             for candidate in candidates
         ]
+
+        similar_user_game_counts = build_similar_user_game_counts(
+            candidates,
+            similar_user_histories,
+        )
+
         candidate_tasks = build_candidate_training_tasks(
             candidates,
             similar_user_histories,
@@ -103,6 +109,7 @@ class TrainingTaskPredictionService:
             patient_id=resolved_patient_id,
             target_history_summary=target_summary,
             similar_user_summaries=similar_summaries,
+            similar_user_game_counts=similar_user_game_counts,
             candidate_training_tasks=candidate_tasks,
             task_top_k=task_top_k,
         )
@@ -132,6 +139,7 @@ class TrainingTaskPredictionService:
             },
             "target_history_summary": target_summary,
             "similar_user_summaries": similar_summaries,
+            "similar_user_game_counts": similar_user_game_counts,
             "candidate_training_tasks": candidate_tasks,
             "predicted_training_tasks": _resolve_predicted_tasks(
                 llm_prediction,
@@ -355,6 +363,41 @@ def build_candidate_training_tasks(
     return tasks
 
 
+def build_similar_user_game_counts(
+    candidates: list[SimilarUserCandidate],
+    similar_user_histories: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Aggregate simple game counts from similar-user histories for prompt input."""
+    game_index: dict[str, dict[str, Any]] = {}
+    for candidate in candidates:
+        rows = similar_user_histories.get(candidate.patient_id, [])
+        for row in rows:
+            game = _normalize_node(row.get("g"))
+            game_id = _normalize_text(game.get("id")) or _normalize_text(
+                game.get("name")
+            )
+            if game_id is None:
+                continue
+            item = game_index.setdefault(
+                game_id,
+                {
+                    "game_id": game_id,
+                    "game_name": _normalize_text(game.get("name")),
+                    "count": 0,
+                },
+            )
+            item["count"] += 1
+
+    game_counts = sorted(
+        game_index.values(),
+        key=lambda item: (
+            -int(item["count"]),
+            str(item["game_id"]),
+        ),
+    )
+    return game_counts
+
+
 def build_rule_based_predictions(
     candidate_training_tasks: list[dict[str, Any]],
     *,
@@ -388,6 +431,7 @@ def build_task_prediction_prompt(
     patient_id: str,
     target_history_summary: dict[str, Any],
     similar_user_summaries: list[dict[str, Any]],
+    similar_user_game_counts: list[dict[str, Any]],
     candidate_training_tasks: list[dict[str, Any]],
     task_top_k: int,
 ) -> str:
@@ -396,6 +440,7 @@ def build_task_prediction_prompt(
         "patient_id": patient_id,
         "target_user_history": target_history_summary,
         "similar_users": similar_user_summaries,
+        "similar_user_game_counts": similar_user_game_counts,
         "candidate_training_tasks": candidate_training_tasks,
         "output_requirement": {
             "top_k": task_top_k,
