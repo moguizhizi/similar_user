@@ -94,10 +94,6 @@ class TrainingTaskPredictionService:
             self.user_service.get_distinct_training_games()
         )
 
-        print(candidate_tasks)
-
-        exit(0)
-
         rule_based_tasks = build_rule_based_predictions(
             candidate_tasks,
             top_k=task_top_k,
@@ -561,6 +557,11 @@ def build_task_prediction_prompt(
     }
     return (
         "请根据以下 JSON 数据预测目标用户下一阶段更可能适合的训练任务。"
+        "字段含义：candidate_training_tasks 是唯一允许选择的候选任务池；"
+        "similar_user_game_counts 是相似用户时间窗口内各任务出现的总次数；"
+        "similar_user_task_evidence 是每个相似用户的相似性分数及其时间窗口内任务次数；"
+        "candidate_score 越大表示该候选用户与目标用户越相似。"
+        "请优先参考相似性分数较高用户的任务证据，并结合总体出现次数排序。"
         "只允许从 candidate_training_tasks 中选择，返回 JSON 对象，不要添加 Markdown。\n\n"
         f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
     )
