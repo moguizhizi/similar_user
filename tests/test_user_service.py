@@ -12,6 +12,18 @@ from src.similar_user.services.user_service import UserService
 
 
 class UserServiceTest(unittest.TestCase):
+    def test_get_distinct_training_games_delegates_to_repository(self) -> None:
+        mock_repository = Mock()
+        mock_repository.get_distinct_training_games.return_value = [
+            {"g": {"id": "42", "name": "打怪物"}}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_distinct_training_games()
+
+        self.assertEqual(result, [{"g": {"id": "42", "name": "打怪物"}}])
+        mock_repository.get_distinct_training_games.assert_called_once_with()
+
     def test_get_patient_training_date_games_by_start_date_delegates_to_repository(
         self,
     ) -> None:

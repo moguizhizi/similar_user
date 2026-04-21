@@ -20,6 +20,15 @@ RETURN
 ORDER BY trainingDate
 """.strip()
 
+DISTINCT_TRAINING_GAMES_QUERY = """
+MATCH (:TaskInstanceSet)
+--(:TaskInstance)
+--(g:Game)
+
+RETURN DISTINCT g
+ORDER BY coalesce(g.id, g.name)
+""".strip()
+
 PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY = """
 MATCH (p:Patient {id: $patient_id})
 --(s1:TaskInstanceSet)
