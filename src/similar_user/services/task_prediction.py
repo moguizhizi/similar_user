@@ -96,6 +96,11 @@ class TrainingTaskPredictionService:
             similar_user_histories,
         )
 
+        similar_user_game_counts = filter_recent_target_repeated_games(
+            similar_user_game_counts,
+            target_history,
+        )
+
         candidate_tasks = build_candidate_training_tasks(
             candidates,
             similar_user_histories,
@@ -396,6 +401,50 @@ def build_similar_user_game_counts(
         ),
     )
     return game_counts
+
+
+def filter_recent_target_repeated_games(
+    game_counts: list[dict[str, Any]],
+    target_history: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Remove games that appear on consecutive target-history dates."""
+    repeated_game_ids = find_consecutive_target_game_ids(target_history)
+    if not repeated_game_ids:
+        return game_counts
+    return [
+        game_count
+        for game_count in game_counts
+        if _normalize_text(game_count.get("game_id")) not in repeated_game_ids
+    ]
+
+
+def find_consecutive_target_game_ids(
+    target_history: list[dict[str, Any]],
+) -> set[str]:
+    """Return game IDs that appear on two consecutive target-history dates."""
+    dates_by_game_id: dict[str, set[date]] = {}
+    for row in target_history:
+        training_date_text = _normalize_text(row.get("trainingDate"))
+        if training_date_text is None:
+            continue
+        try:
+            training_date = parse_date_value(training_date_text, "trainingDate")
+        except ValueError:
+            continue
+        game = _normalize_node(row.get("g"))
+        game_id = _normalize_text(game.get("id")) or _normalize_text(game.get("name"))
+        if game_id is None:
+            continue
+        dates_by_game_id.setdefault(game_id, set()).add(training_date)
+
+    repeated_game_ids: set[str] = set()
+    for game_id, training_dates in dates_by_game_id.items():
+        if any(
+            training_date + timedelta(days=1) in training_dates
+            for training_date in training_dates
+        ):
+            repeated_game_ids.add(game_id)
+    return repeated_game_ids
 
 
 def build_rule_based_predictions(
