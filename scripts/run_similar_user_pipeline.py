@@ -7,6 +7,8 @@
 3. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
 
 如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过第一步，直接基于已有结果打分并构建候选用户。
+调试阶段会额外把完整 pipeline 结果写入系统临时目录，方便 `scripts/predict_training_tasks.py`
+继续读取；全流程打通后可以移除这段临时落盘逻辑。
 
 常用执行方式：
 
@@ -18,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -40,6 +43,7 @@ from scripts.score_patient_pattern_paths import DEFAULT_CONFIG_PATH
 
 
 LOGGER = get_logger(__name__)
+DEBUG_PIPELINE_RESULT_DIR = Path(tempfile.gettempdir()) / "similar_user"
 
 
 def parse_args() -> argparse.Namespace:
@@ -236,6 +240,24 @@ def _extract_candidate_scores(candidates: object) -> list[dict[str, object]]:
     return candidate_scores
 
 
+def _write_debug_pipeline_result(result: dict[str, Any]) -> Path:
+    """Temporarily persist full pipeline output for predict_training_tasks.py debugging."""
+    patient_id = str(result.get("patient_id") or "unknown")
+    safe_patient_id = "".join(
+        char if char.isalnum() or char in {"-", "_"} else "_" for char in patient_id
+    ).strip("_")
+    if not safe_patient_id:
+        safe_patient_id = "unknown"
+
+    output_path = DEBUG_PIPELINE_RESULT_DIR / f"pipeline_result_{safe_patient_id}.json"
+    DEBUG_PIPELINE_RESULT_DIR.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    return output_path
+
+
 def main() -> int:
     """Run the full pipeline and log the JSON result."""
     args = parse_args()
@@ -248,6 +270,7 @@ def main() -> int:
             base_date=args.base_date,
             window_days=args.window_days,
         )
+        debug_output_path = _write_debug_pipeline_result(result)
     except Exception as exc:
         LOGGER.exception(
             "Similar user pipeline failed: patient_id=%s, config_path=%s",
@@ -261,6 +284,7 @@ def main() -> int:
         if args.output_level == "full"
         else summarize_pipeline_result(result, output_level=args.output_level)
     )
+    LOGGER.info("Wrote debug pipeline result: %s", debug_output_path)
     LOGGER.info(json.dumps(output, ensure_ascii=False, indent=2, default=str))
     return 0
 
