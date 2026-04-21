@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
 from typing import Any
-
-from config.settings import load_query_settings
 
 from ..domain.graph_schema import PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT
 from ..data_access.kg_repository import KgRepository
@@ -422,46 +421,24 @@ class UserService:
     def get_patient_pattern_paths(
         self,
         patient_id: str,
+        base_date: str,
+        window_days: int,
     ) -> dict[str, Any]:
-        """Run the end-to-end fixed-pattern path flow for a patient."""
+        """Run the end-to-end fixed-pattern path flow for a patient date window."""
+        path_window = self._build_path_window(base_date, window_days)
         LOGGER.info(
-            "Starting patient pattern path flow in service: patient_id=%s",
+            "Starting patient pattern path flow in service: patient_id=%s, base_date=%s, window_days=%s",
             patient_id,
+            path_window["base_date"],
+            path_window["window_days"],
         )
 
-        ordered_dates = self.get_patient_ordered_training_dates(patient_id)
-        if not ordered_dates:
-            LOGGER.warning(
-                "No training dates found for patient pattern path flow: patient_id=%s",
-                patient_id,
-            )
-            return self._build_empty_pattern_result(patient_id)
-
-        training_context = self._build_training_context(patient_id, ordered_dates)
+        training_context = self._build_training_context(patient_id)
         self._log_training_context(training_context)
 
-        split_settings = load_query_settings(
-            self.kg_repository.config_path
-        ).training_date_split
-        if len(ordered_dates) < split_settings.min_training_dates:
-            LOGGER.warning(
-                "Training dates do not meet minimum split requirement: patient_id=%s, training_date_count=%s, min_training_dates=%s",
-                patient_id,
-                len(ordered_dates),
-                split_settings.min_training_dates,
-            )
-            return self._build_pattern_result(
-                training_context=training_context,
-                statistics=None,
-                limit_recommendation=None,
-                paths=[],
-            )
-
-        statistics, active_statistics, split_date = self._load_dated_statistics(
+        statistics, active_statistics = self._load_window_statistics(
             patient_id,
-            ordered_dates,
-            split_settings.before_ratio,
-            split_settings.after_ratio,
+            path_window,
         )
 
         total_paths = int(active_statistics.get("totalPaths", 0))
@@ -512,9 +489,10 @@ class UserService:
                 paths=[],
             )
 
-        paths = self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_end_date(
+        paths = self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range(
             patient_id=patient_id,
-            end_date=split_date,
+            start_date=path_window["start_date"],
+            end_date=path_window["end_date"],
             per_g=recommendation.per_g,
             limit=recommendation.limit,
         )
@@ -573,67 +551,47 @@ class UserService:
             end_date,
         )
 
-    def _load_dated_statistics(
+    def _load_window_statistics(
         self,
         patient_id: str,
-        ordered_dates: list[str],
-        before_ratio: int,
-        after_ratio: int,
-    ) -> tuple[dict[str, Any], dict[str, int], str]:
-        """Load pre-split statistics and post-split game data."""
-        split_date = self._select_training_date_split_point(
-            ordered_dates,
-            before_ratio,
-            after_ratio,
-        )
-
-        LOGGER.info(
-            "Selected training date split point: patient_id=%s, split_training_date=%s, before_ratio=%s, after_ratio=%s",
-            patient_id,
-            split_date,
-            before_ratio,
-            after_ratio,
-        )
-
-        statistics_by_end_date_records = (
-            self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date(
+        path_window: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, int]]:
+        """Load path statistics for the configured left-closed, right-open window."""
+        statistics_records = (
+            self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range(
                 patient_id,
-                split_date,
+                path_window["start_date"],
+                path_window["end_date"],
             )
         )
-        post_split_games = self.kg_repository.get_patient_training_date_games_by_start_date(
-                patient_id,
-                split_date,
-        )
 
-        statistics_by_end_date = self._extract_statistics(statistics_by_end_date_records)
+        window_statistics = self._extract_statistics(statistics_records)
         statistics = {
-            "split_training_date": split_date,
-            "before_split": statistics_by_end_date,
-            "post_split_games": post_split_games,
+            "base_date": path_window["base_date"],
+            "path_window": path_window,
+            "window_statistics": window_statistics,
         }
 
         LOGGER.info(
-            "Loaded dated statistics: patient_id=%s, before_split=%s, post_split_games_size=%s",
+            "Loaded path window statistics: patient_id=%s, path_window=%s, window_statistics=%s",
             patient_id,
-            statistics_by_end_date,
-            len(post_split_games),
+            path_window,
+            window_statistics,
         )
 
-        return statistics, statistics_by_end_date, split_date
+        return statistics, window_statistics
 
     @staticmethod
     def _build_training_context(
         patient_id: str,
-        ordered_dates: list[str],
     ) -> dict[str, Any]:
-        """Build a normalized training context payload."""
+        """Build a normalized context payload for path generation."""
         return {
             "patient_id": patient_id,
-            "ordered_training_dates": ordered_dates,
-            "first_training_date": ordered_dates[0],
-            "last_training_date": ordered_dates[-1],
-            "training_date_count": len(ordered_dates),
+            "ordered_training_dates": [],
+            "first_training_date": None,
+            "last_training_date": None,
+            "training_date_count": 0,
         }
 
     @staticmethod
@@ -662,20 +620,12 @@ class UserService:
             None
             if statistics is None and limit_recommendation is None and not paths
             else {
-                "split_training_date": (
-                    statistics.get("split_training_date")
+                "base_date": statistics.get("base_date") if isinstance(statistics, dict) else None,
+                "path_window": statistics.get("path_window") if isinstance(statistics, dict) else None,
+                "window_statistics": (
+                    statistics.get("window_statistics")
                     if isinstance(statistics, dict)
                     else None
-                ),
-                "before_split": (
-                    statistics.get("before_split")
-                    if isinstance(statistics, dict)
-                    else None
-                ),
-                "post_split_games": (
-                    statistics.get("post_split_games")
-                    if isinstance(statistics, dict)
-                    else []
                 ),
                 "limit_recommendation": limit_recommendation,
                 "paths": paths,
@@ -689,13 +639,10 @@ class UserService:
 
     @staticmethod
     def _log_training_context(training_context: dict[str, Any]) -> None:
-        """Log the basic training context for the patient path flow."""
+        """Log the basic context for the patient path flow."""
         LOGGER.info(
-            "Loaded ordered training dates: patient_id=%s, training_date_count=%s, first_training_date=%s, last_training_date=%s",
+            "Initialized path flow context: patient_id=%s",
             training_context["patient_id"],
-            training_context["training_date_count"],
-            training_context["first_training_date"],
-            training_context["last_training_date"],
         )
 
     @staticmethod
@@ -718,29 +665,41 @@ class UserService:
         if statistics is None:
             return None
 
-        post_split_games = statistics.get("post_split_games")
-        post_split_games_size = (
-            len(post_split_games) if isinstance(post_split_games, list) else None
-        )
         return {
-            "split_training_date": statistics.get("split_training_date"),
-            "before_split": statistics.get("before_split"),
-            "post_split_games_size": post_split_games_size,
+            "base_date": statistics.get("base_date"),
+            "path_window": statistics.get("path_window"),
+            "window_statistics": statistics.get("window_statistics"),
         }
 
     @staticmethod
-    def _select_training_date_split_point(
-        ordered_dates: list[str],
-        before_ratio: int,
-        after_ratio: int,
-    ) -> str:
-        """Select a split point based on the configured before/after ratio."""
-        if not ordered_dates:
-            raise ValueError("ordered_dates must contain at least one date.")
-        if before_ratio <= 0 or after_ratio <= 0:
-            raise ValueError("before_ratio and after_ratio must be positive integers.")
+    def _build_path_window(base_date: str, window_days: int) -> dict[str, Any]:
+        """Build the left-closed, right-open path retrieval window."""
+        parsed_base_date = _parse_date_value(base_date, "base_date")
+        if (
+            not isinstance(window_days, int)
+            or isinstance(window_days, bool)
+            or window_days <= 0
+        ):
+            raise ValueError(f"window_days must be a positive integer, got {window_days}.")
+        start_date = parsed_base_date - timedelta(days=window_days)
+        return {
+            "base_date": parsed_base_date.isoformat(),
+            "start_date": start_date.isoformat(),
+            "end_date": parsed_base_date.isoformat(),
+            "window_days": window_days,
+            "range_semantics": "[start_date, end_date)",
+        }
 
-        total_ratio = before_ratio + after_ratio
-        split_index = ((len(ordered_dates) * before_ratio) + total_ratio - 1) // total_ratio - 1
-        split_index = max(0, min(split_index, len(ordered_dates) - 1))
-        return ordered_dates[split_index]
+
+def _parse_date_value(value: str, field_name: str) -> date:
+    """Parse a user-provided date string into an ISO calendar date."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty date string.")
+    parts = value.strip().split("-")
+    if len(parts) != 3:
+        raise ValueError(f"{field_name} must use YYYY-MM-DD format.")
+    try:
+        year, month, day = (int(part) for part in parts)
+        return date(year, month, day)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid calendar date.") from exc

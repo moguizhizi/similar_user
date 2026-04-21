@@ -334,7 +334,7 @@ def _normalize_retrieval_context(data: dict[str, Any]) -> dict[str, Any] | None:
     """Normalize retrieval_context and keep backward compatibility with old payloads."""
     retrieval_context = data.get("retrieval_context")
     if isinstance(retrieval_context, dict):
-        return {
+        normalized_context = {
             "split_training_date": (
                 str(retrieval_context["split_training_date"])
                 if retrieval_context.get("split_training_date") is not None
@@ -355,6 +355,25 @@ def _normalize_retrieval_context(data: dict[str, Any]) -> dict[str, Any] | None:
             if isinstance(retrieval_context.get("paths"), list)
             else [],
         }
+        if "base_date" in retrieval_context:
+            normalized_context["base_date"] = (
+                str(retrieval_context["base_date"])
+                if retrieval_context.get("base_date") is not None
+                else None
+            )
+        if "path_window" in retrieval_context:
+            normalized_context["path_window"] = (
+                retrieval_context.get("path_window")
+                if isinstance(retrieval_context.get("path_window"), dict)
+                else None
+            )
+        if "window_statistics" in retrieval_context:
+            normalized_context["window_statistics"] = (
+                retrieval_context.get("window_statistics")
+                if isinstance(retrieval_context.get("window_statistics"), dict)
+                else None
+            )
+        return normalized_context
 
     statistics = data.get("statistics")
     limit_recommendation = data.get("limit_recommendation")
@@ -362,7 +381,7 @@ def _normalize_retrieval_context(data: dict[str, Any]) -> dict[str, Any] | None:
     if statistics is None and limit_recommendation is None and not isinstance(paths, list):
         return None
 
-    return {
+    normalized_context = {
         "split_training_date": (
             statistics.get("split_training_date")
             if isinstance(statistics, dict)
@@ -379,6 +398,21 @@ def _normalize_retrieval_context(data: dict[str, Any]) -> dict[str, Any] | None:
         else None,
         "paths": paths if isinstance(paths, list) else [],
     }
+    if isinstance(statistics, dict) and "base_date" in statistics:
+        normalized_context["base_date"] = statistics.get("base_date")
+    if isinstance(statistics, dict) and "path_window" in statistics:
+        normalized_context["path_window"] = (
+            statistics.get("path_window")
+            if isinstance(statistics.get("path_window"), dict)
+            else None
+        )
+    if isinstance(statistics, dict) and "window_statistics" in statistics:
+        normalized_context["window_statistics"] = (
+            statistics.get("window_statistics")
+            if isinstance(statistics.get("window_statistics"), dict)
+            else None
+        )
+    return normalized_context
 
 
 def _optional_string(value: object) -> str | None:

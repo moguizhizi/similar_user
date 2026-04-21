@@ -51,14 +51,15 @@ class SimilarUserCandidateService:
             )
 
         scored_domain_paths = _build_scored_domain_paths(scored_result)
-        split_training_date = _extract_split_training_date(scored_result)
+        score_end_date = _extract_score_end_date(scored_result)
+        path_window = _extract_path_window(scored_result)
         LOGGER.debug(
-            "Aggregating similar-user candidates: patient_id=%s, scored_path_count=%s, path_top_k=%s, candidate_top_k=%s, split_training_date=%s",
+            "Aggregating similar-user candidates: patient_id=%s, scored_path_count=%s, path_top_k=%s, candidate_top_k=%s, score_end_date=%s",
             scored_result.get("patient_id"),
             len(scored_domain_paths),
             path_top_k,
             candidate_top_k,
-            split_training_date,
+            score_end_date,
         )
 
         candidate_buckets: dict[str, dict[str, Any]] = defaultdict(
@@ -100,7 +101,7 @@ class SimilarUserCandidateService:
             candidate_score, score_details = self.calculate_candidate_score(
                 primary_patient_id=scored_result.get("patient_id"),
                 candidate_patient_id=bucket["patient_id"],
-                end_date=split_training_date,
+                end_date=score_end_date,
             )
             bucket["candidate_score"] = candidate_score
             bucket["score_details"] = score_details
@@ -125,16 +126,14 @@ class SimilarUserCandidateService:
             "path_count": scored_result.get("path_count", 0),
             "scored_path_count": scored_result.get("scored_path_count", 0),
             "retrieval_context": {
-                "split_training_date": split_training_date,
-                "candidate_scope": (
-                    "候选相似用户来自训练日期小于等于 "
-                    f"{split_training_date} 的 top-{path_top_k} path 去重结果，"
-                    f"最终返回 top-{candidate_top_k} 候选用户"
-                    if split_training_date is not None
-                    else (
-                        f"候选相似用户来自已保存检索集合的 top-{path_top_k} "
-                        f"path 去重结果，最终返回 top-{candidate_top_k} 候选用户"
-                    )
+                "base_date": _extract_base_date(scored_result),
+                "path_window": path_window,
+                "score_end_date": score_end_date,
+                "candidate_scope": _build_candidate_scope(
+                    path_window,
+                    score_end_date,
+                    path_top_k,
+                    candidate_top_k,
                 ),
             },
             "candidate_count": len(candidates),
@@ -166,7 +165,7 @@ class SimilarUserCandidateService:
             )
             return None, {
                 "common_game_score_correlation": None,
-                "reason": "missing user_service or split_training_date",
+                "reason": "missing user_service or score_end_date",
             }
 
         records = self.user_service.get_patient_game_norm_score_series_comparison_by_end_date(
@@ -321,15 +320,74 @@ def _build_scored_domain_paths(scored_result: dict[str, Any]) -> list[ScoredDoma
     return scored_domain_paths
 
 
-def _extract_split_training_date(scored_result: dict[str, Any]) -> str | None:
-    """Extract split training date from scored-result retrieval context."""
+def _extract_base_date(scored_result: dict[str, Any]) -> str | None:
+    """Extract base date from scored-result retrieval context."""
     retrieval_context = scored_result.get("retrieval_context")
+    if not isinstance(retrieval_context, dict):
+        return None
+    raw_base_date = retrieval_context.get("base_date")
+    if isinstance(raw_base_date, str) and raw_base_date.strip():
+        return raw_base_date.strip()
+    return None
+
+
+def _extract_path_window(scored_result: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract path window from scored-result retrieval context."""
+    retrieval_context = scored_result.get("retrieval_context")
+    if not isinstance(retrieval_context, dict):
+        return None
+    path_window = retrieval_context.get("path_window")
+    return path_window if isinstance(path_window, dict) else None
+
+
+def _extract_score_end_date(scored_result: dict[str, Any]) -> str | None:
+    """Extract the exclusive end date used for candidate scoring."""
+    retrieval_context = scored_result.get("retrieval_context")
+    if isinstance(retrieval_context, dict):
+        raw_score_end_date = retrieval_context.get("score_end_date")
+        if isinstance(raw_score_end_date, str) and raw_score_end_date.strip():
+            return raw_score_end_date.strip()
+
+    path_window = _extract_path_window(scored_result)
+    if isinstance(path_window, dict):
+        raw_end_date = path_window.get("end_date")
+        if isinstance(raw_end_date, str) and raw_end_date.strip():
+            return raw_end_date.strip()
+
     if not isinstance(retrieval_context, dict):
         return None
     raw_split_training_date = retrieval_context.get("split_training_date")
     if isinstance(raw_split_training_date, str) and raw_split_training_date.strip():
         return raw_split_training_date.strip()
     return None
+
+
+def _build_candidate_scope(
+    path_window: dict[str, Any] | None,
+    score_end_date: str | None,
+    path_top_k: int,
+    candidate_top_k: int,
+) -> str:
+    """Build a concise candidate source description."""
+    if isinstance(path_window, dict):
+        start_date = path_window.get("start_date")
+        end_date = path_window.get("end_date")
+        if start_date is not None and end_date is not None:
+            return (
+                "候选相似用户来自训练日期 "
+                f">= {start_date} 且 < {end_date} 的 top-{path_top_k} path 去重结果，"
+                f"最终返回 top-{candidate_top_k} 候选用户"
+            )
+    if score_end_date is not None:
+        return (
+            "候选相似用户来自训练日期 "
+            f"< {score_end_date} 的 top-{path_top_k} path 去重结果，"
+            f"最终返回 top-{candidate_top_k} 候选用户"
+        )
+    return (
+        f"候选相似用户来自已保存检索集合的 top-{path_top_k} "
+        f"path 去重结果，最终返回 top-{candidate_top_k} 候选用户"
+    )
 
 
 def _coerce_supported_candidate_pattern(value: object) -> PathPattern:

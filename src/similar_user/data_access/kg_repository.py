@@ -54,6 +54,7 @@ from .cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
 )
 from .neo4j_client import Neo4jClient
 
@@ -868,6 +869,36 @@ class KgRepository:
             query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
             parameters={
                 "patient_id": normalized_patient_id,
+                "end_date": normalized_end_date,
+                "per_g": per_g,
+                "limit": limit,
+            },
+        )
+
+    def get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+        per_g: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return randomized fixed-pattern rows constrained to a date range."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+        if not isinstance(per_g, int) or isinstance(per_g, bool) or per_g <= 0:
+            raise ValueError("per_g must be a positive integer.")
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+            raise ValueError("limit must be a positive integer.")
+
+        return self.client.run_query(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
                 "end_date": normalized_end_date,
                 "per_g": per_g,
                 "limit": limit,

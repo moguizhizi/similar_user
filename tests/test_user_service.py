@@ -781,66 +781,39 @@ class UserServiceTest(unittest.TestCase):
                 )
                 getattr(mock_repository, method_name).assert_called_once_with(*args)
 
-    @patch("src.similar_user.services.user_service.LOGGER")
-    def test_get_patient_pattern_paths_returns_empty_payload_when_no_training_dates(
-        self,
-        mock_logger: Mock,
-    ) -> None:
-        mock_repository = Mock()
-        mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = []
-        service = UserService(kg_repository=mock_repository)
-
-        result = service.get_patient_pattern_paths("30010096")
-
-        self.assertEqual(
-            result,
-            {
-                "patient_id": "30010096",
-                "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-                "ordered_training_dates": [],
-                "first_training_date": None,
-                "last_training_date": None,
-                "training_date_count": 0,
-                "retrieval_context": None,
-            },
-        )
-        mock_logger.info.assert_called()
-
     def test_get_patient_pattern_paths_returns_statistics_only_when_no_paths(
         self,
     ) -> None:
         mock_repository = Mock()
         mock_repository.config_path = "config/settings.yaml"
-        mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
-            {"orderedDatesa": ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]}
-        ]
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.return_value = [
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range.return_value = [
             {"totalPaths": 0, "gCount": 0, "p2Count": 0}
-        ]
-        mock_repository.get_patient_training_date_games_by_start_date.return_value = [
-            {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
-            {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 4
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_end_date.return_value = []
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range.return_value = []
         service = UserService(kg_repository=mock_repository)
 
-        result = service.get_patient_pattern_paths("30010096")
-
-        self.assertEqual(
-            result["ordered_training_dates"],
-            ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"],
+        result = service.get_patient_pattern_paths(
+            "30010096",
+            base_date="2022-01-17",
+            window_days=14,
         )
+
+        path_window = {
+            "base_date": "2022-01-17",
+            "start_date": "2022-01-03",
+            "end_date": "2022-01-17",
+            "window_days": 14,
+            "range_semantics": "[start_date, end_date)",
+        }
+        self.assertEqual(result["ordered_training_dates"], [])
         self.assertEqual(
             result["retrieval_context"],
             {
-                "split_training_date": "2022-01-13",
-                "before_split": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
-                "post_split_games": [
-                    {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
-                    {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
-                ],
+                "base_date": "2022-01-17",
+                "path_window": path_window,
+                "window_statistics": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
                 "limit_recommendation": None,
                 "paths": [],
             },
@@ -850,32 +823,22 @@ class UserServiceTest(unittest.TestCase):
             PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         )
         mock_repository.recommend_graph_path_limit.assert_not_called()
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_end_date.assert_not_called()
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.assert_called_once_with(
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range.assert_not_called()
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range.assert_called_once_with(
             "30010096",
-            "2022-01-13",
-        )
-        mock_repository.get_patient_training_date_games_by_start_date.assert_called_once_with(
-            "30010096",
-            "2022-01-13",
+            "2022-01-03",
+            "2022-01-17",
         )
 
     def test_get_patient_pattern_paths_returns_paths_with_recommendation(self) -> None:
         mock_repository = Mock()
         mock_repository.config_path = "config/settings.yaml"
-        mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
-            {"orderedDatesa": ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"]}
-        ]
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.return_value = [
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range.return_value = [
             {"totalPaths": 20, "gCount": 5, "p2Count": 6}
-        ]
-        mock_repository.get_patient_training_date_games_by_start_date.return_value = [
-            {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
-            {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 5
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_end_date.return_value = [
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range.return_value = [
             {
                 "row": {
                     "p": {"id": "30010096"},
@@ -890,24 +853,32 @@ class UserServiceTest(unittest.TestCase):
         ]
         service = UserService(kg_repository=mock_repository)
 
-        result = service.get_patient_pattern_paths("30010096")
+        result = service.get_patient_pattern_paths(
+            "30010096",
+            base_date="2022-01-17",
+            window_days=14,
+        )
 
-        self.assertEqual(result["first_training_date"], "2022-01-01")
-        self.assertEqual(result["last_training_date"], "2022-01-17")
-        self.assertEqual(result["training_date_count"], 5)
+        self.assertEqual(result["first_training_date"], None)
+        self.assertEqual(result["last_training_date"], None)
+        self.assertEqual(result["training_date_count"], 0)
         self.assertEqual(
             result["pattern"],
             PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         )
+        path_window = {
+            "base_date": "2022-01-17",
+            "start_date": "2022-01-03",
+            "end_date": "2022-01-17",
+            "window_days": 14,
+            "range_semantics": "[start_date, end_date)",
+        }
         self.assertEqual(
             result["retrieval_context"],
             {
-                "split_training_date": "2022-01-13",
-                "before_split": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
-                "post_split_games": [
-                    {"trainingDate": "2022-01-13", "games": [{"id": "42"}]},
-                    {"trainingDate": "2022-01-17", "games": [{"id": "84"}]},
-                ],
+                "base_date": "2022-01-17",
+                "path_window": path_window,
+                "window_statistics": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
                 "limit_recommendation": {"per_g": 5, "limit": 10},
                 "paths": [
                     {
@@ -929,46 +900,25 @@ class UserServiceTest(unittest.TestCase):
             g_count=5,
             p2_count=6,
         )
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_end_date.assert_called_once_with(
+        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range.assert_called_once_with(
             patient_id="30010096",
-            end_date="2022-01-13",
+            start_date="2022-01-03",
+            end_date="2022-01-17",
             per_g=5,
             limit=10,
         )
 
-    def test_get_patient_pattern_paths_returns_early_when_training_dates_are_below_configured_minimum(
-        self,
-    ) -> None:
-        mock_repository = Mock()
-        mock_repository.config_path = "config/settings.yaml"
-        mock_repository.get_patient_task_instance_set_ordered_training_dates.return_value = [
-            {"orderedDatesa": ["2022-01-01", "2022-01-13", "2022-01-21", "2022-01-30"]}
-        ]
-        service = UserService(kg_repository=mock_repository)
-
-        result = service.get_patient_pattern_paths("30010096")
-
-        self.assertEqual(result["ordered_training_dates"], ["2022-01-01", "2022-01-13", "2022-01-21", "2022-01-30"])
-        self.assertEqual(
-            result["pattern"],
-            PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        )
-        self.assertEqual(result["retrieval_context"], None)
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date.assert_not_called()
-        mock_repository.get_patient_training_date_games_by_start_date.assert_not_called()
-
-    def test_select_training_date_split_point_uses_approximately_four_to_one_ratio(
+    def test_get_patient_pattern_paths_rejects_invalid_window(
         self,
     ) -> None:
         service = UserService(kg_repository=Mock())
 
-        result = service._select_training_date_split_point(
-            ["2022-01-01", "2022-01-05", "2022-01-09", "2022-01-13", "2022-01-17"],
-            4,
-            1,
-        )
-
-        self.assertEqual(result, "2022-01-13")
+        with self.assertRaises(ValueError):
+            service.get_patient_pattern_paths(
+                "30010096",
+                base_date="2022-01-17",
+                window_days=0,
+            )
 
     def test_get_patient_ordered_training_dates_returns_dates_only(self) -> None:
         mock_repository = Mock()

@@ -41,15 +41,6 @@ class GraphPathLimitSettings:
 
 
 @dataclass(frozen=True)
-class TrainingDateSplitSettings:
-    """Configuration for splitting ordered training dates into two segments."""
-
-    min_training_dates: int = 5
-    before_ratio: int = 4
-    after_ratio: int = 1
-
-
-@dataclass(frozen=True)
 class PatternPathStorageSettings:
     """Configuration for offline pattern path result storage."""
 
@@ -81,7 +72,6 @@ class QuerySettings:
     """Query-related tuning settings."""
 
     graph_path_limit: GraphPathLimitSettings
-    training_date_split: TrainingDateSplitSettings
     pattern_path_storage: PatternPathStorageSettings
     candidate_ranking: CandidateRankingSettings
 
@@ -182,7 +172,6 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     data = _extract_config_section(load_yaml_config(config_path), "query")
 
     graph_path_limit_data = data.get("graph_path_limit") or {}
-    training_date_split_data = data.get("training_date_split") or {}
     pattern_path_storage_data = data.get("pattern_path_storage") or {}
     candidate_ranking_data = data.get("candidate_ranking") or {}
     bands_data = graph_path_limit_data.get("bands") or []
@@ -209,20 +198,6 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     if not bands:
         raise ValueError("graph_path_limit must define at least one band.")
 
-    min_training_dates = training_date_split_data.get("min_training_dates", 5)
-    before_ratio = training_date_split_data.get("before_ratio", 4)
-    after_ratio = training_date_split_data.get("after_ratio", 1)
-
-    for field_name, value in (
-        ("min_training_dates", min_training_dates),
-        ("before_ratio", before_ratio),
-        ("after_ratio", after_ratio),
-    ):
-        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-            raise ValueError(
-                f"training_date_split {field_name} must be a positive integer."
-            )
-
     output_dir = pattern_path_storage_data.get("output_dir", "data/pattern_paths")
     if not isinstance(output_dir, str) or not output_dir.strip():
         raise ValueError("pattern_path_storage output_dir must be a non-empty string.")
@@ -245,11 +220,6 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             max_limit_source=str(
                 graph_path_limit_data.get("max_limit_source", "total_paths")
             ),
-        ),
-        training_date_split=TrainingDateSplitSettings(
-            min_training_dates=min_training_dates,
-            before_ratio=before_ratio,
-            after_ratio=after_ratio,
         ),
         pattern_path_storage=PatternPathStorageSettings(output_dir=output_dir.strip()),
         candidate_ranking=CandidateRankingSettings(
