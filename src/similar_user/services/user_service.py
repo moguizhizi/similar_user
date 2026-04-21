@@ -20,6 +20,10 @@ class UserService:
 
     kg_repository: KgRepository
 
+    def get_distinct_training_games(self) -> list[dict[str, object]]:
+        """Return distinct games that appear in training records."""
+        return self.kg_repository.get_distinct_training_games()
+
     def get_patient_training_date_games_by_start_date(
         self,
         patient_id: str,

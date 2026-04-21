@@ -90,15 +90,19 @@ class TrainingTaskPredictionService:
             excluded_game_ids=repeated_target_game_ids,
         )
 
-        candidate_tasks = build_candidate_training_tasks(
-            candidates,
-            similar_user_histories,
-            top_k=max(task_top_k * 3, task_top_k),
+        candidate_tasks = build_candidate_training_tasks_from_distinct_games(
+            self.user_service.get_distinct_training_games()
         )
+
+        print(candidate_tasks)
+
+        exit(0)
+
         rule_based_tasks = build_rule_based_predictions(
             candidate_tasks,
             top_k=task_top_k,
         )
+        
         prompt = build_task_prediction_prompt(
             patient_id=resolved_patient_id,
             similar_user_game_counts=similar_user_game_counts,
@@ -353,6 +357,27 @@ def build_candidate_training_tasks(
     for task in tasks:
         task["weighted_score"] = round(float(task["weighted_score"]), 4)
     return tasks
+
+
+def build_candidate_training_tasks_from_distinct_games(
+    game_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build the full candidate task pool from distinct training games."""
+    tasks: list[dict[str, Any]] = []
+    seen_game_ids: set[str] = set()
+    for row in game_rows:
+        game = _normalize_node(row.get("g"))
+        game_id = _normalize_text(game.get("id")) or _normalize_text(game.get("name"))
+        if game_id is None or game_id in seen_game_ids:
+            continue
+        tasks.append(
+            {
+                "game_id": game_id,
+                "game_name": _normalize_text(game.get("name")),
+            }
+        )
+        seen_game_ids.add(game_id)
+    return sorted(tasks, key=lambda item: str(item["game_id"]))
 
 
 def build_similar_user_game_counts(
