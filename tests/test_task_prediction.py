@@ -12,6 +12,7 @@ from src.similar_user.services.task_prediction import (
     build_candidate_task_window,
     build_candidate_training_tasks,
     build_rule_based_predictions,
+    build_similar_user_game_counts,
     build_target_task_window,
     extract_similar_user_candidates,
     parse_json_object_from_text,
@@ -180,6 +181,30 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertEqual(tasks[0]["weighted_score"], 4.0)
         self.assertEqual(tasks[0]["supporting_candidate_ids"], ["201"])
 
+    def test_build_similar_user_game_counts_returns_simple_task_counts(self) -> None:
+        game_counts = build_similar_user_game_counts(
+            [
+                SimilarUserCandidate("201", 2.0),
+                SimilarUserCandidate("202", 1.0),
+            ],
+            {
+                "201": [
+                    {"g": {"id": "1", "name": "任务A", "任务类型": "类型A"}},
+                    {"g": {"id": "1", "name": "任务A", "任务类型": "类型A"}},
+                ],
+                "202": [
+                    {"g": {"id": "1", "name": "任务A", "任务类型": "类型A"}},
+                    {"g": {"id": "2", "name": "任务B", "任务类型": "类型B"}},
+                ],
+            },
+        )
+
+        self.assertEqual(game_counts[0]["game_id"], "1")
+        self.assertEqual(game_counts[0]["game_name"], "任务A")
+        self.assertEqual(game_counts[0]["count"], 3)
+        self.assertEqual(game_counts[1]["game_id"], "2")
+        self.assertEqual(game_counts[1]["count"], 1)
+
     def test_build_rule_based_predictions_returns_ranked_tasks(self) -> None:
         predictions = build_rule_based_predictions(
             [
@@ -221,6 +246,21 @@ class TaskPredictionTest(unittest.TestCase):
 
         self.assertEqual(result["patient_id"], "40")
         self.assertEqual(result["candidate_source"]["candidate_ids"], ["201", "202"])
+        self.assertEqual(
+            result["similar_user_game_counts"],
+            [
+                {
+                    "game_id": "1",
+                    "game_name": "任务A",
+                    "count": 1,
+                },
+                {
+                    "game_id": "2",
+                    "game_name": "任务B",
+                    "count": 1,
+                },
+            ],
+        )
         self.assertEqual(
             result["candidate_source"]["candidate_task_window"],
             {
