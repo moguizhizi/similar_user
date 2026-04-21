@@ -8,10 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.build_similar_user_candidates import (
-    build_similar_user_candidates,
-    main,
-)
+from scripts.build_similar_user_candidates import build_similar_user_candidates, main
 from scripts.run_similar_user_pipeline import (
     main as pipeline_main,
     run_similar_user_pipeline,
@@ -140,7 +137,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             candidate_top_k=3,
         )
 
-        self.assertEqual(result["retrieval_context"]["split_training_date"], "2022-01-13")
+        self.assertEqual(result["retrieval_context"]["score_end_date"], "2022-01-13")
         self.assertEqual(result["candidate_count"], 2)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
         self.assertEqual(result["candidates"][0]["candidate_score"], 2.232)
@@ -351,7 +348,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             candidate_top_k=2,
         )
 
-        self.assertEqual(result["retrieval_context"]["split_training_date"], None)
+        self.assertEqual(result["retrieval_context"]["score_end_date"], None)
         self.assertEqual(result["candidate_count"], 1)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
 
@@ -483,7 +480,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 candidates = build_similar_user_candidates("30010096")
 
         self.assertEqual(candidates["candidate_count"], 2)
-        self.assertEqual(candidates["retrieval_context"]["split_training_date"], "2022-01-13")
+        self.assertEqual(candidates["retrieval_context"]["score_end_date"], "2022-01-13")
         self.assertEqual(candidates["candidates"][0]["patient_id"], "20113562")
         self.assertEqual(candidates["candidates"][0]["match_count"], 2)
         self.assertEqual(candidates["candidates"][1]["patient_id"], "20113563")
@@ -539,7 +536,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ) as mock_from_config, patch(
                 "scripts.build_similar_user_candidates.UserService",
             ) as mock_user_service_cls, patch(
-                "scripts.build_similar_user_candidates.score_patient_pattern_result",
+                "scripts.build_similar_user_candidates.score_patient_pattern_paths",
                 return_value=scored_result,
             ) as mock_score:
                 mock_client_context = Mock()
@@ -625,9 +622,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         path_result = {
             "patient_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            "training_date_count": 5,
             "retrieval_context": {
-                "split_training_date": "2022-01-13",
+                "path_window": {
+                    "base_date": "2022-01-17",
+                    "start_date": "2022-01-03",
+                    "end_date": "2022-01-17",
+                    "window_days": 14,
+                    "range_semantics": "[start_date, end_date)",
+                },
                 "paths": [{"row": {}}],
             },
         }
@@ -641,6 +643,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         result = run_similar_user_pipeline(
             "30010096",
+            base_date="2022-01-17",
+            window_days=14,
             config_path="config/custom.yaml",
         )
 
@@ -649,8 +653,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             {
                 "patient_id": "30010096",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                "training_date_count": 5,
-                "split_training_date": "2022-01-13",
+                "path_window": {
+                    "base_date": "2022-01-17",
+                    "start_date": "2022-01-03",
+                    "end_date": "2022-01-17",
+                    "window_days": 14,
+                    "range_semantics": "[start_date, end_date)",
+                },
                 "path_count": 1,
             },
         )
@@ -660,6 +669,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_run_path_flow.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
+            base_date="2022-01-17",
+            window_days=14,
         )
         mock_build_candidates.assert_called_once_with(
             "30010096",
@@ -683,6 +694,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         result = run_similar_user_pipeline(
             "30010096",
+            base_date="2022-01-17",
+            window_days=14,
             config_path="config/custom.yaml",
             skip_path_build=True,
         )
@@ -740,6 +753,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            base_date="2022-05-22",
+            window_days=14,
             output_level="ids",
         )
         mock_run_pipeline.return_value = expected
@@ -752,6 +767,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config_path="config/settings.yaml",
             skip_path_build=False,
+            base_date="2022-05-22",
+            window_days=14,
         )
         mock_logger.info.assert_called_once_with(
             json.dumps(
@@ -780,6 +797,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            base_date="2022-05-22",
+            window_days=14,
             output_level="full",
         )
         mock_run_pipeline.return_value = expected
@@ -814,6 +833,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            base_date="2022-05-22",
+            window_days=14,
             output_level="scores",
         )
         mock_run_pipeline.return_value = expected
@@ -836,10 +857,17 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "config_path": "config/settings.yaml",
             "skip_path_build": False,
+            "base_date": "2022-05-22",
+            "window_days": 14,
             "elapsed_seconds": 2.345,
             "path_generation": {
-                "training_date_count": 8,
-                "split_training_date": "2022-05-22",
+                "path_window": {
+                    "base_date": "2022-05-22",
+                    "start_date": "2022-05-08",
+                    "end_date": "2022-05-22",
+                    "window_days": 14,
+                    "range_semantics": "[start_date, end_date)",
+                },
                 "path_count": 230,
             },
             "candidate_result": {
@@ -850,7 +878,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "path_count": 230,
                 "scored_path_count": 50,
                 "retrieval_context": {
-                    "split_training_date": "2022-05-22",
+                    "path_window": {
+                        "base_date": "2022-05-22",
+                        "start_date": "2022-05-08",
+                        "end_date": "2022-05-22",
+                        "window_days": 14,
+                        "range_semantics": "[start_date, end_date)",
+                    },
                     "candidate_scope": "long text",
                 },
                 "candidate_count": 1,
@@ -880,7 +914,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "candidate_top_k": 10,
                 "path_count": 230,
                 "scored_path_count": 50,
-                "split_training_date": "2022-05-22",
+                "path_window": {
+                    "base_date": "2022-05-22",
+                    "start_date": "2022-05-08",
+                    "end_date": "2022-05-22",
+                    "window_days": 14,
+                    "range_semantics": "[start_date, end_date)",
+                },
                 "candidate_count": 1,
                 "candidate_ids": ["20113562"],
             },

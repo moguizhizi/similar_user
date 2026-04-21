@@ -1,4 +1,18 @@
-"""Predict training tasks from run_similar_user_pipeline.py output."""
+"""Predict training tasks from similar-user pipeline output.
+
+这个脚本处在相似用户候选生成之后：
+
+1. 读取 `scripts/run_similar_user_pipeline.py` 的 JSON 输出，输入可以来自文件或 stdin。
+2. 根据目标患者、候选相似用户和 `base_date` 前两天的训练任务上下文，构建训练任务推荐输入。
+3. 默认调用配置中的 LLM 生成预测结果；使用 `--dry-run` 时跳过 LLM，返回确定性的候选任务结果。
+4. 最后按 `--output-level` 输出任务 ID、任务分数或完整预测结果。
+
+它不会重新生成 path，也不会重新聚合候选相似用户；这些输入应由上游 pipeline 提供。
+
+常用执行方式：
+
+    python scripts/predict_training_tasks.py --similar-users-file result.json --base-date 2022-05-22
+"""
 
 from __future__ import annotations
 
@@ -26,7 +40,7 @@ from similar_user.services.task_prediction import (
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 
-from scripts.score_patient_pattern_result import DEFAULT_CONFIG_PATH
+from scripts.score_patient_pattern_paths import DEFAULT_CONFIG_PATH
 
 
 LOGGER = get_logger(__name__)

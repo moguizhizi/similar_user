@@ -9,8 +9,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from config.settings import load_neo4j_settings
-from scripts.debug_patient_pattern_paths import main as patient_path_main
-from scripts.debug_patient_pattern_paths import run_patient_pattern_path_flow
+from scripts.build_patient_pattern_paths import main as patient_path_main
+from scripts.build_patient_pattern_paths import run_patient_pattern_path_flow
 from scripts.debug_query import main, run_debug_query
 from src.similar_user.data_access.neo4j_client import Neo4jClient
 
@@ -123,9 +123,9 @@ class DebugQueryScriptTest(unittest.TestCase):
 
 
 class DebugPatientPatternPathsScriptTest(unittest.TestCase):
-    @patch("scripts.debug_patient_pattern_paths.LOGGER")
-    @patch("scripts.debug_patient_pattern_paths.save_pattern_result")
-    @patch("scripts.debug_patient_pattern_paths.Neo4jClient.from_config")
+    @patch("scripts.build_patient_pattern_paths.LOGGER")
+    @patch("scripts.build_patient_pattern_paths.save_pattern_result")
+    @patch("scripts.build_patient_pattern_paths.Neo4jClient.from_config")
     def test_run_patient_pattern_path_flow_returns_service_result(
         self,
         mock_from_config: Mock,
@@ -147,13 +147,17 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         )
 
         with patch(
-            "scripts.debug_patient_pattern_paths.KgRepository",
+                "scripts.build_patient_pattern_paths.KgRepository",
             return_value=mock_repository,
         ) as mock_repository_cls, patch(
-            "scripts.debug_patient_pattern_paths.UserService",
+                "scripts.build_patient_pattern_paths.UserService",
             return_value=mock_service,
         ) as mock_service_cls:
-            result = run_patient_pattern_path_flow("30010096")
+            result = run_patient_pattern_path_flow(
+                "30010096",
+                base_date="2022-05-22",
+                window_days=14,
+            )
 
         self.assertEqual(
             result,
@@ -168,7 +172,11 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
             config_path=Path("config/settings.yaml"),
         )
         mock_service_cls.assert_called_once_with(kg_repository=mock_repository)
-        mock_service.get_patient_pattern_paths.assert_called_once_with("30010096")
+        mock_service.get_patient_pattern_paths.assert_called_once_with(
+            "30010096",
+            base_date="2022-05-22",
+            window_days=14,
+        )
         mock_save_pattern_result.assert_called_once_with(
             {
                 "patient_id": "30010096",
@@ -179,9 +187,9 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         )
         mock_logger.info.assert_called()
 
-    @patch("scripts.debug_patient_pattern_paths.LOGGER")
-    @patch("scripts.debug_patient_pattern_paths.run_patient_pattern_path_flow")
-    @patch("scripts.debug_patient_pattern_paths.parse_args")
+    @patch("scripts.build_patient_pattern_paths.LOGGER")
+    @patch("scripts.build_patient_pattern_paths.run_patient_pattern_path_flow")
+    @patch("scripts.build_patient_pattern_paths.parse_args")
     def test_main_returns_zero_on_success_without_logging_error(
         self,
         mock_parse_args: Mock,
@@ -191,7 +199,8 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         mock_parse_args.return_value = Mock(
             patient_id="30010096",
             config="config/settings.yaml",
-            undated=False,
+            base_date="2022-05-22",
+            window_days=14,
         )
         mock_run_flow.return_value = {
             "patient_id": "30010096",
