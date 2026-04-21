@@ -23,6 +23,7 @@
 - 函数和模块职责尽量单一。
 - 只在必要处添加简短注释，说明为什么这样做，而不是重复代码表面含义。
 - 不要把临时实验性质或一次性调试逻辑直接混入正式代码，除非任务明确要求。
+- 脚本或模块改名时，需要同步更新对应的文件头注释、CLI 描述、README 文件说明以及引用处的说明文字，避免名称和职责描述不一致。
 - 修改 `src/similar_user/data_access/cypher_queries/*.py` 中的 `*_QUERY` 时，需要同步更新 `src/similar_user/data_access/cypher_queries/README.md` 查询目录。
 
 ## 测试与验证约定

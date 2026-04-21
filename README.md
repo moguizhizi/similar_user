@@ -17,11 +17,11 @@ similar_user/
 │   └── similar_user.log        # 默认日志文件
 ├── scripts/
 │   ├── build_similar_user_candidates.py  # 从 top-k 评分路径构建 top-k 候选相似用户
-│   ├── debug_patient_pattern_paths.py    # 调试固定模式路径查询
+│   ├── build_patient_pattern_paths.py    # 构建并保存固定模式路径
 │   ├── debug_query.py                    # 直接连接 Neo4j 并执行验证查询
 │   ├── read_patient_pattern_result.py    # 读取本地离线保存的路径结果
 │   ├── run_api.py                        # 启动本地 HTTP 调试服务
-│   └── score_patient_pattern_result.py   # 对离线保存的路径结果打分
+│   └── score_patient_pattern_paths.py    # 对离线保存的 pattern paths 打分
 ├── src/similar_user/
 │   ├── api/
 │   │   ├── app.py              # 最小 HTTP 服务，提供 /health/neo4j 和 /query
@@ -77,7 +77,7 @@ similar_user/
   用于直接验证 `config/settings.yaml` 中的 Neo4j 连接是否可用。
 - `python scripts/run_api.py --host 127.0.0.1 --port 8010`
   启动本地 HTTP 服务。
-- `python scripts/run_similar_user_pipeline.py <patient_id>`
+- `python scripts/run_similar_user_pipeline.py <patient_id> --base-date <YYYY-MM-DD> --window-days <days>`
   一键执行固定模式 path 检索保存、path 打分和候选相似用户聚合排序。
 - `python scripts/build_similar_user_candidates.py <patient_id>`
   按 `config/settings.yaml` 中的 `query.candidate_ranking.path_top_k` 先保留高分 path 作为证据来源，再按 `query.candidate_ranking.candidate_top_k` 返回排序后的候选相似用户。
@@ -95,21 +95,21 @@ similar_user/
 python scripts/debug_query.py
 
 # 从 path 生成到候选用户生成的一键主流程
-python scripts/run_similar_user_pipeline.py <patient_id>
-python scripts/run_similar_user_pipeline.py <patient_id> --config config/settings.yaml
-python scripts/run_similar_user_pipeline.py <patient_id> --skip-path-build
-python scripts/run_similar_user_pipeline.py <patient_id> --output-level scores
-python scripts/run_similar_user_pipeline.py <patient_id> --output-level full
+python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --window-days 14
+python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --window-days 14 --config config/settings.yaml
+python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --window-days 14 --skip-path-build
+python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --window-days 14 --output-level scores
+python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --window-days 14 --output-level full
 
 # 运行固定模式路径检索并保存离线结果
-python scripts/debug_patient_pattern_paths.py <patient_id>
-python scripts/debug_patient_pattern_paths.py <patient_id> --config config/settings.yaml
+python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-22 --window-days 14
+python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-22 --window-days 14 --config config/settings.yaml
 
 # 对已保存的固定模式路径打分
-python scripts/score_patient_pattern_result.py <patient_id>
-python scripts/score_patient_pattern_result.py <patient_id> --config config/settings.yaml
-python scripts/score_patient_pattern_result.py <patient_id> --path-index 0
-python scripts/score_patient_pattern_result.py <patient_id> --top-k 20
+python scripts/score_patient_pattern_paths.py <patient_id>
+python scripts/score_patient_pattern_paths.py <patient_id> --config config/settings.yaml
+python scripts/score_patient_pattern_paths.py <patient_id> --path-index 0
+python scripts/score_patient_pattern_paths.py <patient_id> --top-k 20
 
 # 读取已保存的固定模式路径结果
 python scripts/read_patient_pattern_result.py <patient_id>
@@ -187,24 +187,16 @@ query:
 输入 patient_id
   |
   v
-调用 get_patient_ordered_training_dates(patient_id)
+外部输入 base_date / window_days
   |
   v
-是否拿到训练日期?
-  | \
-  |  \ 否
-  |   v
-  |  返回空结果
-  |
-  v 是
-构建训练日期上下文
-  - ordered_training_dates
-  - first_training_date
-  - last_training_date
-  - training_date_count
+构建 path_window
+  - start_date = base_date - window_days
+  - end_date = base_date
+  - 语义: [start_date, end_date)
   |
   v
-按训练日期切分并调用统计查询
+按 path_window 调用统计查询
   |
   v
 拿到 total_paths / g_count / p2_count
@@ -231,7 +223,7 @@ limit <= 0 ?
   |
   v 否
 调用路径查询
-  - get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_end_date(...)
+  - get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range(...)
   |
   v
 拿到 paths
@@ -239,13 +231,12 @@ limit <= 0 ?
   v
 组装结果
   - patient_id
-  - ordered_training_dates
-  - statistics
-    - split_training_date
-    - before_split
-    - post_split_games
-  - limit_recommendation
-  - paths
+  - retrieval_context
+    - base_date
+    - path_window
+    - window_statistics
+    - limit_recommendation
+    - paths
   |
   v
 返回结果
@@ -275,35 +266,43 @@ data/
 {
   "patient_id": "40",
   "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-  "ordered_training_dates": ["2022-04-01", "2022-04-08", "2022-04-15", "2022-04-22", "2022-04-29"],
-  "statistics": {
-    "split_training_date": "2022-04-22",
-    "before_split": {
+  "ordered_training_dates": [],
+  "first_training_date": null,
+  "last_training_date": null,
+  "training_date_count": 0,
+  "retrieval_context": {
+    "base_date": "2022-05-22",
+    "path_window": {
+      "base_date": "2022-05-22",
+      "start_date": "2022-05-08",
+      "end_date": "2022-05-22",
+      "window_days": 14,
+      "range_semantics": "[start_date, end_date)"
+    },
+    "window_statistics": {
       "totalPaths": 20,
       "gCount": 5,
       "p2Count": 6
     },
-    "post_split_games": [
-      {"trainingDate": "2022-04-22", "games": [{"id": "8", "name": "打怪物"}]},
-      {"trainingDate": "2022-04-29", "games": [{"id": "15", "name": "拼图"}]}
+    "limit_recommendation": {"per_g": 5, "limit": 10},
+    "paths": [
+      {
+        "row": {
+          "p": {"id": "40", "name": "患者_40", "性别": "女"},
+          "s1": {"id": "40_20220516", "name": "事件_40_20220516", "训练日期": "2022-05-16", "执行年龄": "15.0", "执行学历": "小学6年级"},
+          "i1": {"id": "40_20220516_8_x", "name": "任务_x"},
+          "g": {"id": "8", "name": "打怪物"},
+          "i2": {"id": "20102799_20220510_8_y", "name": "任务_y"},
+          "s2": {"id": "20102799_20220510", "name": "事件_20102799_20220510", "训练日期": "2022-05-10", "执行年龄": "89.0", "执行学历": "初中"},
+          "p2": {"id": "20102799", "name": "患者_20102799", "性别": "女"}
+        }
+      }
     ]
-  },
-  "limit_recommendation": {"per_g": 5, "limit": 10},
-  "paths": [
-    {
-      "p": {"id": "40", "name": "患者_40", "性别": "女"},
-      "s1": {"id": "40_20220401", "name": "事件_40_20220401", "训练日期": "2022-04-01", "执行年龄": "15.0", "执行学历": "小学6年级"},
-      "i1": {"id": "40_20220401_8_x", "name": "任务_x"},
-      "g": {"id": "8", "name": "打怪物"},
-      "i2": {"id": "20102799_20230123_8_y", "name": "任务_y"},
-      "s2": {"id": "20102799_20230123", "name": "事件_20102799_20230123", "训练日期": "2023-01-23", "执行年龄": "89.0", "执行学历": "初中"},
-      "p2": {"id": "20102799", "name": "患者_20102799", "性别": "女"}
-    }
-  ]
+  }
 }
 ```
 
-其中 `statistics.post_split_games` 表示从切分点开始收集到的后半段游戏数据，用于表达切分后的观察窗口；它不是严格不重叠意义上的“验证集”。
+其中 `retrieval_context.path_window` 是 path 生成的唯一时间范围来源，使用左闭右开语义：`start_date <= 训练日期 < end_date`。
 
 这样设计的原因是：
 
