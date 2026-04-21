@@ -47,6 +47,7 @@ class TrainingTaskPredictionService:
         pipeline_result: dict[str, Any],
         *,
         base_date: str,
+        window_days: int,
         task_top_k: int = DEFAULT_TASK_TOP_K,
         use_llm: bool = True,
         include_prompt: bool = False,
@@ -54,6 +55,7 @@ class TrainingTaskPredictionService:
         """Predict next training tasks from a similar-user pipeline result."""
         resolved_patient_id = self._resolve_patient_id(pipeline_result)
         target_task_window = build_target_task_window(base_date)
+        candidate_task_window = build_candidate_task_window(base_date, window_days)
         candidates = extract_similar_user_candidates(pipeline_result)
         if not candidates:
             raise ValueError("similar user pipeline output does not contain candidates.")
@@ -64,8 +66,10 @@ class TrainingTaskPredictionService:
             target_task_window["end_date"],
         )
         similar_user_histories = {
-            candidate.patient_id: self.user_service.get_patient_training_task_history(
-                candidate.patient_id
+            candidate.patient_id: self.user_service.get_patient_training_task_history_by_date_window(
+                candidate.patient_id,
+                candidate_task_window["start_date"],
+                candidate_task_window["end_date"],
             )
             for candidate in candidates
         }
@@ -80,6 +84,7 @@ class TrainingTaskPredictionService:
                 **summarize_training_history(
                     candidate.patient_id,
                     similar_user_histories[candidate.patient_id],
+                    task_window=candidate_task_window,
                 ),
                 "candidate_score": candidate.candidate_score,
             }
@@ -123,6 +128,7 @@ class TrainingTaskPredictionService:
                 "has_candidate_scores": any(
                     candidate.candidate_score is not None for candidate in candidates
                 ),
+                "candidate_task_window": candidate_task_window,
             },
             "target_history_summary": target_summary,
             "similar_user_summaries": similar_summaries,
@@ -205,6 +211,26 @@ def build_target_task_window(base_date: str) -> dict[str, Any]:
         "base_date": parsed_base_date.isoformat(),
         "start_date": start_date.isoformat(),
         "end_date": parsed_base_date.isoformat(),
+        "includes_base_date": False,
+        "range_semantics": "[start_date, end_date)",
+    }
+
+
+def build_candidate_task_window(base_date: str, window_days: int) -> dict[str, Any]:
+    """Build the candidate task window: [base_date - window_days, base_date)."""
+    parsed_base_date = parse_date_value(base_date, "base_date")
+    if (
+        not isinstance(window_days, int)
+        or isinstance(window_days, bool)
+        or window_days <= 0
+    ):
+        raise ValueError(f"window_days must be a positive integer, got {window_days}.")
+    start_date = parsed_base_date - timedelta(days=window_days)
+    return {
+        "base_date": parsed_base_date.isoformat(),
+        "start_date": start_date.isoformat(),
+        "end_date": parsed_base_date.isoformat(),
+        "window_days": window_days,
         "includes_base_date": False,
         "range_semantics": "[start_date, end_date)",
     }
