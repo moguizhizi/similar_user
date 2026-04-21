@@ -294,16 +294,7 @@ class TaskPredictionTest(unittest.TestCase):
                 "range_semantics": "[start_date, end_date)",
             },
         )
-        self.assertEqual(
-            result["target_history_summary"]["task_window"],
-            {
-                "base_date": "2022-05-22",
-                "start_date": "2022-05-20",
-                "end_date": "2022-05-22",
-                "includes_base_date": False,
-                "range_semantics": "[start_date, end_date)",
-            },
-        )
+        self.assertNotIn("target_history_summary", result)
         self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "1")
         user_service.get_patient_training_task_history_by_date_window.assert_any_call(
             "40",

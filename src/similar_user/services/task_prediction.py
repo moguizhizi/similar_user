@@ -74,11 +74,6 @@ class TrainingTaskPredictionService:
             for candidate in candidates
         }
 
-        target_summary = summarize_training_history(
-            resolved_patient_id,
-            target_history,
-            task_window=target_task_window,
-        )
         similar_summaries = [
             {
                 **summarize_training_history(
@@ -112,7 +107,6 @@ class TrainingTaskPredictionService:
         )
         prompt = build_task_prediction_prompt(
             patient_id=resolved_patient_id,
-            target_history_summary=target_summary,
             similar_user_summaries=similar_summaries,
             similar_user_game_counts=similar_user_game_counts,
             candidate_training_tasks=candidate_tasks,
@@ -142,7 +136,6 @@ class TrainingTaskPredictionService:
                 ),
                 "candidate_task_window": candidate_task_window,
             },
-            "target_history_summary": target_summary,
             "similar_user_summaries": similar_summaries,
             "similar_user_game_counts": similar_user_game_counts,
             "candidate_training_tasks": candidate_tasks,
@@ -478,7 +471,6 @@ def build_rule_based_predictions(
 def build_task_prediction_prompt(
     *,
     patient_id: str,
-    target_history_summary: dict[str, Any],
     similar_user_summaries: list[dict[str, Any]],
     similar_user_game_counts: list[dict[str, Any]],
     candidate_training_tasks: list[dict[str, Any]],
@@ -487,7 +479,6 @@ def build_task_prediction_prompt(
     """Build the JSON-first prompt for LLM task prediction."""
     payload = {
         "patient_id": patient_id,
-        "target_user_history": target_history_summary,
         "similar_users": similar_user_summaries,
         "similar_user_game_counts": similar_user_game_counts,
         "candidate_training_tasks": candidate_training_tasks,
