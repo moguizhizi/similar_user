@@ -2,7 +2,7 @@
 
 这个脚本处在“path 生成”和“候选用户聚合”之间：
 
-1. `scripts/debug_patient_pattern_paths.py` 或 pipeline 先从 Neo4j 生成并保存某个患者的 paths。
+1. `scripts/build_patient_pattern_paths.py` 或 pipeline 先从 Neo4j 生成并保存某个患者的 paths。
 2. 本脚本从本地 JSON 存储读取这些 paths，用 `PathScorer` 给每条 path 打分。
 3. 下游 `scripts/build_similar_user_candidates.py` 会读取这里的评分结果，按 top-k path
    去重候选用户，再计算 candidate_score。
