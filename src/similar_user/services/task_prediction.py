@@ -83,15 +83,12 @@ class TrainingTaskPredictionService:
             similar_user_game_counts,
             repeated_target_game_ids,
         )
+
         similar_user_task_evidence = build_similar_user_task_evidence(
             candidates,
             similar_user_histories,
             excluded_game_ids=repeated_target_game_ids,
         )
-
-        print(similar_user_task_evidence)
-
-        exit(0)
 
         candidate_tasks = build_candidate_training_tasks(
             candidates,
