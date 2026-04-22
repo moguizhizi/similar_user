@@ -1,17 +1,18 @@
-"""Predict training tasks from similar-user pipeline output.
+"""Predict training tasks from the full similar-user workflow.
 
-这个脚本处在相似用户候选生成之后：
+这个脚本串联相似用户候选生成和训练任务预测：
 
-1. 读取 `scripts/run_similar_user_pipeline.py` 的 JSON 输出，输入可以来自文件或 stdin。
+1. 调用 `scripts/run_similar_user_pipeline.py` 的流程，构建相似用户候选。
 2. 根据目标患者、候选相似用户和训练任务时间窗上下文，构建训练任务推荐输入。
 3. 默认调用配置中的 LLM 生成预测结果；使用 `--dry-run` 时跳过 LLM，返回确定性的候选任务结果。
-4. 最后按 `--output-level` 输出任务 ID、任务分数或完整预测结果。
+4. 最后按 `--output-level` 输出任务 ID、任务分数或完整端到端结果。
 
-它不会重新生成 path，也不会重新聚合候选相似用户；这些输入应由上游 pipeline 提供。
+如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过 path 构建，
+直接基于已保存结果生成相似用户候选并预测训练任务。
 
 常用执行方式：
 
-    python scripts/predict_training_tasks.py --similar-users-file result.json --base-date 2022-05-22 --window-days 14
+    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14
 """
 
 from __future__ import annotations
@@ -35,12 +36,15 @@ from similar_user.services.llm_client import LlmClient
 from similar_user.services.task_prediction import (
     DEFAULT_TASK_TOP_K,
     TrainingTaskPredictionService,
-    parse_json_object_from_text,
 )
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 
+from scripts.run_similar_user_pipeline import run_similar_user_pipeline
 from scripts.score_patient_pattern_paths import DEFAULT_CONFIG_PATH
+from similar_user.domain.graph_schema import (
+    PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -49,16 +53,18 @@ LOGGER = get_logger(__name__)
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for training-task prediction."""
     parser = argparse.ArgumentParser(
-        description="Predict training tasks from similar-user pipeline output."
+        description="Run similar-user candidate generation and predict training tasks."
+    )
+    parser.add_argument("patient_id", help="Patient identifier used in Neo4j queries.")
+    parser.add_argument(
+        "--pattern",
+        default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+        help="Pattern name used to locate the saved similar-user path result.",
     )
     parser.add_argument(
-        "--similar-users-file",
-        help="Path to JSON output from scripts/run_similar_user_pipeline.py.",
-    )
-    parser.add_argument(
-        "--from-stdin",
+        "--skip-path-build",
         action="store_true",
-        help="Read run_similar_user_pipeline.py output from stdin.",
+        help="Use existing saved paths and only run scoring plus candidate ranking.",
     )
     parser.add_argument(
         "--config",
@@ -99,6 +105,43 @@ def parse_args() -> argparse.Namespace:
         help="Include the generated LLM prompt in full output.",
     )
     return parser.parse_args()
+
+
+def run_end_to_end_training_task_prediction(
+    patient_id: str,
+    *,
+    base_date: str,
+    window_days: int,
+    pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
+    skip_path_build: bool = False,
+    task_top_k: int = DEFAULT_TASK_TOP_K,
+    use_llm: bool = True,
+    include_prompt: bool = False,
+) -> dict[str, Any]:
+    """Run similar-user generation and training-task prediction in one workflow."""
+    pipeline_result = run_similar_user_pipeline(
+        patient_id,
+        pattern=pattern,
+        config_path=config_path,
+        skip_path_build=skip_path_build,
+        base_date=base_date,
+        window_days=window_days,
+    )
+    prediction_result = run_training_task_prediction(
+        pipeline_result,
+        base_date=base_date,
+        window_days=window_days,
+        config_path=config_path,
+        task_top_k=task_top_k,
+        use_llm=use_llm,
+        include_prompt=include_prompt,
+    )
+    return {
+        "patient_id": prediction_result.get("patient_id", patient_id),
+        "similar_user_pipeline": pipeline_result,
+        "training_task_prediction": prediction_result,
+    }
 
 
 def run_training_task_prediction(
@@ -142,6 +185,11 @@ def summarize_prediction_result(
     """Build compact CLI output."""
     if output_level == "full":
         return result
+
+    prediction_result = result.get("training_task_prediction")
+    if isinstance(prediction_result, dict):
+        result = prediction_result
+
     predictions = result.get("predicted_training_tasks")
     if not isinstance(predictions, list):
         predictions = []
@@ -170,29 +218,17 @@ def summarize_prediction_result(
     raise ValueError(f"Unsupported output level: {output_level}.")
 
 
-def _read_pipeline_result(args: argparse.Namespace) -> dict[str, Any]:
-    if args.from_stdin and args.similar_users_file:
-        raise ValueError("--from-stdin and --similar-users-file cannot be used together.")
-    if args.from_stdin:
-        return parse_json_object_from_text(sys.stdin.read())
-    if args.similar_users_file:
-        path = Path(args.similar_users_file)
-        return parse_json_object_from_text(path.read_text(encoding="utf-8"))
-    raise ValueError(
-        "similar-user pipeline output is required. Use --similar-users-file or --from-stdin."
-    )
-
-
 def main() -> int:
     """Predict training tasks and log the JSON result."""
     args = parse_args()
     try:
-        pipeline_result = _read_pipeline_result(args)
-        result = run_training_task_prediction(
-            pipeline_result,
+        result = run_end_to_end_training_task_prediction(
+            args.patient_id,
             base_date=args.base_date,
             window_days=args.window_days,
+            pattern=args.pattern,
             config_path=args.config,
+            skip_path_build=args.skip_path_build,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             include_prompt=args.include_prompt,

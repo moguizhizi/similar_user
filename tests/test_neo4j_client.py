@@ -45,12 +45,13 @@ class Neo4jClientTest(unittest.TestCase):
         mock_driver = Mock()
         mock_driver_factory.return_value = mock_driver
         client = Neo4jClient.from_config("config/settings.yaml")
+        settings = load_neo4j_settings("config/settings.yaml")
 
         client.connect()
 
         mock_driver_factory.assert_called_once_with(
-            "bolt://localhost:7687",
-            auth=("neo4j", "password"),
+            settings.uri,
+            auth=(settings.username, settings.password),
         )
         mock_driver.verify_connectivity.assert_called_once_with()
 
