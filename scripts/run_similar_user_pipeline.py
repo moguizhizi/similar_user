@@ -113,6 +113,12 @@ def run_similar_user_pipeline(
             window_days=window_days,
         )
         path_generation = _summarize_path_result(path_result)
+        _raise_if_path_result_empty(
+            path_generation,
+            patient_id=patient_id,
+            base_date=base_date,
+            window_days=window_days,
+        )
 
     candidate_result = build_similar_user_candidates(
         patient_id,
@@ -158,6 +164,23 @@ def _summarize_path_result(path_result: dict[str, object]) -> dict[str, object]:
         "path_window": path_window,
         "path_count": len(paths),
     }
+
+
+def _raise_if_path_result_empty(
+    path_generation: dict[str, object],
+    *,
+    patient_id: str,
+    base_date: str,
+    window_days: int,
+) -> None:
+    """Stop the pipeline when freshly built path data is empty."""
+    path_count = path_generation.get("path_count")
+    if isinstance(path_count, int) and path_count > 0:
+        return
+    raise ValueError(
+        "path_result does not contain paths: "
+        f"patient_id={patient_id}, base_date={base_date}, window_days={window_days}."
+    )
 
 
 def summarize_pipeline_result(

@@ -680,6 +680,41 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
     @patch("scripts.run_similar_user_pipeline.run_patient_pattern_path_flow")
+    def test_run_similar_user_pipeline_rejects_empty_path_result(
+        self,
+        mock_run_path_flow: Mock,
+        mock_build_candidates: Mock,
+    ) -> None:
+        mock_run_path_flow.return_value = {
+            "patient_id": "30010096",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "retrieval_context": {
+                "path_window": {
+                    "base_date": "2022-01-17",
+                    "start_date": "2022-01-03",
+                    "end_date": "2022-01-17",
+                    "window_days": 14,
+                    "range_semantics": "[start_date, end_date)",
+                },
+                "paths": [],
+            },
+        }
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "path_result does not contain paths: patient_id=30010096, base_date=2022-01-17, window_days=14.",
+        ):
+            run_similar_user_pipeline(
+                "30010096",
+                base_date="2022-01-17",
+                window_days=14,
+                config_path="config/custom.yaml",
+            )
+
+        mock_build_candidates.assert_not_called()
+
+    @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
+    @patch("scripts.run_similar_user_pipeline.run_patient_pattern_path_flow")
     def test_run_similar_user_pipeline_can_skip_path_build(
         self,
         mock_run_path_flow: Mock,
