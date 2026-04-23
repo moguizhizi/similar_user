@@ -12,6 +12,16 @@ from src.similar_user.services.user_service import UserService
 
 
 class UserServiceTest(unittest.TestCase):
+    def test_get_patient_ids_delegates_to_repository(self) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_ids.return_value = ["40", "41"]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_ids()
+
+        self.assertEqual(result, ["40", "41"])
+        mock_repository.get_patient_ids.assert_called_once_with()
+
     def test_get_distinct_training_games_delegates_to_repository(self) -> None:
         mock_repository = Mock()
         mock_repository.get_distinct_training_games.return_value = [

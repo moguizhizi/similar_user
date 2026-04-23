@@ -10,6 +10,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CYPHER_QUERY_DIR = PROJECT_ROOT / "src/similar_user/data_access/cypher_queries"
 QUERY_MODULES = (
+    CYPHER_QUERY_DIR / "patients.py",
     CYPHER_QUERY_DIR / "patient_dates.py",
     CYPHER_QUERY_DIR / "pattern_paths.py",
     CYPHER_QUERY_DIR / "pattern_statistics.py",
