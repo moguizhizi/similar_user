@@ -4,6 +4,12 @@
 
 ## 按场景查
 
+### 患者基础信息
+
+| 场景 | Query | 文件 | 主要参数 | 返回 |
+|---|---|---|---|---|
+| 查询全库患者 ID | `PATIENT_IDS_QUERY` | `patients.py` | 无 | `patient_id` |
+
 ### 训练日期与游戏
 
 | 场景 | Query | 文件 | 主要参数 | 返回 |
@@ -63,6 +69,12 @@ Patient -- TaskInstanceSet -- TaskInstance -- Game -- TaskInstance -- TaskInstan
 | 在左闭右开日期区间内统计固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY` | `pattern_statistics.py` | `patient_id`, `start_date`, `end_date` | `totalPaths`, `gCount`, `p2Count` |
 
 ## 按文件查
+
+### `patients.py`
+
+| Query | 用途 | 主要参数 | 返回 |
+|---|---|---|---|
+| `PATIENT_IDS_QUERY` | 查询全库患者 ID | 无 | `patient_id` |
 
 ### `patient_dates.py`
 

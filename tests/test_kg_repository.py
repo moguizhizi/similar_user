@@ -10,6 +10,7 @@ from unittest.mock import Mock
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
     DISTINCT_TRAINING_GAMES_QUERY,
+    PATIENT_IDS_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -63,6 +64,24 @@ from src.similar_user.data_access.kg_repository import (
 
 
 class KgRepositoryTest(unittest.TestCase):
+    def test_get_patient_ids(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"patient_id": "40"},
+            {"patient_id": " 41 "},
+            {"patient_id": ""},
+            {"patient_id": None},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_ids()
+
+        self.assertEqual(result, ["40", "41"])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_IDS_QUERY,
+            parameters={},
+        )
+
     def test_get_distinct_training_games(self) -> None:
         mock_client = Mock()
         mock_client.run_query.return_value = [

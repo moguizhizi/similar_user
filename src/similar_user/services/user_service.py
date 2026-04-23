@@ -20,6 +20,10 @@ class UserService:
 
     kg_repository: KgRepository
 
+    def get_patient_ids(self) -> list[str]:
+        """Return all patient IDs in the graph."""
+        return self.kg_repository.get_patient_ids()
+
     def get_distinct_training_games(self) -> list[dict[str, object]]:
         """Return distinct games that appear in training records."""
         return self.kg_repository.get_distinct_training_games()

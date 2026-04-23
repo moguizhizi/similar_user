@@ -11,6 +11,7 @@ from ..utils.logger import get_logger
 
 from .cypher_queries import (
     DISTINCT_TRAINING_GAMES_QUERY,
+    PATIENT_IDS_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -80,6 +81,19 @@ class KgRepository:
     client: Neo4jClient
     default_limits: list[int] = field(default_factory=lambda: DEFAULT_PATH_LIMITS.copy())
     config_path: Path = DEFAULT_CONFIG_PATH
+
+    def get_patient_ids(self) -> list[str]:
+        """Return all patient IDs in the graph."""
+        rows = self.client.run_query(
+            query=PATIENT_IDS_QUERY,
+            parameters={},
+        )
+        patient_ids: list[str] = []
+        for row in rows:
+            patient_id = str(row.get("patient_id") or "").strip()
+            if patient_id:
+                patient_ids.append(patient_id)
+        return patient_ids
 
     def get_distinct_training_games(self) -> list[dict[str, object]]:
         """Return distinct games that appear in training records."""
