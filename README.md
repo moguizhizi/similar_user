@@ -79,6 +79,10 @@ similar_user/
   启动本地 HTTP 服务。
 - `python scripts/run_similar_user_pipeline.py <patient_id> --base-date <YYYY-MM-DD> --window-days <days>`
   一键执行固定模式 path 检索保存、path 打分和候选相似用户聚合排序。
+- `python scripts/predict_training_tasks.py <patient_id> --base-date <YYYY-MM-DD> --window-days <days>`
+  一键执行相似用户候选生成并预测训练任务。
+- `python scripts/evaluate_predict_training_tasks.py [patient_ids_file] --base-date <YYYY-MM-DD> --window-days <days>`
+  评估 `base_date` 当天训练任务预测表现；可传用户列表文件，也可不传并自动从 Neo4j 读取全量 Patient ID。
 - `python scripts/build_similar_user_candidates.py <patient_id>`
   按 `config/settings.yaml` 中的 `query.candidate_ranking.path_top_k` 先保留高分 path 作为证据来源，再按 `query.candidate_ranking.candidate_top_k` 返回排序后的候选相似用户。
 - `GET /health/neo4j`
@@ -118,6 +122,20 @@ python scripts/read_patient_pattern_result.py <patient_id> --config config/setti
 # 从配置的 path_top_k / candidate_top_k 构建候选相似用户
 python scripts/build_similar_user_candidates.py <patient_id>
 python scripts/build_similar_user_candidates.py <patient_id> --config config/settings.yaml
+
+# 单用户训练任务预测
+python scripts/predict_training_tasks.py <patient_id> --base-date 2022-05-22 --window-days 14
+python scripts/predict_training_tasks.py <patient_id> --base-date 2022-05-22 --window-days 14 --skip-path-build
+python scripts/predict_training_tasks.py <patient_id> --base-date 2022-05-22 --window-days 14 --dry-run --output-level full
+
+# 批量评估（传用户列表文件）
+python scripts/evaluate_predict_training_tasks.py data/patient_ids.txt --base-date 2022-05-22 --window-days 14 --skip-path-build
+
+# 批量评估（不传用户列表，自动从 Neo4j 读取全量 Patient ID）
+python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --window-days 14 --skip-path-build
+
+# 小样本冒烟：限制评估前 N 个用户，并跳过 LLM 调用
+python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --window-days 14 --limit 10 --dry-run
 ```
 
 `run_similar_user_pipeline.py` 默认会先重新生成并保存固定模式 path，再读取保存结果打分并生成候选用户。如果已经有可用的离线路径结果，可以使用 `--skip-path-build` 跳过 path 检索。脚本默认使用 `--output-level ids`，候选用户仅以 `candidate_ids` 列出全部 `patient_id`；使用 `--output-level scores` 时输出 `patient_id` 和 `candidate_score`；使用 `--output-level full` 时输出完整 `candidate_result` 和候选明细。
@@ -175,6 +193,10 @@ query:
     path_top_k: 50       # 先保留多少条高分 path 作为证据来源
     candidate_top_k: 10  # 最终返回多少个候选相似用户
 ```
+
+`predict_training_tasks.py` 支持 `--dry-run`（跳过 LLM，仅验证链路）和 `--skip-path-build`（复用已保存 path 结果）。
+
+`evaluate_predict_training_tasks.py` 评估的是 `base_date` 当天真实训练任务与预测任务集合的命中情况；`patient_ids_file` 可选，不传时会通过 Neo4j 查询全量 Patient ID。`--limit` 可用于小样本冒烟。
 
 ## 特定模式路径主流程
 
