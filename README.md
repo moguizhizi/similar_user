@@ -198,6 +198,17 @@ query:
 
 `evaluate_predict_training_tasks.py` 评估的是 `base_date` 当天真实训练任务与预测任务集合的命中情况；`patient_ids_file` 可选，不传时会通过 Neo4j 查询全量 Patient ID。`--limit` 可用于小样本冒烟。
 
+评估脚本默认会输出两个文件：
+
+- `data/evaluation/predict_training_tasks_summary.json`：整体指标汇总，例如 `total_count`、`failed_count`、`task_hit_rate`、`micro_precision`、`micro_recall`。
+- `data/evaluation/predict_training_tasks_details.jsonl`：逐用户明细，每行一个 JSON 对象，包含 `patient_id`、`status`、`predicted_game_ids`、`actual_game_ids`、`matched_game_ids`、`precision`、`recall`、`f1`。如果某个用户失败，会记录 `error_type` 和 `error_message`，用于定位 `failed_count` 的原因。
+
+查看失败原因示例：
+
+```bash
+grep '"status": "failed"' data/evaluation/predict_training_tasks_details.jsonl | head -n 5
+```
+
 ## 特定模式路径主流程
 
 下面这段流程用于说明：当程序需要获取某个患者在固定模式下的路径时，可以如何利用患者训练日期、统计查询和路径查询进行编排。
