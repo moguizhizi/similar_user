@@ -9,6 +9,7 @@
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
 | 查询全库患者 ID | `PATIENT_IDS_QUERY` | `patients.py` | 无 | `patient_id` |
+| 查询指定日期有训练记录的患者 ID | `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | `patients.py` | `base_date` | `patient_id` |
 
 ### 训练日期与游戏
 
@@ -75,6 +76,7 @@ Patient -- TaskInstanceSet -- TaskInstance -- Game -- TaskInstance -- TaskInstan
 | Query | 用途 | 主要参数 | 返回 |
 |---|---|---|---|
 | `PATIENT_IDS_QUERY` | 查询全库患者 ID | 无 | `patient_id` |
+| `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | 查询指定日期有训练记录的患者 ID | `base_date` | `patient_id` |
 
 ### `patient_dates.py`
 

@@ -22,6 +22,20 @@ class UserServiceTest(unittest.TestCase):
         self.assertEqual(result, ["40", "41"])
         mock_repository.get_patient_ids.assert_called_once_with()
 
+    def test_get_patient_ids_with_training_on_date_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_ids_with_training_on_date.return_value = ["40"]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_ids_with_training_on_date("2022-05-22")
+
+        self.assertEqual(result, ["40"])
+        mock_repository.get_patient_ids_with_training_on_date.assert_called_once_with(
+            "2022-05-22",
+        )
+
     def test_get_distinct_training_games_delegates_to_repository(self) -> None:
         mock_repository = Mock()
         mock_repository.get_distinct_training_games.return_value = [
