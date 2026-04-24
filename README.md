@@ -134,6 +134,9 @@ python scripts/evaluate_predict_training_tasks.py data/patient_ids.txt --base-da
 # 批量评估（不传用户列表，自动从 Neo4j 读取全量 Patient ID）
 python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --window-days 14 --skip-path-build
 
+# 批量评估（不传用户列表，只评估 base_date 当天有训练记录的用户）
+python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --window-days 14 --active-on-base-date --limit 40 --dry-run
+
 # 小样本冒烟：限制评估前 N 个用户，并跳过 LLM 调用
 python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --window-days 14 --limit 10 --dry-run
 ```
@@ -196,7 +199,7 @@ query:
 
 `predict_training_tasks.py` 支持 `--dry-run`（跳过 LLM，仅验证链路）和 `--skip-path-build`（复用已保存 path 结果）。
 
-`evaluate_predict_training_tasks.py` 评估的是 `base_date` 当天真实训练任务与预测任务集合的命中情况；`patient_ids_file` 可选，不传时会通过 Neo4j 查询全量 Patient ID。`--limit` 可用于小样本冒烟。
+`evaluate_predict_training_tasks.py` 评估的是 `base_date` 当天真实训练任务与预测任务集合的命中情况；`patient_ids_file` 可选，不传时会通过 Neo4j 查询全量 Patient ID。`--active-on-base-date` 会在不传 `patient_ids_file` 时只读取 `base_date` 当天有训练记录的用户，适合减少 `actual_game_ids` 为空的不可评估样本。`--limit` 可用于小样本冒烟。
 
 评估脚本默认会输出两个文件：
 

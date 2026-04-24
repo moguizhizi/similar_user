@@ -210,6 +210,69 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             ["40", "41"],
         )
 
+    @patch("scripts.evaluate_predict_training_tasks.Neo4jClient")
+    @patch("scripts.evaluate_predict_training_tasks.KgRepository")
+    @patch("scripts.evaluate_predict_training_tasks.UserService")
+    @patch("scripts.evaluate_predict_training_tasks.evaluate_patient")
+    def test_run_batch_evaluation_can_load_only_base_date_active_patients(
+        self,
+        mock_evaluate_patient: Mock,
+        mock_user_service_class: Mock,
+        mock_repository_class: Mock,
+        mock_client_class: Mock,
+    ) -> None:
+        mock_client = Mock()
+        mock_client_class.from_config.return_value.__enter__.return_value = mock_client
+        mock_user_service = Mock()
+        mock_user_service.get_patient_ids_with_training_on_date.return_value = [
+            "40",
+            "41",
+        ]
+        mock_user_service_class.return_value = mock_user_service
+        mock_evaluate_patient.side_effect = [
+            {"patient_id": "40", "status": "success_evaluated"},
+            {"patient_id": "41", "status": "success_evaluated"},
+        ]
+
+        details = evaluate_predict_training_tasks.run_batch_evaluation(
+            None,
+            base_date="2022-05-22",
+            window_days=14,
+            config_path="config/settings.yaml",
+            use_llm=False,
+            active_on_base_date=True,
+        )
+
+        self.assertEqual(
+            details,
+            [
+                {"patient_id": "40", "status": "success_evaluated"},
+                {"patient_id": "41", "status": "success_evaluated"},
+            ],
+        )
+        mock_repository_class.assert_called_once_with(
+            client=mock_client,
+            config_path=evaluate_predict_training_tasks.Path("config/settings.yaml"),
+        )
+        mock_user_service.get_patient_ids_with_training_on_date.assert_called_once_with(
+            "2022-05-22",
+        )
+        mock_user_service.get_patient_ids.assert_not_called()
+
+    def test_resolve_patient_ids_prefers_explicit_patient_ids(self) -> None:
+        user_service = Mock()
+
+        result = evaluate_predict_training_tasks.resolve_patient_ids_for_evaluation(
+            user_service,
+            patient_ids=["40"],
+            base_date="2022-05-22",
+            active_on_base_date=True,
+        )
+
+        self.assertEqual(result, ["40"])
+        user_service.get_patient_ids.assert_not_called()
+        user_service.get_patient_ids_with_training_on_date.assert_not_called()
+
     def test_run_batch_evaluation_rejects_non_positive_limit(self) -> None:
         with self.assertRaisesRegex(
             ValueError,

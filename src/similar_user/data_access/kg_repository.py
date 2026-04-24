@@ -12,6 +12,7 @@ from ..utils.logger import get_logger
 from .cypher_queries import (
     DISTINCT_TRAINING_GAMES_QUERY,
     PATIENT_IDS_QUERY,
+    PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -88,6 +89,20 @@ class KgRepository:
             query=PATIENT_IDS_QUERY,
             parameters={},
         )
+        return self._extract_patient_ids(rows)
+
+    def get_patient_ids_with_training_on_date(self, base_date: str) -> list[str]:
+        """Return patient IDs with training records on base_date."""
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        rows = self.client.run_query(
+            query=PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
+            parameters={"base_date": normalized_base_date},
+        )
+        return self._extract_patient_ids(rows)
+
+    @staticmethod
+    def _extract_patient_ids(rows: list[dict[str, object]]) -> list[str]:
+        """Extract non-empty patient IDs from query rows."""
         patient_ids: list[str] = []
         for row in rows:
             patient_id = str(row.get("patient_id") or "").strip()

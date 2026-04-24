@@ -121,6 +121,14 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Evaluate at most this many patient IDs after loading them.",
     )
+    parser.add_argument(
+        "--active-on-base-date",
+        action="store_true",
+        help=(
+            "When patient_ids_file is omitted, evaluate only patients with "
+            "training records on base_date."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -394,6 +402,7 @@ def run_batch_evaluation(
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     limit: int | None = None,
+    active_on_base_date: bool = False,
 ) -> list[dict[str, Any]]:
     """Evaluate every patient and return per-patient details."""
     if limit is not None and limit <= 0:
@@ -406,8 +415,11 @@ def run_batch_evaluation(
                 config_path=Path(config_path),
             )
         )
-        resolved_patient_ids = (
-            user_service.get_patient_ids() if patient_ids is None else patient_ids
+        resolved_patient_ids = resolve_patient_ids_for_evaluation(
+            user_service,
+            patient_ids=patient_ids,
+            base_date=base_date,
+            active_on_base_date=active_on_base_date,
         )
         if limit is not None:
             resolved_patient_ids = resolved_patient_ids[:limit]
@@ -432,6 +444,21 @@ def run_batch_evaluation(
                 detail.get("status"),
             )
     return details
+
+
+def resolve_patient_ids_for_evaluation(
+    user_service: UserService,
+    *,
+    patient_ids: list[str] | None,
+    base_date: str,
+    active_on_base_date: bool,
+) -> list[str]:
+    """Resolve the patient ID list used by batch evaluation."""
+    if patient_ids is not None:
+        return patient_ids
+    if active_on_base_date:
+        return user_service.get_patient_ids_with_training_on_date(base_date)
+    return user_service.get_patient_ids()
 
 
 def dedupe_texts(values: list[str]) -> list[str]:
@@ -522,6 +549,7 @@ def main() -> int:
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             limit=args.limit,
+            active_on_base_date=args.active_on_base_date,
         )
         summary = summarize_evaluation_details(details)
         summary_path, details_path = write_outputs(

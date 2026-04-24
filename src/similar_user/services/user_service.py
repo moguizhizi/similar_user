@@ -24,6 +24,10 @@ class UserService:
         """Return all patient IDs in the graph."""
         return self.kg_repository.get_patient_ids()
 
+    def get_patient_ids_with_training_on_date(self, base_date: str) -> list[str]:
+        """Return patient IDs with training records on base_date."""
+        return self.kg_repository.get_patient_ids_with_training_on_date(base_date)
+
     def get_distinct_training_games(self) -> list[dict[str, object]]:
         """Return distinct games that appear in training records."""
         return self.kg_repository.get_distinct_training_games()

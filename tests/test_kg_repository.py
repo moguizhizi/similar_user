@@ -11,6 +11,7 @@ from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
     DISTINCT_TRAINING_GAMES_QUERY,
     PATIENT_IDS_QUERY,
+    PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -81,6 +82,31 @@ class KgRepositoryTest(unittest.TestCase):
             query=PATIENT_IDS_QUERY,
             parameters={},
         )
+
+    def test_get_patient_ids_with_training_on_date(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"patient_id": "40"},
+            {"patient_id": " 41 "},
+            {"patient_id": ""},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_ids_with_training_on_date(" 2022-05-22 ")
+
+        self.assertEqual(result, ["40", "41"])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
+            parameters={"base_date": "2022-05-22"},
+        )
+
+    def test_get_patient_ids_with_training_on_date_rejects_blank_base_date(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "base_date must be a non-empty string."):
+            repository.get_patient_ids_with_training_on_date("   ")
 
     def test_get_distinct_training_games(self) -> None:
         mock_client = Mock()
