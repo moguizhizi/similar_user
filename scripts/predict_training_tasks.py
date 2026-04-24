@@ -13,6 +13,7 @@
 常用执行方式：
 
     python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14
+    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14 --save-prompt
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ from similar_user.domain.graph_schema import (
 
 
 LOGGER = get_logger(__name__)
+DEFAULT_PROMPT_OUTPUT_DIR = Path("data/prompts")
 
 
 def parse_args() -> argparse.Namespace:
@@ -103,6 +105,16 @@ def parse_args() -> argparse.Namespace:
         "--include-prompt",
         action="store_true",
         help="Include the generated LLM prompt in full output.",
+    )
+    parser.add_argument(
+        "--save-prompt",
+        action="store_true",
+        help="Save the generated LLM prompt to a text file for later lookup.",
+    )
+    parser.add_argument(
+        "--prompt-output-dir",
+        default=str(DEFAULT_PROMPT_OUTPUT_DIR),
+        help="Directory used by --save-prompt to store prompt text files.",
     )
     return parser.parse_args()
 
@@ -218,6 +230,35 @@ def summarize_prediction_result(
     raise ValueError(f"Unsupported output level: {output_level}.")
 
 
+def write_prompt_to_file(
+    result: dict[str, Any],
+    *,
+    output_dir: str | Path,
+    base_date: str,
+) -> Path:
+    """Write the generated LLM prompt to a searchable text file."""
+    prediction_result = result.get("training_task_prediction")
+    if isinstance(prediction_result, dict):
+        result = prediction_result
+
+    llm_prompt = result.get("llm_prompt")
+    if not isinstance(llm_prompt, str) or not llm_prompt.strip():
+        raise ValueError("No llm_prompt found in prediction result.")
+
+    patient_id = str(result.get("patient_id") or "").strip()
+    if not patient_id:
+        raise ValueError("patient_id is required to save the prompt.")
+
+    resolved_output_dir = Path(output_dir)
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    prompt_path = (
+        resolved_output_dir
+        / f"training_task_prompt_patient_{patient_id}_base_date_{base_date}.txt"
+    )
+    prompt_path.write_text(llm_prompt.strip() + "\n", encoding="utf-8")
+    return prompt_path
+
+
 def main() -> int:
     """Predict training tasks and log the JSON result."""
     args = parse_args()
@@ -231,14 +272,23 @@ def main() -> int:
             skip_path_build=args.skip_path_build,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
-            include_prompt=args.include_prompt,
+            include_prompt=(args.include_prompt or args.save_prompt),
         )
         output = summarize_prediction_result(result, output_level=args.output_level)
+        prompt_path = None
+        if args.save_prompt:
+            prompt_path = write_prompt_to_file(
+                result,
+                output_dir=args.prompt_output_dir,
+                base_date=args.base_date,
+            )
     except Exception as exc:
         LOGGER.exception("Training task prediction failed: %s", exc)
         return 1
 
     LOGGER.info(json.dumps(output, ensure_ascii=False, indent=2, default=str))
+    if prompt_path is not None:
+        LOGGER.info("Saved training-task prediction prompt to %s", prompt_path)
     return 0
 
 
