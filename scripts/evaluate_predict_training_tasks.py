@@ -9,6 +9,7 @@
 常用执行方式：
 
     python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --window-days 14
+    python scripts/evaluate_predict_training_tasks.py --patient-id 40 --base-date 2022-05-22 --window-days 14
 """
 
 from __future__ import annotations
@@ -62,6 +63,10 @@ def parse_args() -> argparse.Namespace:
             "Optional text file with one patient_id per line; blank lines and # comments "
             "are ignored. If omitted, all Patient IDs are read from Neo4j."
         ),
+    )
+    parser.add_argument(
+        "--patient-id",
+        help="Evaluate only this patient_id instead of a file or the full patient list.",
     )
     parser.add_argument(
         "--base-date",
@@ -534,10 +539,18 @@ def main() -> int:
     """Run same-day prediction evaluation and write metrics outputs."""
     args = parse_args()
     try:
+        if args.patient_id is not None and args.patient_ids_file is not None:
+            raise ValueError(
+                "patient_ids_file and --patient-id cannot be used together."
+            )
         patient_ids = (
-            read_patient_ids(args.patient_ids_file)
-            if args.patient_ids_file is not None
-            else None
+            [args.patient_id]
+            if args.patient_id is not None
+            else (
+                read_patient_ids(args.patient_ids_file)
+                if args.patient_ids_file is not None
+                else None
+            )
         )
         details = run_batch_evaluation(
             patient_ids,

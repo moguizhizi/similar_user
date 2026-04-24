@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import unittest
 from unittest.mock import Mock, patch
 
@@ -9,6 +10,27 @@ from scripts import evaluate_predict_training_tasks
 
 
 class EvaluatePredictTrainingTasksTest(unittest.TestCase):
+    def test_parse_args_accepts_single_patient_id(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "evaluate_predict_training_tasks.py",
+                "--patient-id",
+                "40",
+                "--base-date",
+                "2022-05-22",
+                "--window-days",
+                "14",
+            ],
+        ):
+            args = evaluate_predict_training_tasks.parse_args()
+
+        self.assertEqual(args.patient_id, "40")
+        self.assertIsNone(args.patient_ids_file)
+        self.assertEqual(args.base_date, "2022-05-22")
+        self.assertEqual(args.window_days, 14)
+
     def test_evaluate_prediction_sets_ignores_ranking_and_dedupes_ids(self) -> None:
         result = evaluate_predict_training_tasks.evaluate_prediction_sets(
             ["A", "B", "A", "C"],
@@ -284,6 +306,30 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 window_days=14,
                 limit=0,
             )
+
+    @patch("scripts.evaluate_predict_training_tasks.run_batch_evaluation")
+    def test_main_rejects_patient_id_and_file_together(
+        self,
+        mock_run_batch_evaluation: Mock,
+    ) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "evaluate_predict_training_tasks.py",
+                "patients.txt",
+                "--patient-id",
+                "40",
+                "--base-date",
+                "2022-05-22",
+                "--window-days",
+                "14",
+            ],
+        ):
+            exit_code = evaluate_predict_training_tasks.main()
+
+        self.assertEqual(exit_code, 1)
+        mock_run_batch_evaluation.assert_not_called()
 
 
 if __name__ == "__main__":
