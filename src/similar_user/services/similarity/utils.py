@@ -8,7 +8,10 @@ from typing import Any
 
 
 def calculate_game_series_features(scores: Sequence[object]) -> dict[str, float | int]:
-    """Calculate game score features from one ordered score series."""
+    """从单个游戏的有序分数序列中提取统计特征和综合分。
+
+    综合分以平均分为基础，扣除分数波动带来的不稳定性，并加入少量趋势奖励。
+    """
     numeric_scores = _coerce_numeric_scores(scores)
     if not numeric_scores:
         raise ValueError("scores must contain at least one numeric value.")
@@ -19,7 +22,7 @@ def calculate_game_series_features(scores: Sequence[object]) -> dict[str, float 
         / len(numeric_scores)
     )
     trend = _calculate_linear_trend(numeric_scores)
-    score = mean_score - 0.5 * std + 0.3 * trend
+    score = mean_score - 0.5 * std + 5 * trend
 
     return {
         "count": len(numeric_scores),
