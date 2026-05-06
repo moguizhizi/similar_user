@@ -102,10 +102,10 @@ def calculate_set_same_score(
     }
 
 
-def calculate_common_game_score_correlation(
+def calculate_common_game_score_similarity(
     records: Sequence[dict[str, Any]],
 ) -> dict[str, object]:
-    """Calculate Pearson correlation from common-game score series records."""
+    """Calculate cosine similarity from common-game score series records."""
     common_games: list[str] = []
     source_vector: list[float] = []
     candidate_vector: list[float] = []
@@ -134,8 +134,28 @@ def calculate_common_game_score_correlation(
         "source_vector": source_vector,
         "candidate_vector": candidate_vector,
         "valid_game_count": len(common_games),
-        "correlation": calculate_pearson_correlation(source_vector, candidate_vector),
+        "similarity": calculate_cosine_similarity(source_vector, candidate_vector),
     }
+
+
+def calculate_cosine_similarity(
+    vector_a: Sequence[float],
+    vector_b: Sequence[float],
+) -> float | None:
+    """Calculate cosine similarity for two same-length vectors."""
+    if len(vector_a) != len(vector_b):
+        raise ValueError("vector_a and vector_b must have the same length.")
+    if not vector_a:
+        return None
+
+    numerator = sum(value_a * value_b for value_a, value_b in zip(vector_a, vector_b))
+    denominator_a = math.sqrt(sum(value_a**2 for value_a in vector_a))
+    denominator_b = math.sqrt(sum(value_b**2 for value_b in vector_b))
+    denominator = denominator_a * denominator_b
+    if denominator == 0:
+        return None
+
+    return numerator / denominator
 
 
 def calculate_pearson_correlation(
