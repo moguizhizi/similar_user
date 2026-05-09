@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from config.settings import load_neo4j_settings
+from scripts.build_patient_pattern_paths import parse_args
 from scripts.build_patient_pattern_paths import main as patient_path_main
 from scripts.build_patient_pattern_paths import run_patient_pattern_path_flow
 from scripts.debug_query import main, run_debug_query
@@ -124,6 +125,41 @@ class DebugQueryScriptTest(unittest.TestCase):
 
 
 class DebugPatientPatternPathsScriptTest(unittest.TestCase):
+    @patch(
+        "sys.argv",
+        [
+            "build_patient_pattern_paths.py",
+            "30010096",
+            "--base-date",
+            "2022-05-22",
+            "--window-days",
+            "14",
+            "--pattern",
+            "patient_disease_patient",
+        ],
+    )
+    def test_parse_args_accepts_registered_pattern_alias(self) -> None:
+        args = parse_args()
+
+        self.assertEqual(args.pattern, "patient_disease_patient")
+
+    @patch(
+        "sys.argv",
+        [
+            "build_patient_pattern_paths.py",
+            "30010096",
+            "--base-date",
+            "2022-05-22",
+            "--window-days",
+            "14",
+            "--pattern",
+            "patient_dis_patient",
+        ],
+    )
+    def test_parse_args_rejects_unregistered_pattern_alias(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
+
     @patch("scripts.build_patient_pattern_paths.LOGGER")
     @patch("scripts.build_patient_pattern_paths.save_pattern_result")
     @patch("scripts.build_patient_pattern_paths.Neo4jClient.from_config")

@@ -10,8 +10,7 @@
 
 外层参数只表达业务选择：
 
-- `--pattern` 选择路径模式。默认 `patient_game_patient`，内部会映射到
-  `PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT`。
+- `--pattern` 选择路径模式，只接受公开别名。默认 `patient_game_patient`。
 - `--query-family` 选择同一路径模式下的查询语义族。默认 `training_order`。
   `training_order` 会要求 s1/s2 满足训练日期顺序；`date_window` 只按 s1 的训练日期窗口取路径。
 - `--base-date` 是右开窗口的结束日期，`--window-days` 决定向前回看多少天。
@@ -40,6 +39,7 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
 
 from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
+from similar_user.data_access.pattern_registry import available_path_pattern_aliases
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import save_pattern_result
@@ -76,9 +76,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--pattern",
         default=DEFAULT_PATTERN,
+        choices=available_path_pattern_aliases(),
         help=(
-            "Path pattern alias or enum value. The default patient_game_patient "
-            "maps to PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT."
+            "Path pattern alias. Supported aliases are shown in the choices list."
         ),
     )
     parser.add_argument(
