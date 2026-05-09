@@ -10,7 +10,7 @@ from ..domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     PathPattern,
 )
-from ..data_access.kg_repository import KgRepository
+from ..data_access.kg_repository import KgRepository, PatternQueryFamily
 from ..data_access.pattern_registry import resolve_path_pattern
 from ..utils.logger import get_logger
 
@@ -440,14 +440,17 @@ class UserService:
         base_date: str,
         window_days: int,
         pattern: PathPattern | str = PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+        query_family: PatternQueryFamily | str = PatternQueryFamily.TRAINING_ORDER,
     ) -> dict[str, Any]:
         """Run the end-to-end fixed-pattern path flow for a patient date window."""
         normalized_pattern = resolve_path_pattern(pattern)
+        normalized_query_family = self._normalize_pattern_query_family(query_family)
         path_window = self._build_path_window(base_date, window_days)
         LOGGER.info(
-            "Starting patient pattern path flow in service: patient_id=%s, pattern=%s, base_date=%s, window_days=%s",
+            "Starting patient pattern path flow in service: patient_id=%s, pattern=%s, query_family=%s, base_date=%s, window_days=%s",
             patient_id,
             normalized_pattern.value,
+            normalized_query_family.value,
             path_window["base_date"],
             path_window["window_days"],
         )
@@ -458,6 +461,7 @@ class UserService:
         statistics, active_statistics = self._load_window_statistics(
             patient_id,
             normalized_pattern,
+            normalized_query_family,
             path_window,
         )
 
@@ -474,6 +478,7 @@ class UserService:
             return self._build_pattern_result(
                 training_context=training_context,
                 pattern=normalized_pattern,
+                query_family=normalized_query_family,
                 statistics=statistics,
                 limit_recommendation=None,
                 paths=[],
@@ -506,13 +511,15 @@ class UserService:
             return self._build_pattern_result(
                 training_context=training_context,
                 pattern=normalized_pattern,
+                query_family=normalized_query_family,
                 statistics=statistics,
                 limit_recommendation=limit_recommendation,
                 paths=[],
             )
 
-        paths = self.kg_repository.get_pattern_randomized_paths_by_date_range(
+        paths = self.kg_repository.get_pattern_randomized_paths(
             pattern=normalized_pattern,
+            query_family=normalized_query_family,
             patient_id=patient_id,
             start_date=path_window["start_date"],
             end_date=path_window["end_date"],
@@ -536,6 +543,7 @@ class UserService:
         return self._build_pattern_result(
             training_context=training_context,
             pattern=normalized_pattern,
+            query_family=normalized_query_family,
             statistics=statistics,
             limit_recommendation=limit_recommendation,
             paths=paths,
@@ -579,21 +587,24 @@ class UserService:
         self,
         patient_id: str,
         pattern: PathPattern,
+        query_family: PatternQueryFamily,
         path_window: dict[str, Any],
     ) -> tuple[dict[str, Any], dict[str, int]]:
         """Load path statistics for the configured left-closed, right-open window."""
         statistics_records = (
-            self.kg_repository.get_training_order_pattern_statistics_by_date_range(
-                pattern,
-                patient_id,
-                path_window["start_date"],
-                path_window["end_date"],
+            self.kg_repository.get_pattern_statistics(
+                pattern=pattern,
+                query_family=query_family,
+                patient_id=patient_id,
+                start_date=path_window["start_date"],
+                end_date=path_window["end_date"],
             )
         )
 
         window_statistics = self._extract_statistics(statistics_records)
         statistics = {
             "base_date": path_window["base_date"],
+            "query_family": query_family.value,
             "path_window": path_window,
             "window_statistics": window_statistics,
         }
@@ -638,6 +649,7 @@ class UserService:
         *,
         training_context: dict[str, Any],
         pattern: PathPattern,
+        query_family: PatternQueryFamily,
         statistics: dict[str, Any] | None,
         limit_recommendation: dict[str, int] | None,
         paths: list[dict[str, object]],
@@ -648,6 +660,7 @@ class UserService:
             if statistics is None and limit_recommendation is None and not paths
             else {
                 "base_date": statistics.get("base_date") if isinstance(statistics, dict) else None,
+                "query_family": query_family.value,
                 "path_window": statistics.get("path_window") if isinstance(statistics, dict) else None,
                 "window_statistics": (
                     statistics.get("window_statistics")
@@ -663,6 +676,17 @@ class UserService:
             "pattern": pattern.value,
             "retrieval_context": retrieval_context,
         }
+
+    @staticmethod
+    def _normalize_pattern_query_family(
+        value: PatternQueryFamily | str,
+    ) -> PatternQueryFamily:
+        """Normalize a query family from public input."""
+        if isinstance(value, PatternQueryFamily):
+            return value
+        if isinstance(value, str) and value.strip():
+            return PatternQueryFamily(value.strip())
+        raise ValueError("query_family must be a supported pattern query family.")
 
     @staticmethod
     def _log_training_context(training_context: dict[str, Any]) -> None:

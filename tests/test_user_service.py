@@ -9,6 +9,7 @@ from src.similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     PathPattern,
 )
+from src.similar_user.data_access.kg_repository import PatternQueryFamily
 from src.similar_user.services.user_service import UserService
 
 
@@ -823,12 +824,12 @@ class UserServiceTest(unittest.TestCase):
     ) -> None:
         mock_repository = Mock()
         mock_repository.config_path = "config/settings.yaml"
-        mock_repository.get_training_order_pattern_statistics_by_date_range.return_value = [
+        mock_repository.get_pattern_statistics.return_value = [
             {"totalPaths": 0, "gCount": 0, "p2Count": 0}
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 4
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
-        mock_repository.get_pattern_randomized_paths_by_date_range.return_value = []
+        mock_repository.get_pattern_randomized_paths.return_value = []
         service = UserService(kg_repository=mock_repository)
 
         result = service.get_patient_pattern_paths(
@@ -850,6 +851,7 @@ class UserServiceTest(unittest.TestCase):
             result["retrieval_context"],
             {
                 "base_date": "2022-01-17",
+                "query_family": "training_order",
                 "path_window": path_window,
                 "window_statistics": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
                 "limit_recommendation": None,
@@ -861,23 +863,24 @@ class UserServiceTest(unittest.TestCase):
             PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         )
         mock_repository.recommend_graph_path_limit.assert_not_called()
-        mock_repository.get_pattern_randomized_paths_by_date_range.assert_not_called()
-        mock_repository.get_training_order_pattern_statistics_by_date_range.assert_called_once_with(
-            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-            "30010096",
-            "2022-01-03",
-            "2022-01-17",
+        mock_repository.get_pattern_randomized_paths.assert_not_called()
+        mock_repository.get_pattern_statistics.assert_called_once_with(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id="30010096",
+            start_date="2022-01-03",
+            end_date="2022-01-17",
         )
 
     def test_get_patient_pattern_paths_returns_paths_with_recommendation(self) -> None:
         mock_repository = Mock()
         mock_repository.config_path = "config/settings.yaml"
-        mock_repository.get_training_order_pattern_statistics_by_date_range.return_value = [
+        mock_repository.get_pattern_statistics.return_value = [
             {"totalPaths": 20, "gCount": 5, "p2Count": 6}
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 5
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
-        mock_repository.get_pattern_randomized_paths_by_date_range.return_value = [
+        mock_repository.get_pattern_randomized_paths.return_value = [
             {
                 "row": {
                     "p": {"id": "30010096"},
@@ -916,6 +919,7 @@ class UserServiceTest(unittest.TestCase):
             result["retrieval_context"],
             {
                 "base_date": "2022-01-17",
+                "query_family": "training_order",
                 "path_window": path_window,
                 "window_statistics": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
                 "limit_recommendation": {"per_g": 5, "limit": 10},
@@ -939,8 +943,9 @@ class UserServiceTest(unittest.TestCase):
             g_count=5,
             p2_count=6,
         )
-        mock_repository.get_pattern_randomized_paths_by_date_range.assert_called_once_with(
+        mock_repository.get_pattern_randomized_paths.assert_called_once_with(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
             patient_id="30010096",
             start_date="2022-01-03",
             end_date="2022-01-17",

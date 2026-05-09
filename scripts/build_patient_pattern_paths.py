@@ -1,16 +1,28 @@
-"""Build and persist patient fixed-pattern paths from Neo4j.
+"""Build and persist patient pattern paths from Neo4j.
 
 这个脚本是相似用户流程的第一步：
 
-1. 按 `patient_id`、`base_date` 和 `window_days` 从 Neo4j 查询固定模式 paths。
+1. 按 `patient_id`、日期窗口、路径模式和查询族从 Neo4j 查询 paths。
 2. 将查询结果组装为带 `retrieval_context` 的离线结果。
 3. 把结果保存到配置中的 pattern path 存储目录，供 path 打分和候选用户构建脚本继续使用。
 
 它只负责“构建并保存 paths”，不会给 path 打分，也不会聚合候选相似用户。
 
+外层参数只表达业务选择：
+
+- `--pattern` 选择路径模式。默认 `patient_game_patient`，内部会映射到
+  `PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT`。
+- `--query-family` 选择同一路径模式下的查询语义族。默认 `training_order`。
+  `training_order` 会要求 s1/s2 满足训练日期顺序；`date_window` 只按 s1 的训练日期窗口取路径。
+- `--base-date` 是右开窗口的结束日期，`--window-days` 决定向前回看多少天。
+
 常用执行方式：
 
-    python scripts/build_patient_pattern_paths.py 40 --base-date 2022-05-22 --window-days 14
+    python scripts/build_patient_pattern_paths.py 30010096 \
+        --base-date 2022-05-22 \
+        --window-days 14 \
+        --pattern patient_game_patient \
+        --query-family training_order
 """
 
 from __future__ import annotations
@@ -35,37 +47,48 @@ from similar_user.utils.pattern_storage import save_pattern_result
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 DEFAULT_PATTERN = "patient_game_patient"
+DEFAULT_QUERY_FAMILY = "training_order"
 LOGGER = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for patient path building."""
+    """Parse CLI arguments for building one patient's offline pattern paths."""
     parser = argparse.ArgumentParser(
         description="Build and persist patient fixed-pattern paths."
     )
-    parser.add_argument("patient_id", help="Patient identifier used in Neo4j queries.")
+    parser.add_argument("patient_id", help="Patient ID used as the start node.")
     parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
-        help="Path to the Neo4j YAML config file.",
+        help="YAML config path for Neo4j and query/output settings.",
     )
     parser.add_argument(
         "--base-date",
         required=True,
-        help="Exclusive window end date used to build paths, for example 2022-05-22.",
+        help="Exclusive end date of the path window, for example 2022-05-22.",
     )
     parser.add_argument(
         "--window-days",
         type=int,
         required=True,
-        help="Number of days before base_date included in path retrieval.",
+        help="Number of days before base_date included in the left-closed window.",
     )
     parser.add_argument(
         "--pattern",
         default=DEFAULT_PATTERN,
         help=(
-            "Path pattern alias or enum value to build, "
-            "for example patient_game_patient."
+            "Path pattern alias or enum value. The default patient_game_patient "
+            "maps to PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT."
+        ),
+    )
+    parser.add_argument(
+        "--query-family",
+        default=DEFAULT_QUERY_FAMILY,
+        choices=("training_order", "date_window"),
+        help=(
+            "Query family for both statistics and randomized paths. "
+            "training_order enforces s1/s2 training-date order; "
+            "date_window only filters by the s1 date window."
         ),
     )
     return parser.parse_args()
@@ -78,12 +101,14 @@ def run_patient_pattern_path_flow(
     base_date: str,
     window_days: int,
     pattern: str = DEFAULT_PATTERN,
+    query_family: str = DEFAULT_QUERY_FAMILY,
 ) -> dict[str, object]:
-    """Build patient fixed-pattern paths from Neo4j and save the result."""
+    """Build one patient's pattern paths from Neo4j and persist the result."""
     LOGGER.info(
-        "Starting patient pattern path build: patient_id=%s, pattern=%s, base_date=%s, window_days=%s, config_path=%s",
+        "Starting patient pattern path build: patient_id=%s, pattern=%s, query_family=%s, base_date=%s, window_days=%s, config_path=%s",
         patient_id,
         pattern,
+        query_family,
         base_date,
         window_days,
         config_path,
@@ -96,6 +121,7 @@ def run_patient_pattern_path_flow(
             base_date=base_date,
             window_days=window_days,
             pattern=pattern,
+            query_family=query_family,
         )
         output_path = save_pattern_result(result, repository.config_path)
         retrieval_context = result.get("retrieval_context") or {}
@@ -110,7 +136,7 @@ def run_patient_pattern_path_flow(
 
 
 def main() -> int:
-    """Build patient fixed-pattern paths and persist the JSON result."""
+    """CLI entrypoint for building and saving one patient's pattern paths."""
     args = parse_args()
     try:
         run_patient_pattern_path_flow(
@@ -119,6 +145,7 @@ def main() -> int:
             base_date=args.base_date,
             window_days=args.window_days,
             pattern=getattr(args, "pattern", DEFAULT_PATTERN),
+            query_family=getattr(args, "query_family", DEFAULT_QUERY_FAMILY),
         )
     except Exception as exc:
         LOGGER.exception(
