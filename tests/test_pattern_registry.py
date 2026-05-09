@@ -13,6 +13,14 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
@@ -153,7 +161,7 @@ class PathPatternRegistryTest(unittest.TestCase):
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
         )
 
-    def test_registered_disease_pattern_declares_date_window_contract(self) -> None:
+    def test_registered_disease_pattern_declares_contract(self) -> None:
         spec = get_path_pattern_spec(PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT)
 
         self.assertEqual(spec.pattern, PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT)
@@ -161,6 +169,7 @@ class PathPatternRegistryTest(unittest.TestCase):
         self.assertEqual(spec.group_field, "dis")
         self.assertIs(spec.path_model, PatientTasksetDiseaseTasksetPatientPath)
         date_window = spec.queries.family("date_window")
+        training_order = spec.queries.family("training_order")
         self.assertEqual(
             date_window.randomized_path.base,
             PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
@@ -193,8 +202,38 @@ class PathPatternRegistryTest(unittest.TestCase):
             date_window.statistics.by_date_range,
             PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
         )
-        with self.assertRaisesRegex(ValueError, "does not support query family"):
-            spec.queries.family("training_order")
+        self.assertEqual(
+            training_order.randomized_path.base,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+        )
+        self.assertEqual(
+            training_order.randomized_path.by_start_date,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+        )
+        self.assertEqual(
+            training_order.randomized_path.by_end_date,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+        )
+        self.assertEqual(
+            training_order.randomized_path.by_date_range,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+        )
+        self.assertEqual(
+            training_order.statistics.base,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+        )
+        self.assertEqual(
+            training_order.statistics.by_start_date,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+        )
+        self.assertEqual(
+            training_order.statistics.by_end_date,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+        )
+        self.assertEqual(
+            training_order.statistics.by_date_range,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+        )
 
     def test_query_date_window_selects_matching_query_variant(self) -> None:
         variants = get_path_pattern_spec(
