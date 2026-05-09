@@ -11,7 +11,10 @@ from ..domain.graph_schema import (
     PathPattern,
 )
 from ..data_access.kg_repository import KgRepository, PatternQueryFamily
-from ..data_access.pattern_registry import resolve_path_pattern
+from ..data_access.pattern_registry import (
+    get_path_pattern_spec,
+    resolve_path_pattern_alias,
+)
 from ..utils.logger import get_logger
 
 
@@ -443,7 +446,11 @@ class UserService:
         query_family: PatternQueryFamily | str = PatternQueryFamily.TRAINING_ORDER,
     ) -> dict[str, Any]:
         """Run the end-to-end fixed-pattern path flow for a patient date window."""
-        normalized_pattern = resolve_path_pattern(pattern)
+        normalized_pattern = (
+            pattern
+            if isinstance(pattern, PathPattern)
+            else resolve_path_pattern_alias(pattern)
+        )
         normalized_query_family = self._normalize_pattern_query_family(query_family)
         path_window = self._build_path_window(base_date, window_days)
         LOGGER.info(
@@ -466,7 +473,10 @@ class UserService:
         )
 
         total_paths = int(active_statistics.get("totalPaths", 0))
-        g_count = int(active_statistics.get("gCount", 0))
+        group_count = self._extract_pattern_group_count(
+            normalized_pattern,
+            active_statistics,
+        )
         p2_count = int(active_statistics.get("p2Count", 0))
 
         if total_paths <= 0:
@@ -486,7 +496,7 @@ class UserService:
 
         recommendation = self.kg_repository.recommend_graph_path_limit(
             total_paths=total_paths,
-            g_count=g_count,
+            g_count=group_count,
             p2_count=p2_count,
         )
 
@@ -707,6 +717,16 @@ class UserService:
             }
 
         return records[0]
+
+    @staticmethod
+    def _extract_pattern_group_count(
+        pattern: PathPattern,
+        statistics: dict[str, Any],
+    ) -> int:
+        """Return the pattern-specific grouping count used for path limits."""
+        group_field = get_path_pattern_spec(pattern).group_field
+        group_count_key = f"{group_field}Count"
+        return int(statistics.get(group_count_key, 0))
 
     @staticmethod
     def _summarize_statistics_for_logging(

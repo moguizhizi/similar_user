@@ -179,3 +179,83 @@ RETURN
     count(DISTINCT g) AS gCount,
     count(DISTINCT p2) AS p2Count
 """.strip()
+
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(dis:Disease)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL
+
+RETURN
+    count(*) AS totalPaths,
+    count(DISTINCT dis) AS disCount,
+    count(DISTINCT p2) AS p2Count
+""".strip()
+
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(dis:Disease)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date)
+
+RETURN
+    count(*) AS totalPaths,
+    count(DISTINCT dis) AS disCount,
+    count(DISTINCT p2) AS p2Count
+""".strip()
+
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(dis:Disease)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) < date($end_date)
+
+RETURN
+    count(*) AS totalPaths,
+    count(DISTINCT dis) AS disCount,
+    count(DISTINCT p2) AS p2Count
+""".strip()
+
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(dis:Disease)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+RETURN
+    count(*) AS totalPaths,
+    count(DISTINCT dis) AS disCount,
+    count(DISTINCT p2) AS p2Count
+""".strip()

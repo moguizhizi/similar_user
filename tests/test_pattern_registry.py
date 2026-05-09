@@ -5,6 +5,14 @@ from __future__ import annotations
 import unittest
 
 from src.similar_user.data_access.cypher_queries import (
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
@@ -27,11 +35,14 @@ from src.similar_user.data_access.pattern_registry import (
     PatternQuerySet,
     QueryDateVariant,
     QueryDateWindow,
+    available_path_pattern_aliases,
     get_path_pattern_spec,
+    resolve_path_pattern_alias,
     resolve_path_pattern,
 )
 from src.similar_user.domain.graph_schema import PathPattern
 from src.similar_user.domain.path_models import (
+    PatientTasksetDiseaseTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
 )
 
@@ -142,6 +153,49 @@ class PathPatternRegistryTest(unittest.TestCase):
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
         )
 
+    def test_registered_disease_pattern_declares_date_window_contract(self) -> None:
+        spec = get_path_pattern_spec(PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT)
+
+        self.assertEqual(spec.pattern, PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT)
+        self.assertEqual(spec.row_fields, ("p", "s1", "dis", "s2", "p2"))
+        self.assertEqual(spec.group_field, "dis")
+        self.assertIs(spec.path_model, PatientTasksetDiseaseTasksetPatientPath)
+        date_window = spec.queries.family("date_window")
+        self.assertEqual(
+            date_window.randomized_path.base,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
+        )
+        self.assertEqual(
+            date_window.randomized_path.by_start_date,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+        )
+        self.assertEqual(
+            date_window.randomized_path.by_end_date,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+        )
+        self.assertEqual(
+            date_window.randomized_path.by_date_range,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+        )
+        self.assertEqual(
+            date_window.statistics.base,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY,
+        )
+        self.assertEqual(
+            date_window.statistics.by_start_date,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+        )
+        self.assertEqual(
+            date_window.statistics.by_end_date,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+        )
+        self.assertEqual(
+            date_window.statistics.by_date_range,
+            PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+        )
+        with self.assertRaisesRegex(ValueError, "does not support query family"):
+            spec.queries.family("training_order")
+
     def test_query_date_window_selects_matching_query_variant(self) -> None:
         variants = get_path_pattern_spec(
             "patient_game_patient"
@@ -217,9 +271,29 @@ class PathPatternRegistryTest(unittest.TestCase):
             ),
         )
 
+    def test_patient_disease_patient_alias_resolves_to_registered_pattern(self) -> None:
+        self.assertEqual(
+            resolve_path_pattern("patient_disease_patient"),
+            PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
+        )
+        self.assertIs(
+            get_path_pattern_spec("patient_disease_patient"),
+            get_path_pattern_spec(PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT),
+        )
+
+    def test_available_path_pattern_aliases_returns_public_aliases_only(self) -> None:
+        self.assertEqual(
+            available_path_pattern_aliases(),
+            ("patient_disease_patient", "patient_game_patient"),
+        )
+
+    def test_path_pattern_alias_rejects_unregistered_alias(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Supported aliases"):
+            resolve_path_pattern_alias("patient_dis_patient")
+
     def test_get_path_pattern_spec_rejects_unregistered_pattern(self) -> None:
         with self.assertRaisesRegex(ValueError, "no registered Cypher query set"):
-            get_path_pattern_spec(PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT)
+            get_path_pattern_spec(PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT)
 
 
 if __name__ == "__main__":

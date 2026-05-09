@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.similar_user.domain.graph_schema import (
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     PathPattern,
 )
@@ -946,6 +947,41 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.get_pattern_randomized_paths.assert_called_once_with(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id="30010096",
+            start_date="2022-01-03",
+            end_date="2022-01-17",
+            per_group=5,
+            limit=10,
+        )
+
+    def test_get_patient_pattern_paths_uses_pattern_specific_group_count(self) -> None:
+        mock_repository = Mock()
+        mock_repository.config_path = "config/settings.yaml"
+        mock_repository.get_pattern_statistics.return_value = [
+            {"totalPaths": 20, "disCount": 4, "p2Count": 6}
+        ]
+        mock_repository.recommend_graph_path_limit.return_value.per_g = 5
+        mock_repository.recommend_graph_path_limit.return_value.limit = 10
+        mock_repository.get_pattern_randomized_paths.return_value = []
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_pattern_paths(
+            "30010096",
+            base_date="2022-01-17",
+            window_days=14,
+            pattern="patient_disease_patient",
+            query_family=PatternQueryFamily.DATE_WINDOW,
+        )
+
+        self.assertEqual(result["pattern"], PATIENT_TASKSET_DISEASE_TASKSET_PATIENT)
+        mock_repository.recommend_graph_path_limit.assert_called_once_with(
+            total_paths=20,
+            g_count=4,
+            p2_count=6,
+        )
+        mock_repository.get_pattern_randomized_paths.assert_called_once_with(
+            pattern=PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
+            query_family=PatternQueryFamily.DATE_WINDOW,
             patient_id="30010096",
             start_date="2022-01-03",
             end_date="2022-01-17",

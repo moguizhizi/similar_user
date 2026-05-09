@@ -7,8 +7,19 @@ from enum import Enum
 from typing import TypeAlias
 
 from ..domain.graph_schema import PathPattern
-from ..domain.path_models import PatientTasksetTaskGameTaskTasksetPatientPath
+from ..domain.path_models import (
+    PatientTasksetDiseaseTasksetPatientPath,
+    PatientTasksetTaskGameTaskTasksetPatientPath,
+)
 from .cypher_queries import (
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
@@ -28,7 +39,10 @@ from .cypher_queries import (
 )
 
 
-PathModel: TypeAlias = type[PatientTasksetTaskGameTaskTasksetPatientPath]
+PathModel: TypeAlias = (
+    type[PatientTasksetTaskGameTaskTasksetPatientPath]
+    | type[PatientTasksetDiseaseTasksetPatientPath]
+)
 
 
 class QueryDateVariant(str, Enum):
@@ -169,14 +183,63 @@ PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC = PathPatternSpec(
     ),
 )
 
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC = PathPatternSpec(
+    pattern=PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
+    description="患者-任务集-疾病-任务集-患者",
+    path_shape="(p:Patient)--(s1:TaskInstanceSet)--(dis:Disease)--(s2:TaskInstanceSet)--(p2:Patient)",
+    row_fields=("p", "s1", "dis", "s2", "p2"),
+    group_field="dis",
+    path_model=PatientTasksetDiseaseTasksetPatientPath,
+    queries=PatternQuerySet(
+        families={
+            "date_window": PatternQueryFamilySpec(
+                randomized_path=QueryVariants(
+                    base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
+                    by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                    by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                    by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                ),
+                statistics=QueryVariants(
+                    base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY,
+                    by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                    by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                    by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+                ),
+            ),
+        },
+    ),
+)
+
 
 PATH_PATTERN_SPECS: dict[PathPattern, PathPatternSpec] = {
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC,
 }
 
 PATH_PATTERN_ALIASES: dict[str, PathPattern] = {
     "patient_game_patient": PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    "patient_disease_patient": PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
 }
+
+
+def available_path_pattern_aliases() -> tuple[str, ...]:
+    """Return public pattern aliases accepted from external string input."""
+    return tuple(sorted(PATH_PATTERN_ALIASES))
+
+
+def resolve_path_pattern_alias(value: str) -> PathPattern:
+    """Resolve a public pattern alias from external string input."""
+    if isinstance(value, str) and value.strip():
+        normalized_value = value.strip()
+        alias_pattern = PATH_PATTERN_ALIASES.get(normalized_value)
+        if alias_pattern is not None:
+            return alias_pattern
+        supported = ", ".join(available_path_pattern_aliases())
+        raise ValueError(
+            f"Unsupported path pattern alias: {normalized_value}. "
+            f"Supported aliases: {supported}"
+        )
+    raise ValueError("pattern must be a non-empty supported path pattern alias.")
 
 
 def get_path_pattern_spec(pattern: PathPattern | str) -> PathPatternSpec:
@@ -191,7 +254,7 @@ def get_path_pattern_spec(pattern: PathPattern | str) -> PathPatternSpec:
 
 
 def resolve_path_pattern(value: PathPattern | str) -> PathPattern:
-    """Resolve a public pattern alias or enum value to a supported PathPattern."""
+    """Resolve a public alias, stored enum value, or internal enum to a PathPattern."""
     if isinstance(value, PathPattern):
         return value
     if isinstance(value, str) and value.strip():
@@ -199,5 +262,12 @@ def resolve_path_pattern(value: PathPattern | str) -> PathPattern:
         alias_pattern = PATH_PATTERN_ALIASES.get(normalized_value)
         if alias_pattern is not None:
             return alias_pattern
-        return PathPattern(normalized_value)
+        try:
+            return PathPattern(normalized_value)
+        except ValueError as exc:
+            supported = ", ".join(available_path_pattern_aliases())
+            raise ValueError(
+                f"Unsupported path pattern alias: {normalized_value}. "
+                f"Supported aliases: {supported}"
+            ) from exc
     raise ValueError("pattern must be a non-empty supported path pattern string.")
