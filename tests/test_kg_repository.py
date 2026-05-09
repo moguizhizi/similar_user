@@ -55,6 +55,10 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -1878,6 +1882,60 @@ class KgRepositoryTest(unittest.TestCase):
             },
         )
 
+    def test_get_pattern_statistics_selects_unknown_date_window_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"totalPaths": 11, "unCount": 3, "p2Count": 6}
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_statistics(
+            pattern="patient_unknown_patient",
+            query_family=PatternQueryFamily.DATE_WINDOW,
+            patient_id=" 30010096 ",
+            start_date=" 2022-01-01 ",
+            end_date=" 2022-01-13 ",
+        )
+
+        self.assertEqual(result, [{"totalPaths": 11, "unCount": 3, "p2Count": 6}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-01",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_pattern_statistics_selects_unknown_training_order_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"totalPaths": 10, "unCount": 3, "p2Count": 5}
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_statistics(
+            pattern="patient_unknown_patient",
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id=" 30010096 ",
+            start_date=" 2022-01-01 ",
+            end_date=" 2022-01-13 ",
+        )
+
+        self.assertEqual(result, [{"totalPaths": 10, "unCount": 3, "p2Count": 5}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-01",
+                "end_date": "2022-01-13",
+            },
+        )
+
     def test_get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_rejects_blank_patient_id(
         self,
     ) -> None:
@@ -2282,6 +2340,64 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertEqual(result, [{"row": {"p": {"id": "30010096"}}}])
         mock_client.run_query.assert_called_once_with(
             query=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-03",
+                "end_date": "2022-01-17",
+                "per_g": 3,
+                "limit": 100,
+            },
+        )
+
+    def test_get_pattern_randomized_paths_selects_unknown_date_window_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"p": {"id": "30010096"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_randomized_paths(
+            pattern="patient_unknown_patient",
+            query_family="date_window",
+            patient_id=" 30010096 ",
+            start_date=" 2022-01-03 ",
+            end_date=" 2022-01-17 ",
+            per_group=3,
+            limit=100,
+        )
+
+        self.assertEqual(result, [{"row": {"p": {"id": "30010096"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-03",
+                "end_date": "2022-01-17",
+                "per_g": 3,
+                "limit": 100,
+            },
+        )
+
+    def test_get_pattern_randomized_paths_selects_unknown_training_order_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"p": {"id": "30010096"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_randomized_paths(
+            pattern="patient_unknown_patient",
+            query_family="training_order",
+            patient_id=" 30010096 ",
+            start_date=" 2022-01-03 ",
+            end_date=" 2022-01-17 ",
+            per_group=3,
+            limit=100,
+        )
+
+        self.assertEqual(result, [{"row": {"p": {"id": "30010096"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
             parameters={
                 "patient_id": "30010096",
                 "start_date": "2022-01-03",
