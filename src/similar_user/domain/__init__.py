@@ -1,6 +1,7 @@
 """Domain entities and graph schema definitions."""
 
 from .graph_schema import (
+    DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
@@ -24,6 +25,7 @@ from .item import (
     UnknownNode,
 )
 from .path_models import (
+    DiseaseTasksetPatientPath,
     PatientTasksetDiseaseTasksetPatientPath,
     PatientTasksetSymptomTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
@@ -34,6 +36,8 @@ from .user import PatientNode
 
 __all__ = [
     "DiseaseNode",
+    "DiseaseTasksetPatientPath",
+    "DISEASE_TASKSET_PATIENT",
     "GameNode",
     "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
     "PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT",

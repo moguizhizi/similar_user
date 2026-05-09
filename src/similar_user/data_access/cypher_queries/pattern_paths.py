@@ -1103,3 +1103,88 @@ UNWIND rows AS row
 RETURN row
 LIMIT $limit
 """.strip()
+
+DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY = """
+MATCH path =
+(d:Disease {id: $disease_id})
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WITH d, s, p, path, rand() AS r
+ORDER BY r
+
+WITH p, collect({
+    d: d,
+    s: s,
+    p: p
+})[0] AS row
+
+RETURN row
+""".strip()
+
+DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY = """
+MATCH path =
+(d:Disease {id: $disease_id})
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) >= date($start_date)
+
+WITH d, s, p, path, rand() AS r
+ORDER BY r
+
+WITH p, collect({
+    d: d,
+    s: s,
+    p: p
+})[0] AS row
+
+RETURN row
+""".strip()
+
+DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY = """
+MATCH path =
+(d:Disease {id: $disease_id})
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) < date($end_date)
+
+WITH d, s, p, path, rand() AS r
+ORDER BY r
+
+WITH p, collect({
+    d: d,
+    s: s,
+    p: p
+})[0] AS row
+
+RETURN row
+""".strip()
+
+DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = """
+MATCH path =
+(d:Disease {id: $disease_id})
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) >= date($start_date) AND
+    date(s.`训练日期`) < date($end_date)
+
+WITH d, s, p, path, rand() AS r
+ORDER BY r
+
+WITH p, collect({
+    d: d,
+    s: s,
+    p: p
+})[0] AS row
+
+RETURN row
+""".strip()
