@@ -25,6 +25,7 @@ from src.similar_user.data_access.cypher_queries import (
 from src.similar_user.data_access.pattern_registry import (
     PATH_PATTERN_SPECS,
     get_path_pattern_spec,
+    resolve_path_pattern,
 )
 from src.similar_user.domain.graph_schema import PathPattern
 from src.similar_user.domain.path_models import (
@@ -142,6 +143,18 @@ class PathPatternRegistryTest(unittest.TestCase):
         for pattern, spec in PATH_PATTERN_SPECS.items():
             with self.subTest(pattern=pattern):
                 self.assertEqual(pattern, spec.pattern)
+
+    def test_patient_game_patient_alias_resolves_to_registered_pattern(self) -> None:
+        self.assertEqual(
+            resolve_path_pattern("patient_game_patient"),
+            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+        )
+        self.assertIs(
+            get_path_pattern_spec("patient_game_patient"),
+            get_path_pattern_spec(
+                PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT
+            ),
+        )
 
     def test_get_path_pattern_spec_rejects_unregistered_pattern(self) -> None:
         with self.assertRaisesRegex(ValueError, "no registered Cypher query set"):

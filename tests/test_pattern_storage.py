@@ -46,6 +46,32 @@ class PatternStorageTest(unittest.TestCase):
             Path("custom/output/PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"),
         )
 
+    def test_get_pattern_result_output_dir_accepts_pattern_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "pattern_path_storage:",
+                        '  output_dir: "custom/output"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            output_dir = get_pattern_result_output_dir(
+                config_path,
+                "patient_game_patient",
+            )
+
+        self.assertEqual(
+            output_dir,
+            Path("custom/output/PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"),
+        )
+
     def test_get_patient_pattern_result_output_path_uses_bucketed_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"

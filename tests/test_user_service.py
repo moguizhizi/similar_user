@@ -835,6 +835,7 @@ class UserServiceTest(unittest.TestCase):
             "30010096",
             base_date="2022-01-17",
             window_days=14,
+            pattern="patient_game_patient",
         )
 
         path_window = {
