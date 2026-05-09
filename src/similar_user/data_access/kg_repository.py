@@ -59,7 +59,7 @@ from .cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
 )
 from .neo4j_client import Neo4jClient
-from .pattern_registry import PatternQuerySet, get_path_pattern_spec
+from .pattern_registry import PatternQuerySet, QueryDateWindow, get_path_pattern_spec
 
 
 LOGGER = get_logger(__name__)
@@ -888,20 +888,20 @@ class KgRepository:
         normalized_patient_id = patient_id.strip()
         normalized_start_date = self._normalize_optional_string(start_date, "start_date")
         normalized_end_date = self._normalize_optional_string(end_date, "end_date")
+        date_window = QueryDateWindow(
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+        )
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
         query = self._select_pattern_statistics_query(
             spec.queries,
             normalized_query_family,
-            start_date=normalized_start_date,
-            end_date=normalized_end_date,
+            date_window=date_window,
         )
         parameters: dict[str, object] = {"patient_id": normalized_patient_id}
-        if normalized_start_date is not None:
-            parameters["start_date"] = normalized_start_date
-        if normalized_end_date is not None:
-            parameters["end_date"] = normalized_end_date
+        parameters.update(date_window.parameters())
 
         return self.client.run_query(
             query=query,
@@ -1125,6 +1125,10 @@ class KgRepository:
         normalized_patient_id = patient_id.strip()
         normalized_start_date = self._normalize_optional_string(start_date, "start_date")
         normalized_end_date = self._normalize_optional_string(end_date, "end_date")
+        date_window = QueryDateWindow(
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+        )
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
         if (
@@ -1136,18 +1140,16 @@ class KgRepository:
         if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
             raise ValueError("limit must be a positive integer.")
 
-        query = spec.queries.family(normalized_query_family.value).randomized_path.select(
-            start_date=normalized_start_date,
-            end_date=normalized_end_date,
-        )
+        query = spec.queries.family(
+            normalized_query_family.value
+        ).randomized_path.select(date_window)
         return self.client.run_query(
             query=query,
             parameters=self._build_pattern_path_parameters(
                 patient_id=normalized_patient_id,
                 per_group=per_group,
                 limit=limit,
-                start_date=normalized_start_date,
-                end_date=normalized_end_date,
+                date_window=date_window,
             ),
         )
 
@@ -1274,14 +1276,10 @@ class KgRepository:
         queries: PatternQuerySet,
         query_family: PatternQueryFamily,
         *,
-        start_date: str | None,
-        end_date: str | None,
+        date_window: QueryDateWindow,
     ) -> str:
         """Select the static statistics query for one family and date shape."""
-        return queries.family(query_family.value).statistics.select(
-            start_date=start_date,
-            end_date=end_date,
-        )
+        return queries.family(query_family.value).statistics.select(date_window)
 
     @staticmethod
     def _build_pattern_path_parameters(
@@ -1289,8 +1287,7 @@ class KgRepository:
         patient_id: str,
         per_group: int,
         limit: int,
-        start_date: str | None,
-        end_date: str | None,
+        date_window: QueryDateWindow,
     ) -> dict[str, object]:
         """Build randomized path query parameters for the selected date shape."""
         parameters: dict[str, object] = {
@@ -1298,10 +1295,7 @@ class KgRepository:
             "per_g": per_group,
             "limit": limit,
         }
-        if start_date is not None:
-            parameters["start_date"] = start_date
-        if end_date is not None:
-            parameters["end_date"] = end_date
+        parameters.update(date_window.parameters())
         return parameters
 
     def _run_patient_pair_query_by_end_date(
