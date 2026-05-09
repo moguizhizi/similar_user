@@ -25,6 +25,8 @@ from src.similar_user.data_access.cypher_queries import (
 from src.similar_user.data_access.pattern_registry import (
     PATH_PATTERN_SPECS,
     PatternQuerySet,
+    QueryDateVariant,
+    QueryDateWindow,
     get_path_pattern_spec,
     resolve_path_pattern,
 )
@@ -138,6 +140,49 @@ class PathPatternRegistryTest(unittest.TestCase):
         self.assertEqual(
             spec.queries.family("date_window").statistics.by_date_range,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+        )
+
+    def test_query_date_window_selects_matching_query_variant(self) -> None:
+        variants = get_path_pattern_spec(
+            "patient_game_patient"
+        ).queries.family("date_window").randomized_path
+
+        self.assertEqual(QueryDateWindow().variant, QueryDateVariant.BASE)
+        self.assertEqual(
+            variants.select(QueryDateWindow()),
+            PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
+        )
+        self.assertEqual(
+            variants.select(QueryDateWindow(start_date="2022-01-01")),
+            PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+        )
+        self.assertEqual(
+            variants.select(QueryDateWindow(end_date="2022-01-13")),
+            PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+        )
+        self.assertEqual(
+            variants.select(
+                QueryDateWindow(start_date="2022-01-01", end_date="2022-01-13")
+            ),
+            PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+        )
+
+    def test_query_date_window_returns_only_required_date_parameters(self) -> None:
+        self.assertEqual(QueryDateWindow().parameters(), {})
+        self.assertEqual(
+            QueryDateWindow(start_date="2022-01-01").parameters(),
+            {"start_date": "2022-01-01"},
+        )
+        self.assertEqual(
+            QueryDateWindow(end_date="2022-01-13").parameters(),
+            {"end_date": "2022-01-13"},
+        )
+        self.assertEqual(
+            QueryDateWindow(
+                start_date="2022-01-01",
+                end_date="2022-01-13",
+            ).parameters(),
+            {"start_date": "2022-01-01", "end_date": "2022-01-13"},
         )
 
     def test_query_family_rejects_unregistered_family(self) -> None:

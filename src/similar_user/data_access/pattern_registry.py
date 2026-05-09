@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import TypeAlias
 
 from ..domain.graph_schema import PathPattern
@@ -30,6 +31,43 @@ from .cypher_queries import (
 PathModel: TypeAlias = type[PatientTasksetTaskGameTaskTasksetPatientPath]
 
 
+class QueryDateVariant(str, Enum):
+    """Static query variant selected by date-window bounds."""
+
+    BASE = "base"
+    START_DATE = "start_date"
+    END_DATE = "end_date"
+    DATE_RANGE = "date_range"
+
+
+@dataclass(frozen=True)
+class QueryDateWindow:
+    """Date bounds used to select one static Cypher query variant."""
+
+    start_date: str | None = None
+    end_date: str | None = None
+
+    @property
+    def variant(self) -> QueryDateVariant:
+        """Return the query variant implied by the supplied date bounds."""
+        if self.start_date is not None and self.end_date is not None:
+            return QueryDateVariant.DATE_RANGE
+        if self.start_date is not None:
+            return QueryDateVariant.START_DATE
+        if self.end_date is not None:
+            return QueryDateVariant.END_DATE
+        return QueryDateVariant.BASE
+
+    def parameters(self) -> dict[str, str]:
+        """Return only date parameters required by this window."""
+        parameters: dict[str, str] = {}
+        if self.start_date is not None:
+            parameters["start_date"] = self.start_date
+        if self.end_date is not None:
+            parameters["end_date"] = self.end_date
+        return parameters
+
+
 @dataclass(frozen=True)
 class QueryVariants:
     """Date-bound variants for one Cypher query purpose."""
@@ -39,13 +77,13 @@ class QueryVariants:
     by_end_date: str
     by_date_range: str
 
-    def select(self, *, start_date: str | None, end_date: str | None) -> str:
-        """Select the static query matching the supplied date-bound shape."""
-        if start_date is not None and end_date is not None:
+    def select(self, window: QueryDateWindow) -> str:
+        """Select the static query matching the supplied date window."""
+        if window.variant == QueryDateVariant.DATE_RANGE:
             return self.by_date_range
-        if start_date is not None:
+        if window.variant == QueryDateVariant.START_DATE:
             return self.by_start_date
-        if end_date is not None:
+        if window.variant == QueryDateVariant.END_DATE:
             return self.by_end_date
         return self.base
 
