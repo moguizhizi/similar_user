@@ -62,16 +62,19 @@ class PatternQueryFamilySpec:
 class PatternQuerySet:
     """Cypher query families for one path pattern."""
 
-    date_window: PatternQueryFamilySpec
-    training_order: PatternQueryFamilySpec
+    families: dict[str, PatternQueryFamilySpec]
 
     def family(self, name: str) -> PatternQueryFamilySpec:
-        """Return the query family by its public family name."""
-        if name == "date_window":
-            return self.date_window
-        if name == "training_order":
-            return self.training_order
-        raise ValueError(f"Unsupported pattern query family: {name}")
+        """Return a registered query family by its public family name."""
+        normalized_name = name.strip() if isinstance(name, str) else ""
+        try:
+            return self.families[normalized_name]
+        except KeyError as exc:
+            supported = ", ".join(sorted(self.families))
+            raise ValueError(
+                f"Pattern does not support query family: {name}. "
+                f"Supported query families: {supported}"
+            ) from exc
 
 
 @dataclass(frozen=True)
@@ -95,34 +98,36 @@ PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC = PathPatternSpec(
     group_field="g",
     path_model=PatientTasksetTaskGameTaskTasksetPatientPath,
     queries=PatternQuerySet(
-        date_window=PatternQueryFamilySpec(
-            randomized_path=QueryVariants(
-                base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
-                by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-                by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-                by_date_range=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+        families={
+            "date_window": PatternQueryFamilySpec(
+                randomized_path=QueryVariants(
+                    base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
+                    by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                    by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                    by_date_range=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                ),
+                statistics=QueryVariants(
+                    base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY,
+                    by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                    by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                    by_date_range=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+                ),
             ),
-            statistics=QueryVariants(
-                base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY,
-                by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-                by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-                by_date_range=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            "training_order": PatternQueryFamilySpec(
+                randomized_path=QueryVariants(
+                    base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_QUERY,
+                    by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                    by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                    by_date_range=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                ),
+                statistics=QueryVariants(
+                    base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
+                    by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                    by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                    by_date_range=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+                ),
             ),
-        ),
-        training_order=PatternQueryFamilySpec(
-            randomized_path=QueryVariants(
-                base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_QUERY,
-                by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-                by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-                by_date_range=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-            ),
-            statistics=QueryVariants(
-                base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
-                by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-                by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-                by_date_range=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
-            ),
-        ),
+        },
     ),
 )
 

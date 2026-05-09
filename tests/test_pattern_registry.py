@@ -24,6 +24,7 @@ from src.similar_user.data_access.cypher_queries import (
 )
 from src.similar_user.data_access.pattern_registry import (
     PATH_PATTERN_SPECS,
+    PatternQuerySet,
     get_path_pattern_spec,
     resolve_path_pattern,
 )
@@ -46,80 +47,82 @@ class PathPatternRegistryTest(unittest.TestCase):
         self.assertEqual(spec.row_fields, ("p", "s1", "i1", "g", "i2", "s2", "p2"))
         self.assertEqual(spec.group_field, "g")
         self.assertIs(spec.path_model, PatientTasksetTaskGameTaskTasksetPatientPath)
+        date_window = spec.queries.family("date_window")
+        training_order = spec.queries.family("training_order")
         self.assertEqual(
-            spec.queries.date_window.randomized_path.base,
+            date_window.randomized_path.base,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
         )
         self.assertEqual(
-            spec.queries.date_window.randomized_path.by_start_date,
+            date_window.randomized_path.by_start_date,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY,
         )
         self.assertEqual(
-            spec.queries.date_window.randomized_path.by_end_date,
+            date_window.randomized_path.by_end_date,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY,
         )
         self.assertEqual(
-            spec.queries.date_window.randomized_path.by_date_range,
+            date_window.randomized_path.by_date_range,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
         )
         self.assertEqual(
-            spec.queries.date_window.statistics.base,
+            date_window.statistics.base,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY,
         )
         self.assertEqual(
-            spec.queries.date_window.statistics.by_start_date,
+            date_window.statistics.by_start_date,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
         )
         self.assertEqual(
-            spec.queries.date_window.statistics.by_end_date,
+            date_window.statistics.by_end_date,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
         )
         self.assertEqual(
-            spec.queries.date_window.statistics.by_date_range,
+            date_window.statistics.by_date_range,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
         )
         self.assertEqual(
-            spec.queries.training_order.randomized_path.base,
+            training_order.randomized_path.base,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_QUERY,
         )
         self.assertEqual(
-            spec.queries.training_order.randomized_path.by_start_date,
+            training_order.randomized_path.by_start_date,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
         )
         self.assertEqual(
-            spec.queries.training_order.randomized_path.by_end_date,
+            training_order.randomized_path.by_end_date,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
         )
         self.assertEqual(
-            spec.queries.training_order.randomized_path.by_date_range,
+            training_order.randomized_path.by_date_range,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
         )
         self.assertNotEqual(
-            spec.queries.training_order.randomized_path.by_start_date,
-            spec.queries.training_order.randomized_path.base,
+            training_order.randomized_path.by_start_date,
+            training_order.randomized_path.base,
         )
         self.assertNotEqual(
-            spec.queries.training_order.randomized_path.by_end_date,
-            spec.queries.training_order.randomized_path.base,
+            training_order.randomized_path.by_end_date,
+            training_order.randomized_path.base,
         )
         self.assertNotEqual(
-            spec.queries.training_order.randomized_path.by_date_range,
-            spec.queries.training_order.randomized_path.base,
+            training_order.randomized_path.by_date_range,
+            training_order.randomized_path.base,
         )
         self.assertEqual(
-            spec.queries.training_order.statistics.base,
+            training_order.statistics.base,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
         )
         self.assertEqual(
-            spec.queries.training_order.statistics.by_start_date,
+            training_order.statistics.by_start_date,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
         )
         self.assertEqual(
-            spec.queries.training_order.statistics.by_end_date,
+            training_order.statistics.by_end_date,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
         )
         self.assertEqual(
-            spec.queries.training_order.statistics.by_date_range,
+            training_order.statistics.by_date_range,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
         )
 
@@ -128,8 +131,6 @@ class PathPatternRegistryTest(unittest.TestCase):
             PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT
         )
 
-        self.assertIs(spec.queries.family("date_window"), spec.queries.date_window)
-        self.assertIs(spec.queries.family("training_order"), spec.queries.training_order)
         self.assertEqual(
             spec.queries.family("date_window").randomized_path.by_date_range,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
@@ -138,6 +139,21 @@ class PathPatternRegistryTest(unittest.TestCase):
             spec.queries.family("date_window").statistics.by_date_range,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
         )
+
+    def test_query_family_rejects_unregistered_family(self) -> None:
+        spec = get_path_pattern_spec("patient_game_patient")
+
+        with self.assertRaisesRegex(ValueError, "does not support query family"):
+            spec.queries.family("unsupported_family")
+
+    def test_query_family_rejects_family_not_registered_for_pattern(self) -> None:
+        spec = get_path_pattern_spec("patient_game_patient")
+        query_set = PatternQuerySet(
+            families={"date_window": spec.queries.family("date_window")}
+        )
+
+        with self.assertRaisesRegex(ValueError, "does not support query family"):
+            query_set.family("training_order")
 
     def test_registered_specs_are_keyed_by_their_pattern(self) -> None:
         for pattern, spec in PATH_PATTERN_SPECS.items():
