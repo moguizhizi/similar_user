@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
-from ..domain.graph_schema import PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT
+from ..domain.graph_schema import (
+    PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    PathPattern,
+)
 from ..data_access.kg_repository import KgRepository
 from ..utils.logger import get_logger
 
@@ -435,12 +438,15 @@ class UserService:
         patient_id: str,
         base_date: str,
         window_days: int,
+        pattern: PathPattern | str = PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     ) -> dict[str, Any]:
         """Run the end-to-end fixed-pattern path flow for a patient date window."""
+        normalized_pattern = PathPattern(pattern)
         path_window = self._build_path_window(base_date, window_days)
         LOGGER.info(
-            "Starting patient pattern path flow in service: patient_id=%s, base_date=%s, window_days=%s",
+            "Starting patient pattern path flow in service: patient_id=%s, pattern=%s, base_date=%s, window_days=%s",
             patient_id,
+            normalized_pattern.value,
             path_window["base_date"],
             path_window["window_days"],
         )
@@ -450,6 +456,7 @@ class UserService:
 
         statistics, active_statistics = self._load_window_statistics(
             patient_id,
+            normalized_pattern,
             path_window,
         )
 
@@ -465,6 +472,7 @@ class UserService:
             )
             return self._build_pattern_result(
                 training_context=training_context,
+                pattern=normalized_pattern,
                 statistics=statistics,
                 limit_recommendation=None,
                 paths=[],
@@ -496,16 +504,18 @@ class UserService:
             )
             return self._build_pattern_result(
                 training_context=training_context,
+                pattern=normalized_pattern,
                 statistics=statistics,
                 limit_recommendation=limit_recommendation,
                 paths=[],
             )
 
-        paths = self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range(
+        paths = self.kg_repository.get_pattern_randomized_paths_by_date_range(
+            pattern=normalized_pattern,
             patient_id=patient_id,
             start_date=path_window["start_date"],
             end_date=path_window["end_date"],
-            per_g=recommendation.per_g,
+            per_group=recommendation.per_g,
             limit=recommendation.limit,
         )
 
@@ -524,6 +534,7 @@ class UserService:
 
         return self._build_pattern_result(
             training_context=training_context,
+            pattern=normalized_pattern,
             statistics=statistics,
             limit_recommendation=limit_recommendation,
             paths=paths,
@@ -566,11 +577,13 @@ class UserService:
     def _load_window_statistics(
         self,
         patient_id: str,
+        pattern: PathPattern,
         path_window: dict[str, Any],
     ) -> tuple[dict[str, Any], dict[str, int]]:
         """Load path statistics for the configured left-closed, right-open window."""
         statistics_records = (
-            self.kg_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range(
+            self.kg_repository.get_training_order_pattern_statistics_by_date_range(
+                pattern,
                 patient_id,
                 path_window["start_date"],
                 path_window["end_date"],
@@ -623,6 +636,7 @@ class UserService:
     def _build_pattern_result(
         *,
         training_context: dict[str, Any],
+        pattern: PathPattern,
         statistics: dict[str, Any] | None,
         limit_recommendation: dict[str, int] | None,
         paths: list[dict[str, object]],
@@ -645,7 +659,7 @@ class UserService:
         )
         return {
             **training_context,
-            "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            "pattern": pattern.value,
             "retrieval_context": retrieval_context,
         }
 

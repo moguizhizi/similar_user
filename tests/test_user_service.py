@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from src.similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    PathPattern,
 )
 from src.similar_user.services.user_service import UserService
 
@@ -822,12 +823,12 @@ class UserServiceTest(unittest.TestCase):
     ) -> None:
         mock_repository = Mock()
         mock_repository.config_path = "config/settings.yaml"
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range.return_value = [
+        mock_repository.get_training_order_pattern_statistics_by_date_range.return_value = [
             {"totalPaths": 0, "gCount": 0, "p2Count": 0}
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 4
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range.return_value = []
+        mock_repository.get_pattern_randomized_paths_by_date_range.return_value = []
         service = UserService(kg_repository=mock_repository)
 
         result = service.get_patient_pattern_paths(
@@ -859,8 +860,9 @@ class UserServiceTest(unittest.TestCase):
             PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         )
         mock_repository.recommend_graph_path_limit.assert_not_called()
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range.assert_not_called()
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range.assert_called_once_with(
+        mock_repository.get_pattern_randomized_paths_by_date_range.assert_not_called()
+        mock_repository.get_training_order_pattern_statistics_by_date_range.assert_called_once_with(
+            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             "30010096",
             "2022-01-03",
             "2022-01-17",
@@ -869,12 +871,12 @@ class UserServiceTest(unittest.TestCase):
     def test_get_patient_pattern_paths_returns_paths_with_recommendation(self) -> None:
         mock_repository = Mock()
         mock_repository.config_path = "config/settings.yaml"
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range.return_value = [
+        mock_repository.get_training_order_pattern_statistics_by_date_range.return_value = [
             {"totalPaths": 20, "gCount": 5, "p2Count": 6}
         ]
         mock_repository.recommend_graph_path_limit.return_value.per_g = 5
         mock_repository.recommend_graph_path_limit.return_value.limit = 10
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range.return_value = [
+        mock_repository.get_pattern_randomized_paths_by_date_range.return_value = [
             {
                 "row": {
                     "p": {"id": "30010096"},
@@ -936,11 +938,12 @@ class UserServiceTest(unittest.TestCase):
             g_count=5,
             p2_count=6,
         )
-        mock_repository.get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range.assert_called_once_with(
+        mock_repository.get_pattern_randomized_paths_by_date_range.assert_called_once_with(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             patient_id="30010096",
             start_date="2022-01-03",
             end_date="2022-01-17",
-            per_g=5,
+            per_group=5,
             limit=10,
         )
 
