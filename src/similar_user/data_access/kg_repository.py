@@ -12,6 +12,10 @@ from ..domain.graph_schema import PathPattern
 from ..utils.logger import get_logger
 
 from .cypher_queries import (
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
     DISTINCT_TRAINING_GAMES_QUERY,
     PATIENT_IDS_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
@@ -59,7 +63,12 @@ from .cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
 )
 from .neo4j_client import Neo4jClient
-from .pattern_registry import PatternQuerySet, QueryDateWindow, get_path_pattern_spec
+from .pattern_registry import (
+    PatternQuerySet,
+    QueryDateVariant,
+    QueryDateWindow,
+    get_path_pattern_spec,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -141,6 +150,33 @@ class KgRepository:
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
             },
+        )
+
+    def get_disease_taskset_patient_randomized_paths(
+        self,
+        disease_id: str,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Return one randomized Disease-TaskInstanceSet-Patient path per patient."""
+        normalized_disease_id = disease_id.strip()
+        normalized_start_date = self._normalize_optional_string(start_date, "start_date")
+        normalized_end_date = self._normalize_optional_string(end_date, "end_date")
+        date_window = QueryDateWindow(
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+        )
+        if not normalized_disease_id:
+            raise ValueError("disease_id must be a non-empty string.")
+
+        query = self._select_disease_taskset_patient_randomized_path_query(date_window)
+        parameters: dict[str, object] = {"disease_id": normalized_disease_id}
+        parameters.update(date_window.parameters())
+
+        return self.client.run_query(
+            query=query,
+            parameters=parameters,
         )
 
     def get_patient_distinct_games_by_end_date(
@@ -1297,6 +1333,19 @@ class KgRepository:
         }
         parameters.update(date_window.parameters())
         return parameters
+
+    @staticmethod
+    def _select_disease_taskset_patient_randomized_path_query(
+        date_window: QueryDateWindow,
+    ) -> str:
+        """Select the Disease-TaskInstanceSet-Patient query matching date bounds."""
+        if date_window.variant == QueryDateVariant.DATE_RANGE:
+            return DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY
+        if date_window.variant == QueryDateVariant.START_DATE:
+            return DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY
+        if date_window.variant == QueryDateVariant.END_DATE:
+            return DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY
+        return DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY
 
     def _run_patient_pair_query_by_end_date(
         self,

@@ -9,6 +9,10 @@ from unittest.mock import Mock
 
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
     DISTINCT_TRAINING_GAMES_QUERY,
     PATIENT_IDS_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
@@ -187,6 +191,102 @@ class KgRepositoryTest(unittest.TestCase):
             repository.get_patient_training_date_games_by_start_date(
                 "30010096",
                 "   ",
+            )
+
+    def test_get_disease_taskset_patient_randomized_paths_selects_base_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"d": {"id": "AU_DIS_0013"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_disease_taskset_patient_randomized_paths(
+            " AU_DIS_0013 "
+        )
+
+        self.assertEqual(result, [{"row": {"d": {"id": "AU_DIS_0013"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+            parameters={"disease_id": "AU_DIS_0013"},
+        )
+
+    def test_get_disease_taskset_patient_randomized_paths_selects_start_date_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = []
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_disease_taskset_patient_randomized_paths(
+            " AU_DIS_0013 ",
+            start_date=" 2022-01-01 ",
+        )
+
+        self.assertEqual(result, [])
+        mock_client.run_query.assert_called_once_with(
+            query=DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+            parameters={
+                "disease_id": "AU_DIS_0013",
+                "start_date": "2022-01-01",
+            },
+        )
+
+    def test_get_disease_taskset_patient_randomized_paths_selects_end_date_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = []
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_disease_taskset_patient_randomized_paths(
+            " AU_DIS_0013 ",
+            end_date=" 2022-01-13 ",
+        )
+
+        self.assertEqual(result, [])
+        mock_client.run_query.assert_called_once_with(
+            query=DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+            parameters={
+                "disease_id": "AU_DIS_0013",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_disease_taskset_patient_randomized_paths_selects_date_range_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = []
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_disease_taskset_patient_randomized_paths(
+            " AU_DIS_0013 ",
+            start_date=" 2022-01-01 ",
+            end_date=" 2022-01-13 ",
+        )
+
+        self.assertEqual(result, [])
+        mock_client.run_query.assert_called_once_with(
+            query=DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "disease_id": "AU_DIS_0013",
+                "start_date": "2022-01-01",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_disease_taskset_patient_randomized_paths_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "disease_id must be a non-empty string."):
+            repository.get_disease_taskset_patient_randomized_paths("   ")
+
+        with self.assertRaisesRegex(ValueError, "start_date must be a non-empty string or None."):
+            repository.get_disease_taskset_patient_randomized_paths(
+                "AU_DIS_0013",
+                start_date="   ",
             )
 
     def test_get_patient_distinct_games_by_end_date(self) -> None:

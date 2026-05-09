@@ -154,6 +154,33 @@ class PatientTasksetUnknownTasksetPatientPath:
 
 
 @dataclass(frozen=True)
+class DiseaseTasksetPatientPath:
+    """The D-S-P fixed graph path model."""
+
+    pattern: PathPattern
+    d: DiseaseNode
+    s: TaskInstanceSetNode
+    p: PatientNode
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+    ) -> DiseaseTasksetPatientPath:
+        """Build a typed path from a stored path row."""
+        row = data.get("row") if isinstance(data.get("row"), dict) else data
+        if not isinstance(row, dict):
+            raise ValueError("path data must contain a mapping row.")
+
+        return cls(
+            pattern=_coerce_path_pattern(data.get("pattern")),
+            d=_build_disease_node(row.get("d"), "d"),
+            s=_build_task_instance_set_node(row.get("s"), "s"),
+            p=_build_patient_node(row.get("p"), "p"),
+        )
+
+
+@dataclass(frozen=True)
 class PatternPathResult:
     """A patient-scoped collection of paths for one fixed pattern."""
 
@@ -164,6 +191,7 @@ class PatternPathResult:
         | PatientTasksetDiseaseTasksetPatientPath
         | PatientTasksetSymptomTasksetPatientPath
         | PatientTasksetUnknownTasksetPatientPath
+        | DiseaseTasksetPatientPath
     ]
 
 

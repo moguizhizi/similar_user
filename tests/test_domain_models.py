@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from src.similar_user.domain import (
+    DISEASE_TASKSET_PATIENT,
     TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
@@ -14,6 +15,7 @@ from src.similar_user.domain import (
     TASK_INSTANCE_RESULT_VALUES,
     TASK_INSTANCE_SET_EDUCATION_VALUES,
     DiseaseNode,
+    DiseaseTasksetPatientPath,
     GameNode,
     PathPattern,
     PatientNode,
@@ -46,6 +48,10 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(
             PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
             PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT.value,
+        )
+        self.assertEqual(
+            DISEASE_TASKSET_PATIENT,
+            PathPattern.DISEASE_TASKSET_PATIENT.value,
         )
 
     def test_patient_taskset_task_game_task_taskset_patient_path_can_be_built(
@@ -251,6 +257,52 @@ class DomainModelsTest(unittest.TestCase):
                         "s1": {"id": "40_20220401"},
                         "s2": {"id": "20102799_20230123"},
                         "p2": {"id": "20102799"},
+                    },
+                }
+            )
+
+    def test_disease_taskset_patient_path_can_be_built(self) -> None:
+        path = DiseaseTasksetPatientPath(
+            pattern=PathPattern.DISEASE_TASKSET_PATIENT,
+            d=DiseaseNode(id="AU_DIS_0013", name="遗忘型轻度认知障碍"),
+            s=TaskInstanceSetNode(id="40_20220401", 训练日期="2022-04-01"),
+            p=PatientNode(id="40", name="患者_40", 性别="女"),
+        )
+        result = PatternPathResult(
+            patient_id="AU_DIS_0013",
+            pattern=PathPattern.DISEASE_TASKSET_PATIENT,
+            paths=[path],
+        )
+
+        self.assertEqual(result.pattern, PathPattern.DISEASE_TASKSET_PATIENT)
+        self.assertEqual(result.paths[0].d.name, "遗忘型轻度认知障碍")
+        self.assertEqual(result.paths[0].p.id, "40")
+
+    def test_disease_taskset_patient_path_can_be_built_from_dict(self) -> None:
+        path = DiseaseTasksetPatientPath.from_dict(
+            {
+                "pattern": DISEASE_TASKSET_PATIENT,
+                "row": {
+                    "d": {"id": "AU_DIS_0013", "name": "遗忘型轻度认知障碍"},
+                    "s": {"id": "40_20220401", "训练日期": "2022-04-01"},
+                    "p": {"id": "40", "name": "患者_40", "性别": "女"},
+                },
+            }
+        )
+
+        self.assertEqual(path.pattern, PathPattern.DISEASE_TASKSET_PATIENT)
+        self.assertEqual(path.d.id, "AU_DIS_0013")
+        self.assertEqual(path.s.训练日期, "2022-04-01")
+        self.assertEqual(path.p.id, "40")
+
+    def test_disease_taskset_patient_path_rejects_missing_patient(self) -> None:
+        with self.assertRaisesRegex(ValueError, "p must be a mapping"):
+            DiseaseTasksetPatientPath.from_dict(
+                {
+                    "pattern": DISEASE_TASKSET_PATIENT,
+                    "row": {
+                        "d": {"id": "AU_DIS_0013"},
+                        "s": {"id": "40_20220401"},
                     },
                 }
             )

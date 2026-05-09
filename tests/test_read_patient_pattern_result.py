@@ -269,6 +269,45 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
         self.assertEqual(domain_paths[0].un.name, "儿童相关-其他")
         self.assertEqual(domain_paths[0].p2.id, "20113562")
 
+    def test_stored_pattern_result_can_convert_disease_taskset_patient_paths_to_domain_objects(
+        self,
+    ) -> None:
+        result = StoredPatternResult.from_dict(
+            {
+                "patient_id": "AU_DIS_0013",
+                "pattern": "DISEASE_TASKSET_PATIENT",
+                "ordered_training_dates": [],
+                "first_training_date": None,
+                "last_training_date": None,
+                "training_date_count": 0,
+                "retrieval_context": {
+                    "split_training_date": None,
+                    "before_split": {},
+                    "post_split_games": [],
+                    "limit_recommendation": None,
+                    "paths": [
+                        {
+                            "row": {
+                                "d": {
+                                    "id": "AU_DIS_0013",
+                                    "name": "遗忘型轻度认知障碍",
+                                },
+                                "s": {"id": "30010096_20220113", "训练日期": "2022-01-13"},
+                                "p": {"id": "30010096", "name": "患者_30010096"},
+                            }
+                        }
+                    ],
+                },
+            }
+        )
+
+        domain_paths = result.to_domain_paths()
+
+        self.assertEqual(len(domain_paths), 1)
+        self.assertEqual(domain_paths[0].d.id, "AU_DIS_0013")
+        self.assertEqual(domain_paths[0].s.训练日期, "2022-01-13")
+        self.assertEqual(domain_paths[0].p.id, "30010096")
+
     def test_stored_pattern_result_can_convert_statistics_to_typed_object(self) -> None:
         result = StoredPatternResult.from_dict(
             {
