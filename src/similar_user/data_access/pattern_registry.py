@@ -131,10 +131,14 @@ PATH_PATTERN_SPECS: dict[PathPattern, PathPatternSpec] = {
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC,
 }
 
+PATH_PATTERN_ALIASES: dict[str, PathPattern] = {
+    "patient_game_patient": PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+}
+
 
 def get_path_pattern_spec(pattern: PathPattern | str) -> PathPatternSpec:
     """Return the data-access spec for a query-supported path pattern."""
-    normalized_pattern = _coerce_path_pattern(pattern)
+    normalized_pattern = resolve_path_pattern(pattern)
     try:
         return PATH_PATTERN_SPECS[normalized_pattern]
     except KeyError as exc:
@@ -143,9 +147,14 @@ def get_path_pattern_spec(pattern: PathPattern | str) -> PathPatternSpec:
         ) from exc
 
 
-def _coerce_path_pattern(value: PathPattern | str) -> PathPattern:
+def resolve_path_pattern(value: PathPattern | str) -> PathPattern:
+    """Resolve a public pattern alias or enum value to a supported PathPattern."""
     if isinstance(value, PathPattern):
         return value
     if isinstance(value, str) and value.strip():
-        return PathPattern(value.strip())
+        normalized_value = value.strip()
+        alias_pattern = PATH_PATTERN_ALIASES.get(normalized_value)
+        if alias_pattern is not None:
+            return alias_pattern
+        return PathPattern(normalized_value)
     raise ValueError("pattern must be a non-empty supported path pattern string.")

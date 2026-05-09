@@ -177,6 +177,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
             "30010096",
             base_date="2022-05-22",
             window_days=14,
+            pattern="patient_game_patient",
         )
         mock_save_pattern_result.assert_called_once_with(
             {
@@ -202,6 +203,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
             config="config/settings.yaml",
             base_date="2022-05-22",
             window_days=14,
+            pattern="patient_game_patient",
         )
         mock_run_flow.return_value = {
             "patient_id": "30010096",
@@ -212,6 +214,13 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         exit_code = patient_path_main()
 
         self.assertEqual(exit_code, 0)
+        mock_run_flow.assert_called_once_with(
+            "30010096",
+            config_path="config/settings.yaml",
+            base_date="2022-05-22",
+            window_days=14,
+            pattern="patient_game_patient",
+        )
         mock_logger.exception.assert_not_called()
 
 

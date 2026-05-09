@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from config.settings import load_query_settings
+from ..data_access.pattern_registry import resolve_path_pattern
 from ..domain.graph_schema import PathPattern
 from ..domain.item import GameNode
 from ..domain.path_models import (
@@ -151,7 +152,7 @@ class StoredPatternResult:
         | PatientTasksetUnknownTasksetPatientPath
     ]:
         """Convert stored raw path rows to typed domain path objects."""
-        pattern = PathPattern(self.pattern)
+        pattern = resolve_path_pattern(self.pattern)
         if pattern == PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT:
             path_cls = PatientTasksetTaskGameTaskTasksetPatientPath
         elif pattern == PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT:
@@ -215,7 +216,8 @@ class StoredPatternResult:
 def get_pattern_result_output_dir(config_path: str | Path, pattern: str) -> Path:
     """Return the output directory for a given pattern."""
     settings = load_query_settings(config_path)
-    return Path(settings.pattern_path_storage.output_dir) / pattern
+    normalized_pattern = resolve_path_pattern(pattern)
+    return Path(settings.pattern_path_storage.output_dir) / normalized_pattern.value
 
 
 def get_patient_pattern_result_output_path(

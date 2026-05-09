@@ -34,6 +34,7 @@ from similar_user.utils.pattern_storage import save_pattern_result
 
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
+DEFAULT_PATTERN = "patient_game_patient"
 LOGGER = get_logger(__name__)
 
 
@@ -59,6 +60,14 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Number of days before base_date included in path retrieval.",
     )
+    parser.add_argument(
+        "--pattern",
+        default=DEFAULT_PATTERN,
+        help=(
+            "Path pattern alias or enum value to build, "
+            "for example patient_game_patient."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -68,11 +77,13 @@ def run_patient_pattern_path_flow(
     *,
     base_date: str,
     window_days: int,
+    pattern: str = DEFAULT_PATTERN,
 ) -> dict[str, object]:
     """Build patient fixed-pattern paths from Neo4j and save the result."""
     LOGGER.info(
-        "Starting patient pattern path build: patient_id=%s, base_date=%s, window_days=%s, config_path=%s",
+        "Starting patient pattern path build: patient_id=%s, pattern=%s, base_date=%s, window_days=%s, config_path=%s",
         patient_id,
+        pattern,
         base_date,
         window_days,
         config_path,
@@ -84,6 +95,7 @@ def run_patient_pattern_path_flow(
             patient_id,
             base_date=base_date,
             window_days=window_days,
+            pattern=pattern,
         )
         output_path = save_pattern_result(result, repository.config_path)
         retrieval_context = result.get("retrieval_context") or {}
@@ -106,6 +118,7 @@ def main() -> int:
             config_path=args.config,
             base_date=args.base_date,
             window_days=args.window_days,
+            pattern=getattr(args, "pattern", DEFAULT_PATTERN),
         )
     except Exception as exc:
         LOGGER.exception(

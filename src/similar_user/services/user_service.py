@@ -11,6 +11,7 @@ from ..domain.graph_schema import (
     PathPattern,
 )
 from ..data_access.kg_repository import KgRepository
+from ..data_access.pattern_registry import resolve_path_pattern
 from ..utils.logger import get_logger
 
 
@@ -441,7 +442,7 @@ class UserService:
         pattern: PathPattern | str = PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     ) -> dict[str, Any]:
         """Run the end-to-end fixed-pattern path flow for a patient date window."""
-        normalized_pattern = PathPattern(pattern)
+        normalized_pattern = resolve_path_pattern(pattern)
         path_window = self._build_path_window(base_date, window_days)
         LOGGER.info(
             "Starting patient pattern path flow in service: patient_id=%s, pattern=%s, base_date=%s, window_days=%s",

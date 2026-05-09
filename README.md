@@ -108,6 +108,7 @@ python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 
 # 运行固定模式路径检索并保存离线结果
 python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-22 --window-days 14
 python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-22 --window-days 14 --config config/settings.yaml
+python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-22 --window-days 14 --pattern patient_game_patient
 
 # 对已保存的固定模式路径打分
 python scripts/score_patient_pattern_paths.py <patient_id>
