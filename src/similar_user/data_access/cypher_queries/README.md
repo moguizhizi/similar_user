@@ -50,6 +50,7 @@
 ```text
 Patient -- TaskInstanceSet -- TaskInstance -- Game -- TaskInstance -- TaskInstanceSet -- Patient
 Patient -- TaskInstanceSet -- Disease -- TaskInstanceSet -- Patient
+Patient -- TaskInstanceSet -- Symptom -- TaskInstanceSet -- Patient
 ```
 
 | 场景 | Query | 文件 | 主要参数 | 返回 |
@@ -70,6 +71,14 @@ Patient -- TaskInstanceSet -- Disease -- TaskInstanceSet -- Patient
 | 按训练日期顺序，并按 s1 从某日期开始随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 早于 end_date 随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 左闭右开日期区间随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 仅要求两侧训练日期非空，随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `patient_id`, `per_g`, `limit` | `row` |
+| 按 s1 从某日期开始随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
+| 按 s1 早于 end_date 随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
+| 按 s1 左闭右开日期区间随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `patient_id`, `per_g`, `limit` | `row` |
+| 按训练日期顺序，并按 s1 从某日期开始随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序，并按 s1 早于 end_date 随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序，并按 s1 左闭右开日期区间随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
 
 ### 固定模式 path 统计
 
@@ -91,6 +100,14 @@ Patient -- TaskInstanceSet -- Disease -- TaskInstanceSet -- Patient
 | 按训练日期顺序，并按 s1 从某日期开始统计疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY` | `pattern_statistics.py` | `patient_id`, `start_date` | `totalPaths`, `disCount`, `p2Count` |
 | 按训练日期顺序，并按 s1 早于 end_date 统计疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY` | `pattern_statistics.py` | `patient_id`, `end_date` | `totalPaths`, `disCount`, `p2Count` |
 | 按训练日期顺序，并按 s1 左闭右开日期区间统计疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY` | `pattern_statistics.py` | `patient_id`, `start_date`, `end_date` | `totalPaths`, `disCount`, `p2Count` |
+| 仅要求两侧训练日期非空，统计症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY` | `pattern_statistics.py` | `patient_id` | `totalPaths`, `symCount`, `p2Count` |
+| 按 s1 从某日期开始统计症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY` | `pattern_statistics.py` | `patient_id`, `start_date` | `totalPaths`, `symCount`, `p2Count` |
+| 按 s1 早于 end_date 统计症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY` | `pattern_statistics.py` | `patient_id`, `end_date` | `totalPaths`, `symCount`, `p2Count` |
+| 按 s1 左闭右开日期区间统计症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY` | `pattern_statistics.py` | `patient_id`, `start_date`, `end_date` | `totalPaths`, `symCount`, `p2Count` |
+| 按训练日期顺序统计症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY` | `pattern_statistics.py` | `patient_id` | `totalPaths`, `symCount`, `p2Count` |
+| 按训练日期顺序，并按 s1 从某日期开始统计症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY` | `pattern_statistics.py` | `patient_id`, `start_date` | `totalPaths`, `symCount`, `p2Count` |
+| 按训练日期顺序，并按 s1 早于 end_date 统计症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY` | `pattern_statistics.py` | `patient_id`, `end_date` | `totalPaths`, `symCount`, `p2Count` |
+| 按训练日期顺序，并按 s1 左闭右开日期区间统计症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY` | `pattern_statistics.py` | `patient_id`, `start_date`, `end_date` | `totalPaths`, `symCount`, `p2Count` |
 
 ## 按文件查
 
@@ -162,6 +179,14 @@ Patient -- TaskInstanceSet -- Disease -- TaskInstanceSet -- Patient
 | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY` | 按训练日期顺序，并按 s1 从某日期开始随机抽取疾病固定模式 path | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY` | 按训练日期顺序，并按 s1 早于 end_date 随机抽取疾病固定模式 path | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
 | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | 按训练日期顺序，并按 s1 左闭右开日期区间随机抽取疾病固定模式 path | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY` | 仅要求两侧训练日期非空，随机抽取症状固定模式 path | `patient_id`, `per_g`, `limit` | `row` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY` | 按 s1 从某日期开始随机抽取症状固定模式 path | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY` | 按 s1 早于 end_date 随机抽取症状固定模式 path | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | 按 s1 左闭右开日期区间随机抽取症状固定模式 path | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY` | 按训练日期顺序随机抽取症状固定模式 path | `patient_id`, `per_g`, `limit` | `row` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY` | 按训练日期顺序，并按 s1 从某日期开始随机抽取症状固定模式 path | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY` | 按训练日期顺序，并按 s1 早于 end_date 随机抽取症状固定模式 path | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | 按训练日期顺序，并按 s1 左闭右开日期区间随机抽取症状固定模式 path | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
 
 ### `pattern_statistics.py`
 
@@ -183,3 +208,11 @@ Patient -- TaskInstanceSet -- Disease -- TaskInstanceSet -- Patient
 | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY` | 按训练日期顺序，并按 s1 从某日期开始统计疾病固定模式 path | `patient_id`, `start_date` | `totalPaths`, `disCount`, `p2Count` |
 | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY` | 按训练日期顺序，并按 s1 早于 end_date 统计疾病固定模式 path | `patient_id`, `end_date` | `totalPaths`, `disCount`, `p2Count` |
 | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY` | 按训练日期顺序，并按 s1 左闭右开日期区间统计疾病固定模式 path | `patient_id`, `start_date`, `end_date` | `totalPaths`, `disCount`, `p2Count` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY` | 仅要求两侧训练日期非空，统计症状固定模式 path | `patient_id` | `totalPaths`, `symCount`, `p2Count` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY` | 按 s1 从某日期开始统计症状固定模式 path | `patient_id`, `start_date` | `totalPaths`, `symCount`, `p2Count` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY` | 按 s1 早于 end_date 统计症状固定模式 path | `patient_id`, `end_date` | `totalPaths`, `symCount`, `p2Count` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY` | 按 s1 左闭右开日期区间统计症状固定模式 path | `patient_id`, `start_date`, `end_date` | `totalPaths`, `symCount`, `p2Count` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY` | 按训练日期顺序统计症状固定模式 path | `patient_id` | `totalPaths`, `symCount`, `p2Count` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY` | 按训练日期顺序，并按 s1 从某日期开始统计症状固定模式 path | `patient_id`, `start_date` | `totalPaths`, `symCount`, `p2Count` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY` | 按训练日期顺序，并按 s1 早于 end_date 统计症状固定模式 path | `patient_id`, `end_date` | `totalPaths`, `symCount`, `p2Count` |
+| `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY` | 按训练日期顺序，并按 s1 左闭右开日期区间统计症状固定模式 path | `patient_id`, `start_date`, `end_date` | `totalPaths`, `symCount`, `p2Count` |

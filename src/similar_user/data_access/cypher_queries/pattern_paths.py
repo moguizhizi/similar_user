@@ -567,3 +567,271 @@ UNWIND rows AS row
 RETURN row
 LIMIT $limit
 """.strip()
+
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(sym:Symptom)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL
+
+WITH p, s1, sym, s2, p2, path, rand() AS r
+ORDER BY r
+
+WITH sym, p2, collect({
+    p: p,
+    s1: s1,
+    sym: sym,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH sym, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(sym:Symptom)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date)
+
+WITH p, s1, sym, s2, p2, path, rand() AS r
+ORDER BY r
+
+WITH sym, p2, collect({
+    p: p,
+    s1: s1,
+    sym: sym,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH sym, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(sym:Symptom)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH p, s1, sym, s2, p2, path, rand() AS r
+ORDER BY r
+
+WITH sym, p2, collect({
+    p: p,
+    s1: s1,
+    sym: sym,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH sym, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(sym:Symptom)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH p, s1, sym, s2, p2, path, rand() AS r
+ORDER BY r
+
+WITH sym, p2, collect({
+    p: p,
+    s1: s1,
+    sym: sym,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH sym, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(sym:Symptom)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date(s2.`训练日期`)
+
+WITH p, s1, sym, s2, p2, path, rand() AS r
+ORDER BY r
+
+WITH sym, p2, collect({
+    p: p,
+    s1: s1,
+    sym: sym,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH sym, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(sym:Symptom)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+    date(s1.`训练日期`) >= date($start_date)
+
+WITH p, s1, sym, s2, p2, path, rand() AS r
+ORDER BY r
+
+WITH sym, p2, collect({
+    p: p,
+    s1: s1,
+    sym: sym,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH sym, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(sym:Symptom)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH p, s1, sym, s2, p2, path, rand() AS r
+ORDER BY r
+
+WITH sym, p2, collect({
+    p: p,
+    s1: s1,
+    sym: sym,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH sym, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = """
+MATCH path =
+(p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(sym:Symptom)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s1.`训练日期` IS NOT NULL AND
+    s2.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH p, s1, sym, s2, p2, path, rand() AS r
+ORDER BY r
+
+WITH sym, p2, collect({
+    p: p,
+    s1: s1,
+    sym: sym,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH sym, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
