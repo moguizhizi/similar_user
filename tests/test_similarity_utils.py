@@ -5,7 +5,8 @@ from __future__ import annotations
 import unittest
 
 from src.similar_user.services.similarity.utils import (
-    calculate_common_game_score_correlation,
+    calculate_common_game_score_similarity,
+    calculate_cosine_similarity,
     calculate_game_composite_score,
     calculate_game_series_features,
     calculate_game_similarity_with_diversity_score,
@@ -22,18 +23,18 @@ class SimilarityUtilsTest(unittest.TestCase):
         self.assertAlmostEqual(float(result["mean_score"]), 90.0)
         self.assertAlmostEqual(float(result["std"]), 8.16496580927726)
         self.assertAlmostEqual(float(result["trend"]), 10.0)
-        self.assertAlmostEqual(float(result["score"]), 88.91751709536137)
+        self.assertAlmostEqual(float(result["score"]), 135.91751709536137)
 
     def test_calculate_game_composite_score_accepts_numeric_strings(self) -> None:
         result = calculate_game_composite_score(["91", "95"])
 
-        self.assertAlmostEqual(result, 93.2)
+        self.assertAlmostEqual(result, 112.0)
 
     def test_calculate_game_series_features_ignores_non_numeric_values(self) -> None:
         result = calculate_game_series_features(["", "80", None, "bad", 90])
 
         self.assertEqual(result["count"], 2)
-        self.assertAlmostEqual(float(result["score"]), 85.5)
+        self.assertAlmostEqual(float(result["score"]), 132.5)
 
     def test_calculate_game_series_features_rejects_empty_numeric_series(self) -> None:
         with self.assertRaisesRegex(
@@ -196,8 +197,31 @@ class SimilarityUtilsTest(unittest.TestCase):
         ):
             calculate_pearson_correlation([1.0, 2.0], [1.0])
 
-    def test_calculate_common_game_score_correlation_uses_query_records(self) -> None:
-        result = calculate_common_game_score_correlation(
+    def test_calculate_cosine_similarity_returns_vector_similarity(self) -> None:
+        self.assertAlmostEqual(
+            calculate_cosine_similarity([1.0, 2.0, 3.0], [2.0, 4.0, 6.0]),
+            1.0,
+        )
+        self.assertAlmostEqual(
+            calculate_cosine_similarity([1.0, 0.0], [0.0, 1.0]),
+            0.0,
+        )
+
+    def test_calculate_cosine_similarity_returns_none_for_empty_or_zero_vector(
+        self,
+    ) -> None:
+        self.assertIsNone(calculate_cosine_similarity([], []))
+        self.assertIsNone(calculate_cosine_similarity([0.0, 0.0], [1.0, 2.0]))
+
+    def test_calculate_cosine_similarity_rejects_different_lengths(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "vector_a and vector_b must have the same length.",
+        ):
+            calculate_cosine_similarity([1.0, 2.0], [1.0])
+
+    def test_calculate_common_game_score_similarity_uses_query_records(self) -> None:
+        result = calculate_common_game_score_similarity(
             [
                 {
                     "game": "打怪物",
@@ -219,12 +243,12 @@ class SimilarityUtilsTest(unittest.TestCase):
 
         self.assertEqual(result["common_games"], ["打怪物", "真假句辨别", "空间搜索"])
         self.assertEqual(result["valid_game_count"], 3)
-        self.assertEqual(result["source_vector"], [85.5, 95.5, 105.5])
-        self.assertEqual(result["candidate_vector"], [87.5, 98.5, 109.5])
-        self.assertAlmostEqual(float(result["correlation"]), 1.0)
+        self.assertEqual(result["source_vector"], [132.5, 142.5, 152.5])
+        self.assertEqual(result["candidate_vector"], [134.5, 145.5, 156.5])
+        self.assertAlmostEqual(float(result["similarity"]), 0.9999902556016596)
 
-    def test_calculate_common_game_score_correlation_skips_invalid_records(self) -> None:
-        result = calculate_common_game_score_correlation(
+    def test_calculate_common_game_score_similarity_skips_invalid_records(self) -> None:
+        result = calculate_common_game_score_similarity(
             [
                 {
                     "game": "打怪物",
@@ -246,12 +270,12 @@ class SimilarityUtilsTest(unittest.TestCase):
 
         self.assertEqual(result["common_games"], ["打怪物"])
         self.assertEqual(result["valid_game_count"], 1)
-        self.assertIsNone(result["correlation"])
+        self.assertAlmostEqual(float(result["similarity"]), 1.0)
 
-    def test_calculate_common_game_score_correlation_returns_none_for_zero_variance(
+    def test_calculate_common_game_score_similarity_ignores_zero_variance(
         self,
     ) -> None:
-        result = calculate_common_game_score_correlation(
+        result = calculate_common_game_score_similarity(
             [
                 {
                     "game": "打怪物",
@@ -268,7 +292,7 @@ class SimilarityUtilsTest(unittest.TestCase):
 
         self.assertEqual(result["source_vector"], [90.0, 90.0])
         self.assertEqual(result["candidate_vector"], [80.0, 100.0])
-        self.assertIsNone(result["correlation"])
+        self.assertAlmostEqual(float(result["similarity"]), 0.9938837346736189)
 
 
 if __name__ == "__main__":

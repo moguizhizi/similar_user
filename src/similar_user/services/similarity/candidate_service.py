@@ -11,7 +11,7 @@ from ...domain.path_models import PatientTasksetTaskGameTaskTasksetPatientPath
 from ...utils.logger import get_logger
 from ..user_service import UserService
 from .utils import (
-    calculate_common_game_score_correlation,
+    calculate_common_game_score_similarity,
     calculate_game_similarity_with_diversity_score,
     calculate_set_same_score,
 )
@@ -147,7 +147,7 @@ class SimilarUserCandidateService:
         candidate_patient_id: object,
         end_date: str | None,
     ) -> tuple[float | None, dict[str, Any]]:
-        """Calculate candidate score from correlation, set sameness, and game diversity."""
+        """Calculate candidate score from similarity, set sameness, and game diversity."""
         if (
             self.user_service is None
             or not isinstance(primary_patient_id, str)
@@ -164,7 +164,7 @@ class SimilarUserCandidateService:
                 self.user_service is not None,
             )
             return None, {
-                "common_game_score_correlation": None,
+                "common_game_score_similarity": None,
                 "reason": "missing user_service or score_end_date",
             }
 
@@ -173,16 +173,16 @@ class SimilarUserCandidateService:
             candidate_patient_id.strip(),
             end_date,
         )
-        common_game_score_correlation = calculate_common_game_score_correlation(records)
-        correlation = common_game_score_correlation.get("correlation")
-        correlation_score = (
-            round(float(correlation), 3)
-            if isinstance(correlation, (int, float))
+        common_game_score_similarity = calculate_common_game_score_similarity(records)
+        similarity = common_game_score_similarity.get("similarity")
+        similarity_score = (
+            round(float(similarity), 3)
+            if isinstance(similarity, (int, float))
             else None
         )
-        common_game_score_correlation = {
-            **common_game_score_correlation,
-            "correlation": correlation_score,
+        common_game_score_similarity = {
+            **common_game_score_similarity,
+            "similarity": similarity_score,
         }
         game_rows = self.user_service.get_patient_game_set_comparison_by_end_date(
             primary_patient_id.strip(),
@@ -208,26 +208,26 @@ class SimilarUserCandidateService:
         game_similarity_score = game_similarity_with_diversity_score.get("score")
         set_same_score = set_same_scores.get("score")
         candidate_score = (
-            round(correlation_score + game_similarity_score + set_same_score, 3)
+            round(similarity_score + game_similarity_score + set_same_score, 3)
             if (
-                correlation_score is not None
+                similarity_score is not None
                 and isinstance(game_similarity_score, (int, float))
                 and isinstance(set_same_score, (int, float))
             )
             else None
         )
         LOGGER.debug(
-            "Calculated candidate score: primary_patient_id=%s, candidate_patient_id=%s, end_date=%s, correlation=%s, game_similarity=%s, set_same=%s, candidate_score=%s",
+            "Calculated candidate score: primary_patient_id=%s, candidate_patient_id=%s, end_date=%s, similarity=%s, game_similarity=%s, set_same=%s, candidate_score=%s",
             primary_patient_id.strip(),
             candidate_patient_id.strip(),
             end_date,
-            correlation_score,
+            similarity_score,
             game_similarity_score,
             set_same_score,
             candidate_score,
         )
         return candidate_score, {
-            "common_game_score_correlation": common_game_score_correlation,
+            "common_game_score_similarity": common_game_score_similarity,
             "game_similarity_with_diversity_score": game_similarity_with_diversity_score,
             "set_same_scores": set_same_scores,
         }

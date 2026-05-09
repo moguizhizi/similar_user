@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 
 from config.settings import GraphPathLimitSettings, load_query_settings
+from ..domain.graph_schema import PathPattern
 from ..utils.logger import get_logger
 
 from .cypher_queries import (
@@ -45,7 +47,6 @@ from .cypher_queries import (
     PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
@@ -55,11 +56,10 @@ from .cypher_queries import (
     PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
     PATIENT_TRAINING_TASK_HISTORY_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
 )
 from .neo4j_client import Neo4jClient
+from .pattern_registry import PatternQuerySet, get_path_pattern_spec
 
 
 LOGGER = get_logger(__name__)
@@ -73,6 +73,13 @@ class GraphPathLimitRecommendation:
 
     per_g: int
     limit: int
+
+
+class PatternQueryFamily(str, Enum):
+    """Named query families for a path pattern candidate space."""
+
+    DATE_WINDOW = "date_window"
+    TRAINING_ORDER = "training_order"
 
 
 @dataclass
@@ -746,18 +753,159 @@ class KgRepository:
             },
         )
 
-    def get_patient_task_set_task_game_task_set_patient_pattern_statistics(
+    def get_pattern_date_window_statistics(
         self,
+        pattern: PathPattern | str,
         patient_id: str,
     ) -> list[dict[str, int]]:
-        """Return statistics for the fixed P-S-I-G-I-S-P traversal pattern."""
+        """Return statistics for rows with non-null training dates."""
+        return self.get_pattern_statistics(
+            pattern=pattern,
+            query_family=PatternQueryFamily.DATE_WINDOW,
+            patient_id=patient_id,
+        )
+
+    def get_pattern_date_window_statistics_by_end_date(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, int]]:
+        """Return date-window statistics constrained before an end date."""
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        return self.get_pattern_statistics(
+            pattern=pattern,
+            query_family=PatternQueryFamily.DATE_WINDOW,
+            patient_id=patient_id,
+            end_date=normalized_end_date,
+        )
+
+    def get_pattern_date_window_statistics_by_start_date(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, int]]:
+        """Return date-window statistics constrained from a start date."""
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        return self.get_pattern_statistics(
+            pattern=pattern,
+            query_family=PatternQueryFamily.DATE_WINDOW,
+            patient_id=patient_id,
+            start_date=normalized_start_date,
+        )
+
+    def get_pattern_date_window_statistics_by_date_range(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, int]]:
+        """Return date-window statistics constrained to a date range."""
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        return self.get_pattern_statistics(
+            pattern=pattern,
+            query_family=PatternQueryFamily.DATE_WINDOW,
+            patient_id=patient_id,
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+        )
+
+    def get_training_order_pattern_statistics(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+    ) -> list[dict[str, int]]:
+        """Return statistics for rows constrained by s1/s2 training-date order."""
+        return self.get_pattern_statistics(
+            pattern=pattern,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id=patient_id,
+        )
+
+    def get_training_order_pattern_statistics_by_end_date(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        end_date: str,
+    ) -> list[dict[str, int]]:
+        """Return training-order statistics constrained before an end date."""
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        return self.get_pattern_statistics(
+            pattern=pattern,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id=patient_id,
+            end_date=normalized_end_date,
+        )
+
+    def get_training_order_pattern_statistics_by_start_date(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        start_date: str,
+    ) -> list[dict[str, int]]:
+        """Return training-order statistics constrained from a start date."""
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        return self.get_pattern_statistics(
+            pattern=pattern,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id=patient_id,
+            start_date=normalized_start_date,
+        )
+
+    def get_training_order_pattern_statistics_by_date_range(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, int]]:
+        """Return training-order statistics constrained to a date range."""
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        return self.get_pattern_statistics(
+            pattern=pattern,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id=patient_id,
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+        )
+
+    def get_pattern_statistics(
+        self,
+        *,
+        pattern: PathPattern | str,
+        query_family: PatternQueryFamily | str,
+        patient_id: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[dict[str, int]]:
+        """Return statistics for one pattern family and optional date bounds."""
+        spec = get_path_pattern_spec(pattern)
+        normalized_query_family = self._normalize_pattern_query_family(query_family)
         normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_optional_string(start_date, "start_date")
+        normalized_end_date = self._normalize_optional_string(end_date, "end_date")
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        query = self._select_pattern_statistics_query(
+            spec.queries,
+            normalized_query_family,
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+        )
+        parameters: dict[str, object] = {"patient_id": normalized_patient_id}
+        if normalized_start_date is not None:
+            parameters["start_date"] = normalized_start_date
+        if normalized_end_date is not None:
+            parameters["end_date"] = normalized_end_date
+
         return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_PATTERN_STATISTICS_QUERY,
-            parameters={"patient_id": normalized_patient_id},
+            query=query,
+            parameters=parameters,
         )
 
     def get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics(
@@ -765,13 +913,9 @@ class KgRepository:
         patient_id: str,
     ) -> list[dict[str, int]]:
         """Return fixed-pattern statistics constrained by TaskInstanceSet training dates."""
-        normalized_patient_id = patient_id.strip()
-        if not normalized_patient_id:
-            raise ValueError("patient_id must be a non-empty string.")
-
-        return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
-            parameters={"patient_id": normalized_patient_id},
+        return self.get_training_order_pattern_statistics(
+            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            patient_id,
         )
 
     def get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_end_date(
@@ -780,17 +924,10 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, int]]:
         """Return dated fixed-pattern statistics constrained before an end date."""
-        normalized_patient_id = patient_id.strip()
-        normalized_end_date = self._normalize_required_string(end_date, "end_date")
-        if not normalized_patient_id:
-            raise ValueError("patient_id must be a non-empty string.")
-
-        return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-            parameters={
-                "patient_id": normalized_patient_id,
-                "end_date": normalized_end_date,
-            },
+        return self.get_training_order_pattern_statistics_by_end_date(
+            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            patient_id,
+            end_date,
         )
 
     def get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_start_date(
@@ -799,17 +936,10 @@ class KgRepository:
         start_date: str,
     ) -> list[dict[str, int]]:
         """Return dated fixed-pattern statistics constrained from a start date."""
-        normalized_patient_id = patient_id.strip()
-        normalized_start_date = self._normalize_required_string(start_date, "start_date")
-        if not normalized_patient_id:
-            raise ValueError("patient_id must be a non-empty string.")
-
-        return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-            parameters={
-                "patient_id": normalized_patient_id,
-                "start_date": normalized_start_date,
-            },
+        return self.get_training_order_pattern_statistics_by_start_date(
+            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            patient_id,
+            start_date,
         )
 
     def get_patient_task_set_task_game_task_set_patient_dated_pattern_statistics_by_date_range(
@@ -819,43 +949,206 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, int]]:
         """Return dated fixed-pattern statistics constrained to a date range."""
-        normalized_patient_id = patient_id.strip()
-        normalized_start_date = self._normalize_required_string(start_date, "start_date")
-        normalized_end_date = self._normalize_required_string(end_date, "end_date")
-        if not normalized_patient_id:
-            raise ValueError("patient_id must be a non-empty string.")
-
-        return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
-            parameters={
-                "patient_id": normalized_patient_id,
-                "start_date": normalized_start_date,
-                "end_date": normalized_end_date,
-            },
+        return self.get_training_order_pattern_statistics_by_date_range(
+            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            patient_id,
+            start_date,
+            end_date,
         )
 
-    def get_patient_task_set_task_game_task_set_patient_randomized_paths(
+    def get_pattern_randomized_paths_by_start_date(
         self,
+        pattern: PathPattern | str,
         patient_id: str,
-        per_g: int,
+        start_date: str,
+        per_group: int,
         limit: int,
     ) -> list[dict[str, object]]:
-        """Return randomized fixed-pattern rows with named nodes and limits applied."""
+        """Return randomized rows for a registered pattern from a start date."""
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        return self.get_pattern_randomized_paths(
+            pattern=pattern,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id=patient_id,
+            start_date=normalized_start_date,
+            per_group=per_group,
+            limit=limit,
+        )
+
+    def get_pattern_date_window_randomized_paths(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        per_group: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return randomized rows constrained to non-null training dates."""
+        return self.get_pattern_randomized_paths(
+            pattern=pattern,
+            query_family=PatternQueryFamily.DATE_WINDOW,
+            patient_id=patient_id,
+            per_group=per_group,
+            limit=limit,
+        )
+
+    def get_pattern_date_window_randomized_paths_by_start_date(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        start_date: str,
+        per_group: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return randomized rows constrained from a start date without date order."""
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        return self.get_pattern_randomized_paths(
+            pattern=pattern,
+            query_family=PatternQueryFamily.DATE_WINDOW,
+            patient_id=patient_id,
+            start_date=normalized_start_date,
+            per_group=per_group,
+            limit=limit,
+        )
+
+    def get_pattern_date_window_randomized_paths_by_end_date(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        end_date: str,
+        per_group: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return randomized rows constrained before an end date without date order."""
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        return self.get_pattern_randomized_paths(
+            pattern=pattern,
+            query_family=PatternQueryFamily.DATE_WINDOW,
+            patient_id=patient_id,
+            end_date=normalized_end_date,
+            per_group=per_group,
+            limit=limit,
+        )
+
+    def get_pattern_date_window_randomized_paths_by_date_range(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+        per_group: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return randomized rows in a date range without date order."""
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        return self.get_pattern_randomized_paths(
+            pattern=pattern,
+            query_family=PatternQueryFamily.DATE_WINDOW,
+            patient_id=patient_id,
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+            per_group=per_group,
+            limit=limit,
+        )
+
+    def get_pattern_training_order_randomized_paths(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        per_group: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return randomized rows with s1/s2 training-date order."""
+        return self.get_pattern_randomized_paths(
+            pattern=pattern,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id=patient_id,
+            per_group=per_group,
+            limit=limit,
+        )
+
+    def get_pattern_dated_randomized_paths_by_end_date(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        end_date: str,
+        per_group: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return date-aware randomized rows before an end date."""
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        return self.get_pattern_randomized_paths(
+            pattern=pattern,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id=patient_id,
+            end_date=normalized_end_date,
+            per_group=per_group,
+            limit=limit,
+        )
+
+    def get_pattern_randomized_paths_by_date_range(
+        self,
+        pattern: PathPattern | str,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+        per_group: int,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return randomized rows for a registered pattern in a date range."""
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        return self.get_pattern_randomized_paths(
+            pattern=pattern,
+            query_family=PatternQueryFamily.TRAINING_ORDER,
+            patient_id=patient_id,
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+            per_group=per_group,
+            limit=limit,
+        )
+
+    def get_pattern_randomized_paths(
+        self,
+        *,
+        pattern: PathPattern | str,
+        query_family: PatternQueryFamily | str,
+        patient_id: str,
+        per_group: int,
+        limit: int,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Return randomized paths for one pattern family and optional date bounds."""
+        spec = get_path_pattern_spec(pattern)
+        normalized_query_family = self._normalize_pattern_query_family(query_family)
         normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_optional_string(start_date, "start_date")
+        normalized_end_date = self._normalize_optional_string(end_date, "end_date")
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
-        if not isinstance(per_g, int) or isinstance(per_g, bool) or per_g <= 0:
+        if (
+            not isinstance(per_group, int)
+            or isinstance(per_group, bool)
+            or per_group <= 0
+        ):
             raise ValueError("per_g must be a positive integer.")
         if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
             raise ValueError("limit must be a positive integer.")
 
+        query = spec.queries.family(normalized_query_family.value).randomized_path.select(
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+        )
         return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_RANDOMIZED_PATH_QUERY,
-            parameters={
-                "patient_id": normalized_patient_id,
-                "per_g": per_g,
-                "limit": limit,
-            },
+            query=query,
+            parameters=self._build_pattern_path_parameters(
+                patient_id=normalized_patient_id,
+                per_group=per_group,
+                limit=limit,
+                start_date=normalized_start_date,
+                end_date=normalized_end_date,
+            ),
         )
 
     def get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_start_date(
@@ -866,23 +1159,12 @@ class KgRepository:
         limit: int,
     ) -> list[dict[str, object]]:
         """Return randomized fixed-pattern rows constrained from a start date."""
-        normalized_patient_id = patient_id.strip()
-        normalized_start_date = self._normalize_required_string(start_date, "start_date")
-        if not normalized_patient_id:
-            raise ValueError("patient_id must be a non-empty string.")
-        if not isinstance(per_g, int) or isinstance(per_g, bool) or per_g <= 0:
-            raise ValueError("per_g must be a positive integer.")
-        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
-            raise ValueError("limit must be a positive integer.")
-
-        return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-            parameters={
-                "patient_id": normalized_patient_id,
-                "start_date": normalized_start_date,
-                "per_g": per_g,
-                "limit": limit,
-            },
+        return self.get_pattern_randomized_paths_by_start_date(
+            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            patient_id,
+            start_date,
+            per_group=per_g,
+            limit=limit,
         )
 
     def get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_end_date(
@@ -893,23 +1175,12 @@ class KgRepository:
         limit: int,
     ) -> list[dict[str, object]]:
         """Return randomized fixed-pattern rows constrained before an end date."""
-        normalized_patient_id = patient_id.strip()
-        normalized_end_date = self._normalize_required_string(end_date, "end_date")
-        if not normalized_patient_id:
-            raise ValueError("patient_id must be a non-empty string.")
-        if not isinstance(per_g, int) or isinstance(per_g, bool) or per_g <= 0:
-            raise ValueError("per_g must be a positive integer.")
-        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
-            raise ValueError("limit must be a positive integer.")
-
-        return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-            parameters={
-                "patient_id": normalized_patient_id,
-                "end_date": normalized_end_date,
-                "per_g": per_g,
-                "limit": limit,
-            },
+        return self.get_pattern_dated_randomized_paths_by_end_date(
+            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            patient_id,
+            end_date,
+            per_group=per_g,
+            limit=limit,
         )
 
     def get_patient_task_set_task_game_task_set_patient_dated_randomized_paths_by_date_range(
@@ -921,52 +1192,13 @@ class KgRepository:
         limit: int,
     ) -> list[dict[str, object]]:
         """Return randomized fixed-pattern rows constrained to a date range."""
-        normalized_patient_id = patient_id.strip()
-        normalized_start_date = self._normalize_required_string(start_date, "start_date")
-        normalized_end_date = self._normalize_required_string(end_date, "end_date")
-        if not normalized_patient_id:
-            raise ValueError("patient_id must be a non-empty string.")
-        if not isinstance(per_g, int) or isinstance(per_g, bool) or per_g <= 0:
-            raise ValueError("per_g must be a positive integer.")
-        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
-            raise ValueError("limit must be a positive integer.")
-
-        return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-            parameters={
-                "patient_id": normalized_patient_id,
-                "start_date": normalized_start_date,
-                "end_date": normalized_end_date,
-                "per_g": per_g,
-                "limit": limit,
-            },
-        )
-
-    def get_patient_task_set_task_game_task_set_patient_randomized_paths_by_end_date(
-        self,
-        patient_id: str,
-        end_date: str,
-        per_g: int,
-        limit: int,
-    ) -> list[dict[str, object]]:
-        """Return randomized fixed-pattern rows constrained only by end date."""
-        normalized_patient_id = patient_id.strip()
-        normalized_end_date = self._normalize_required_string(end_date, "end_date")
-        if not normalized_patient_id:
-            raise ValueError("patient_id must be a non-empty string.")
-        if not isinstance(per_g, int) or isinstance(per_g, bool) or per_g <= 0:
-            raise ValueError("per_g must be a positive integer.")
-        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
-            raise ValueError("limit must be a positive integer.")
-
-        return self.client.run_query(
-            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_END_DATE_RANDOMIZED_PATH_QUERY,
-            parameters={
-                "patient_id": normalized_patient_id,
-                "end_date": normalized_end_date,
-                "per_g": per_g,
-                "limit": limit,
-            },
+        return self.get_pattern_randomized_paths_by_date_range(
+            PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            patient_id,
+            start_date,
+            end_date,
+            per_group=per_g,
+            limit=limit,
         )
 
     def recommend_graph_path_limit(
@@ -1011,6 +1243,66 @@ class KgRepository:
             raise ValueError(f"{field_name} must be a non-empty string.")
 
         return normalized_value
+
+    @staticmethod
+    def _normalize_optional_string(value: str | None, field_name: str) -> str | None:
+        """Validate and normalize an optional string parameter."""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be a non-empty string or None.")
+
+        normalized_value = value.strip()
+        if not normalized_value:
+            raise ValueError(f"{field_name} must be a non-empty string or None.")
+
+        return normalized_value
+
+    @staticmethod
+    def _normalize_pattern_query_family(
+        value: PatternQueryFamily | str,
+    ) -> PatternQueryFamily:
+        """Normalize a raw query-family value."""
+        if isinstance(value, PatternQueryFamily):
+            return value
+        if isinstance(value, str) and value.strip():
+            return PatternQueryFamily(value.strip())
+        raise ValueError("query_family must be a supported pattern query family.")
+
+    @staticmethod
+    def _select_pattern_statistics_query(
+        queries: PatternQuerySet,
+        query_family: PatternQueryFamily,
+        *,
+        start_date: str | None,
+        end_date: str | None,
+    ) -> str:
+        """Select the static statistics query for one family and date shape."""
+        return queries.family(query_family.value).statistics.select(
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    @staticmethod
+    def _build_pattern_path_parameters(
+        *,
+        patient_id: str,
+        per_group: int,
+        limit: int,
+        start_date: str | None,
+        end_date: str | None,
+    ) -> dict[str, object]:
+        """Build randomized path query parameters for the selected date shape."""
+        parameters: dict[str, object] = {
+            "patient_id": patient_id,
+            "per_g": per_group,
+            "limit": limit,
+        }
+        if start_date is not None:
+            parameters["start_date"] = start_date
+        if end_date is not None:
+            parameters["end_date"] = end_date
+        return parameters
 
     def _run_patient_pair_query_by_end_date(
         self,
