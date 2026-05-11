@@ -606,14 +606,21 @@ class UserService:
         path_window: dict[str, Any],
     ) -> dict[str, Any]:
         """Run a direct path query for a source-driven pattern."""
-        if pattern != PathPattern.DISEASE_TASKSET_PATIENT:
+        if pattern == PathPattern.DISEASE_TASKSET_PATIENT:
+            paths = self.kg_repository.get_disease_taskset_patient_randomized_paths(
+                source_id,
+                start_date=path_window["start_date"],
+                end_date=path_window["end_date"],
+            )
+        elif pattern == PathPattern.SYMPTOM_TASKSET_PATIENT:
+            paths = self.kg_repository.get_symptom_taskset_patient_randomized_paths(
+                source_id,
+                start_date=path_window["start_date"],
+                end_date=path_window["end_date"],
+            )
+        else:
             raise ValueError(f"Unsupported direct path pattern: {pattern.value}")
 
-        paths = self.kg_repository.get_disease_taskset_patient_randomized_paths(
-            source_id,
-            start_date=path_window["start_date"],
-            end_date=path_window["end_date"],
-        )
         LOGGER.info(
             "Loaded direct randomized paths: source_id=%s, pattern=%s, path_count=%s",
             source_id,
