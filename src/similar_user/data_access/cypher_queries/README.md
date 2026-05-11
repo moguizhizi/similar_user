@@ -97,6 +97,10 @@ Disease -- TaskInstanceSet -- Patient
 | 按 s 从某日期开始随机抽取症状到患者路径，每个患者保留一条 | `SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `symptom_id`, `start_date` | `row` |
 | 按 s 早于 end_date 随机抽取症状到患者路径，每个患者保留一条 | `SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `symptom_id`, `end_date` | `row` |
 | 按 s 左闭右开日期区间随机抽取症状到患者路径，每个患者保留一条 | `SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `symptom_id`, `start_date`, `end_date` | `row` |
+| 随机抽取未知到患者路径，每个患者保留一条 | `UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `unknown_id` | `row` |
+| 按 s 从某日期开始随机抽取未知到患者路径，每个患者保留一条 | `UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `unknown_id`, `start_date` | `row` |
+| 按 s 早于 end_date 随机抽取未知到患者路径，每个患者保留一条 | `UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `unknown_id`, `end_date` | `row` |
+| 按 s 左闭右开日期区间随机抽取未知到患者路径，每个患者保留一条 | `UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `unknown_id`, `start_date`, `end_date` | `row` |
 
 ### 固定模式 path 统计
 
@@ -229,6 +233,10 @@ Disease -- TaskInstanceSet -- Patient
 | `SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY` | 按 s 从某日期开始随机抽取症状到患者路径，每个患者保留一条 | `symptom_id`, `start_date` | `row` |
 | `SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY` | 按 s 早于 end_date 随机抽取症状到患者路径，每个患者保留一条 | `symptom_id`, `end_date` | `row` |
 | `SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | 按 s 左闭右开日期区间随机抽取症状到患者路径，每个患者保留一条 | `symptom_id`, `start_date`, `end_date` | `row` |
+| `UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY` | 随机抽取未知到患者路径，每个患者保留一条 | `unknown_id` | `row` |
+| `UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY` | 按 s 从某日期开始随机抽取未知到患者路径，每个患者保留一条 | `unknown_id`, `start_date` | `row` |
+| `UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY` | 按 s 早于 end_date 随机抽取未知到患者路径，每个患者保留一条 | `unknown_id`, `end_date` | `row` |
+| `UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | 按 s 左闭右开日期区间随机抽取未知到患者路径，每个患者保留一条 | `unknown_id`, `start_date`, `end_date` | `row` |
 
 ### `pattern_statistics.py`
 

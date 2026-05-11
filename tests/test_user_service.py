@@ -10,6 +10,7 @@ from src.similar_user.domain.graph_schema import (
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     SYMPTOM_TASKSET_PATIENT,
+    UNKNOWN_TASKSET_PATIENT,
     PathPattern,
 )
 from src.similar_user.data_access.kg_repository import PatternQueryFamily
@@ -1098,6 +1099,53 @@ class UserServiceTest(unittest.TestCase):
         )
         mock_repository.get_symptom_taskset_patient_randomized_paths.assert_called_once_with(
             "AU_SYM_0007",
+            start_date="2022-01-03",
+            end_date="2022-01-17",
+        )
+        mock_repository.get_pattern_statistics.assert_not_called()
+        mock_repository.recommend_graph_path_limit.assert_not_called()
+        mock_repository.get_pattern_randomized_paths.assert_not_called()
+
+    def test_get_pattern_paths_loads_direct_unknown_patient_paths(self) -> None:
+        mock_repository = Mock()
+        mock_repository.config_path = "config/settings.yaml"
+        mock_repository.get_unknown_taskset_patient_randomized_paths.return_value = [
+            {
+                "row": {
+                    "un": {"id": "AU_UNKOWN_0005"},
+                    "s": {"id": "40_20220516"},
+                    "p": {"id": "40"},
+                }
+            }
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_pattern_paths(
+            "AU_UNKOWN_0005",
+            base_date="2022-01-17",
+            window_days=14,
+            pattern="unknown_patient",
+        )
+
+        self.assertEqual(result["source_id"], "AU_UNKOWN_0005")
+        self.assertEqual(result["source_parameter"], "unknown_id")
+        self.assertEqual(result["unknown_id"], "AU_UNKOWN_0005")
+        self.assertNotIn("patient_id", result)
+        self.assertEqual(result["pattern"], UNKNOWN_TASKSET_PATIENT)
+        self.assertEqual(
+            result["retrieval_context"]["paths"],
+            [
+                {
+                    "row": {
+                        "un": {"id": "AU_UNKOWN_0005"},
+                        "s": {"id": "40_20220516"},
+                        "p": {"id": "40"},
+                    }
+                }
+            ],
+        )
+        mock_repository.get_unknown_taskset_patient_randomized_paths.assert_called_once_with(
+            "AU_UNKOWN_0005",
             start_date="2022-01-03",
             end_date="2022-01-17",
         )

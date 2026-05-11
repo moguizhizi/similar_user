@@ -7,6 +7,7 @@ import unittest
 from src.similar_user.domain import (
     DISEASE_TASKSET_PATIENT,
     SYMPTOM_TASKSET_PATIENT,
+    UNKNOWN_TASKSET_PATIENT,
     TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
@@ -30,6 +31,7 @@ from src.similar_user.domain import (
     TaskInstanceNode,
     TaskInstanceSetNode,
     UnknownNode,
+    UnknownTasksetPatientPath,
 )
 
 
@@ -58,6 +60,10 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(
             SYMPTOM_TASKSET_PATIENT,
             PathPattern.SYMPTOM_TASKSET_PATIENT.value,
+        )
+        self.assertEqual(
+            UNKNOWN_TASKSET_PATIENT,
+            PathPattern.UNKNOWN_TASKSET_PATIENT.value,
         )
 
     def test_patient_taskset_task_game_task_taskset_patient_path_can_be_built(
@@ -344,6 +350,40 @@ class DomainModelsTest(unittest.TestCase):
 
         self.assertEqual(path.pattern, PathPattern.SYMPTOM_TASKSET_PATIENT)
         self.assertEqual(path.sym.id, "AU_SYM_0007")
+        self.assertEqual(path.s.训练日期, "2022-04-01")
+        self.assertEqual(path.p.id, "40")
+
+    def test_unknown_taskset_patient_path_can_be_built(self) -> None:
+        path = UnknownTasksetPatientPath(
+            pattern=PathPattern.UNKNOWN_TASKSET_PATIENT,
+            un=UnknownNode(id="AU_UNKOWN_0005", name="儿童相关-其他"),
+            s=TaskInstanceSetNode(id="40_20220401", 训练日期="2022-04-01"),
+            p=PatientNode(id="40", name="患者_40", 性别="女"),
+        )
+        result = PatternPathResult(
+            patient_id="AU_UNKOWN_0005",
+            pattern=PathPattern.UNKNOWN_TASKSET_PATIENT,
+            paths=[path],
+        )
+
+        self.assertEqual(result.pattern, PathPattern.UNKNOWN_TASKSET_PATIENT)
+        self.assertEqual(result.paths[0].un.name, "儿童相关-其他")
+        self.assertEqual(result.paths[0].p.id, "40")
+
+    def test_unknown_taskset_patient_path_can_be_built_from_dict(self) -> None:
+        path = UnknownTasksetPatientPath.from_dict(
+            {
+                "pattern": UNKNOWN_TASKSET_PATIENT,
+                "row": {
+                    "un": {"id": "AU_UNKOWN_0005", "name": "儿童相关-其他"},
+                    "s": {"id": "40_20220401", "训练日期": "2022-04-01"},
+                    "p": {"id": "40", "name": "患者_40", "性别": "女"},
+                },
+            }
+        )
+
+        self.assertEqual(path.pattern, PathPattern.UNKNOWN_TASKSET_PATIENT)
+        self.assertEqual(path.un.id, "AU_UNKOWN_0005")
         self.assertEqual(path.s.训练日期, "2022-04-01")
         self.assertEqual(path.p.id, "40")
 

@@ -13,6 +13,10 @@ from src.similar_user.data_access.cypher_queries import (
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
@@ -97,6 +101,7 @@ from src.similar_user.domain.path_models import (
     PatientTasksetTaskGameTaskTasksetPatientPath,
     PatientTasksetUnknownTasksetPatientPath,
     SymptomTasksetPatientPath,
+    UnknownTasksetPatientPath,
 )
 
 
@@ -496,6 +501,40 @@ class PathPatternRegistryTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Supported query families: none"):
             spec.queries.family("date_window")
 
+    def test_registered_direct_unknown_patient_pattern_declares_contract(self) -> None:
+        spec = get_path_pattern_spec(PathPattern.UNKNOWN_TASKSET_PATIENT)
+
+        self.assertEqual(spec.pattern, PathPattern.UNKNOWN_TASKSET_PATIENT)
+        self.assertEqual(spec.description, "未知-任务集-患者")
+        self.assertEqual(spec.path_shape, "(un:Unknown)--(s:TaskInstanceSet)--(p:Patient)")
+        self.assertEqual(spec.row_fields, ("un", "s", "p"))
+        self.assertEqual(spec.group_field, "p")
+        self.assertIs(spec.path_model, UnknownTasksetPatientPath)
+        self.assertEqual(spec.query_mode, PatternQueryMode.DIRECT_PATH)
+        self.assertEqual(spec.source_parameter, "unknown_id")
+        self.assertEqual(spec.queries.families, {})
+        self.assertIsNotNone(spec.direct_queries)
+        assert spec.direct_queries is not None
+        self.assertEqual(
+            spec.direct_queries.randomized_path.base,
+            UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+        )
+        self.assertEqual(
+            spec.direct_queries.randomized_path.by_start_date,
+            UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+        )
+        self.assertEqual(
+            spec.direct_queries.randomized_path.by_end_date,
+            UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+        )
+        self.assertEqual(
+            spec.direct_queries.randomized_path.by_date_range,
+            UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+        )
+
+        with self.assertRaisesRegex(ValueError, "Supported query families: none"):
+            spec.queries.family("date_window")
+
     def test_query_date_window_selects_matching_query_variant(self) -> None:
         variants = get_path_pattern_spec(
             "patient_game_patient"
@@ -621,6 +660,16 @@ class PathPatternRegistryTest(unittest.TestCase):
             get_path_pattern_spec(PathPattern.SYMPTOM_TASKSET_PATIENT),
         )
 
+    def test_unknown_patient_alias_resolves_to_registered_pattern(self) -> None:
+        self.assertEqual(
+            resolve_path_pattern("unknown_patient"),
+            PathPattern.UNKNOWN_TASKSET_PATIENT,
+        )
+        self.assertIs(
+            get_path_pattern_spec("unknown_patient"),
+            get_path_pattern_spec(PathPattern.UNKNOWN_TASKSET_PATIENT),
+        )
+
     def test_available_path_pattern_aliases_returns_public_aliases_only(self) -> None:
         self.assertEqual(
             available_path_pattern_aliases(),
@@ -631,6 +680,7 @@ class PathPatternRegistryTest(unittest.TestCase):
                 "patient_symptom_patient",
                 "patient_unknown_patient",
                 "symptom_patient",
+                "unknown_patient",
             ),
         )
 
