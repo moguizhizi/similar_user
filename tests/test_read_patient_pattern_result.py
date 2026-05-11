@@ -40,6 +40,8 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 encoding="utf-8",
             )
             expected_result = {
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
                 "patient_id": "30010096",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 "ordered_training_dates": ["2022-01-01", "2022-01-13"],
@@ -86,13 +88,15 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 encoding="utf-8",
             )
             expected_result = {
-                "patient_id": "30010096",
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 "ordered_training_dates": [],
                 "first_training_date": None,
                 "last_training_date": None,
                 "training_date_count": 0,
                 "retrieval_context": None,
+                "patient_id": "30010096",
             }
             save_pattern_result(expected_result, config_path)
             mock_parse_args.return_value = Mock(

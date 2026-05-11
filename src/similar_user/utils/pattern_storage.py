@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from config.settings import load_query_settings
-from ..data_access.pattern_registry import resolve_path_pattern
+from ..data_access.pattern_registry import get_path_pattern_spec, resolve_path_pattern
 from ..domain.graph_schema import PathPattern
 from ..domain.item import GameNode
 from ..domain.path_models import (
@@ -96,8 +96,10 @@ class StoredPatternStatistics:
 class StoredPatternResult:
     """Typed view of one saved patient pattern result."""
 
-    patient_id: str
+    source_id: str
+    source_parameter: str
     pattern: str
+    patient_id: str | None = None
     ordered_training_dates: list[str] = field(default_factory=list)
     first_training_date: str | None = None
     last_training_date: str | None = None
@@ -107,14 +109,20 @@ class StoredPatternResult:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StoredPatternResult:
         """Build a typed result from a stored JSON mapping."""
-        patient_id = _normalize_required_string(data.get("patient_id"), "patient_id")
         pattern = _normalize_required_string(data.get("pattern"), "pattern")
+        source_parameter = _normalize_source_parameter(data)
+        source_id = _normalize_source_id(data, source_parameter)
+        patient_id = _optional_string(data.get("patient_id"))
+        if patient_id is None and source_parameter == "patient_id":
+            patient_id = source_id
         ordered_training_dates = data.get("ordered_training_dates", [])
         retrieval_context = _normalize_retrieval_context(data)
 
         return cls(
-            patient_id=patient_id,
+            source_id=source_id,
+            source_parameter=source_parameter,
             pattern=pattern,
+            patient_id=patient_id,
             ordered_training_dates=[str(value) for value in ordered_training_dates]
             if isinstance(ordered_training_dates, list)
             else [],
@@ -134,8 +142,9 @@ class StoredPatternResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Return the JSON-serializable mapping for the stored result."""
-        return {
-            "patient_id": self.patient_id,
+        result = {
+            "source_id": self.source_id,
+            "source_parameter": self.source_parameter,
             "pattern": self.pattern,
             "ordered_training_dates": self.ordered_training_dates,
             "first_training_date": self.first_training_date,
@@ -143,6 +152,10 @@ class StoredPatternResult:
             "training_date_count": self.training_date_count,
             "retrieval_context": self.retrieval_context,
         }
+        result[self.source_parameter] = self.source_id
+        if self.patient_id is not None:
+            result["patient_id"] = self.patient_id
+        return result
 
     def to_domain_paths(
         self,
@@ -230,31 +243,40 @@ def get_patient_pattern_result_output_path(
     patient_id: str,
 ) -> Path:
     """Return the bucketed JSON output path for one patient's pattern result."""
+    return get_pattern_result_output_path(config_path, pattern, patient_id)
+
+
+def get_pattern_result_output_path(
+    config_path: str | Path,
+    pattern: str,
+    source_id: str,
+) -> Path:
+    """Return the bucketed JSON output path for one pattern source."""
     normalized_pattern = _normalize_required_string(pattern, "pattern")
-    normalized_patient_id = _normalize_required_string(patient_id, "patient_id")
-    bucket = normalized_patient_id[:2] or "unknown"
+    normalized_source_id = _normalize_required_string(source_id, "source_id")
+    bucket = normalized_source_id[:2] or "unknown"
     return (
         get_pattern_result_output_dir(config_path, normalized_pattern)
         / bucket
-        / f"{normalized_patient_id}.json"
+        / f"{normalized_source_id}.json"
     )
 
 
 class PatternResultStore:
-    """Read and write patient-scoped pattern path result files."""
+    """Read and write source-scoped pattern path result files."""
 
     def __init__(self, config_path: str | Path) -> None:
         self.config_path = config_path
 
     def save(self, result: StoredPatternResult | dict[str, Any]) -> Path:
-        """Save one patient's result as a single JSON file, overwriting older data."""
+        """Save one source result as a single JSON file, overwriting older data."""
         normalized_result = (
             result if isinstance(result, StoredPatternResult) else StoredPatternResult.from_dict(result)
         )
-        output_path = get_patient_pattern_result_output_path(
+        output_path = get_pattern_result_output_path(
             self.config_path,
             normalized_result.pattern,
-            normalized_result.patient_id,
+            normalized_result.source_id,
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -268,7 +290,7 @@ class PatternResultStore:
             "w",
             encoding="utf-8",
             dir=output_path.parent,
-            prefix=f"{normalized_result.patient_id}.",
+            prefix=f"{normalized_result.source_id}.",
             suffix=".tmp",
             delete=False,
         ) as temp_file:
@@ -277,8 +299,9 @@ class PatternResultStore:
 
         os.replace(temp_path, output_path)
         LOGGER.debug(
-            "Saved pattern result: patient_id=%s, pattern=%s, path_count=%s, output_path=%s",
-            normalized_result.patient_id,
+            "Saved pattern result: source_id=%s, source_parameter=%s, pattern=%s, path_count=%s, output_path=%s",
+            normalized_result.source_id,
+            normalized_result.source_parameter,
             normalized_result.pattern,
             len(normalized_result.paths),
             output_path,
@@ -286,8 +309,12 @@ class PatternResultStore:
         return output_path
 
     def load(self, pattern: str, patient_id: str) -> StoredPatternResult:
-        """Load one patient's saved result."""
-        output_path = get_patient_pattern_result_output_path(
+        """Load one saved result by source ID.
+
+        The argument is still named patient_id for existing callers; for direct
+        source patterns it should contain that pattern's source ID.
+        """
+        output_path = get_pattern_result_output_path(
             self.config_path,
             pattern,
             patient_id,
@@ -295,8 +322,9 @@ class PatternResultStore:
         with output_path.open("r", encoding="utf-8") as file:
             result = StoredPatternResult.from_dict(json.load(file))
         LOGGER.debug(
-            "Loaded pattern result: patient_id=%s, pattern=%s, path_count=%s, input_path=%s",
-            result.patient_id,
+            "Loaded pattern result: source_id=%s, source_parameter=%s, pattern=%s, path_count=%s, input_path=%s",
+            result.source_id,
+            result.source_parameter,
             result.pattern,
             len(result.paths),
             output_path,
@@ -313,8 +341,9 @@ class PatternResultStore:
             with path.open("r", encoding="utf-8") as file:
                 result = StoredPatternResult.from_dict(json.load(file))
             LOGGER.debug(
-                "Loaded pattern result from iterator: patient_id=%s, pattern=%s, input_path=%s",
-                result.patient_id,
+                "Loaded pattern result from iterator: source_id=%s, source_parameter=%s, pattern=%s, input_path=%s",
+                result.source_id,
+                result.source_parameter,
                 result.pattern,
                 path,
             )
@@ -334,6 +363,33 @@ def _normalize_required_string(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string.")
     return value.strip()
+
+
+def _normalize_source_parameter(data: dict[str, Any]) -> str:
+    """Return the semantic ID field name for a stored pattern result."""
+    raw_source_parameter = data.get("source_parameter")
+    if isinstance(raw_source_parameter, str) and raw_source_parameter.strip():
+        return raw_source_parameter.strip()
+
+    pattern = _normalize_required_string(data.get("pattern"), "pattern")
+    return get_path_pattern_spec(pattern).source_parameter
+
+
+def _normalize_source_id(data: dict[str, Any], source_parameter: str) -> str:
+    """Return the stored source ID from unified or semantic ID fields."""
+    source_id = data.get("source_id")
+    if isinstance(source_id, str) and source_id.strip():
+        return source_id.strip()
+
+    semantic_id = data.get(source_parameter)
+    if isinstance(semantic_id, str) and semantic_id.strip():
+        return semantic_id.strip()
+
+    patient_id = data.get("patient_id")
+    if isinstance(patient_id, str) and patient_id.strip():
+        return patient_id.strip()
+
+    raise ValueError(f"{source_parameter} or source_id must be a non-empty string.")
 
 
 def _normalize_retrieval_context(data: dict[str, Any]) -> dict[str, Any] | None:
