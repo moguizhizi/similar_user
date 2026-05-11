@@ -43,6 +43,14 @@
 |---|---|---|---|---|
 | 查询两个患者共同游戏上的常模分序列 | `PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY` | `patient_dates.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `game`, `scores_p1`, `scores_p2` |
 
+### 实体扩展查询
+
+这类查询用于从一个起点实体扩展到相关图谱上下文，不注册为 `PathPattern`。结构化归属见 `graph_query_registry.py`。
+
+| 场景 | Query | 文件 | 主要参数 | 返回 |
+|---|---|---|---|---|
+| 从疾病扩展到相关游戏，每个游戏随机保留一条路径 | `DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `disease_id` | `row` |
+
 ### 固定模式 path 检索
 
 固定模式为：
@@ -188,6 +196,12 @@ Disease -- TaskInstanceSet -- Patient
 | `PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重 unknown 节点 | `patient_id`, `start_date`, `end_date` | `u` |
 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY` | 在左闭右开日期区间内比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `unknowns1`, `unknowns2` |
 | `PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY` | 查询患者训练日期的有序列表 | `patient_id` | `orderedDatesa` |
+
+### `entity_expansions.py`
+
+| Query | 用途 | 主要参数 | 返回 |
+|---|---|---|---|
+| `DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | 从疾病扩展到相关游戏，每个游戏随机保留一条路径 | `disease_id` | `row` |
 
 ### `pattern_paths.py`
 
