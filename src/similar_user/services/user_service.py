@@ -6,14 +6,11 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
-from ..domain.graph_schema import (
-    PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-    PathPattern,
-)
+from ..domain.graph_schema import PathPattern
 from ..data_access.kg_repository import KgRepository, PatternQueryFamily
 from ..data_access.pattern_registry import (
+    PatternQueryMode,
     get_path_pattern_spec,
-    resolve_path_pattern_alias,
 )
 from ..utils.logger import get_logger
 
@@ -437,57 +434,98 @@ class UserService:
             end_date,
         )
 
-    def get_patient_pattern_paths(
+    def get_pattern_paths(
         self,
-        patient_id: str,
+        source_id: str,
         base_date: str,
         window_days: int,
         pattern: PathPattern | str = PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        query_family: PatternQueryFamily | str = PatternQueryFamily.TRAINING_ORDER,
+        query_family: PatternQueryFamily | str | None = None,
     ) -> dict[str, Any]:
-        """Run the end-to-end fixed-pattern path flow for a patient date window."""
-        normalized_pattern = (
-            pattern
-            if isinstance(pattern, PathPattern)
-            else resolve_path_pattern_alias(pattern)
-        )
-        normalized_query_family = self._normalize_pattern_query_family(query_family)
+        """Run the end-to-end fixed-pattern path flow for one source node."""
+        normalized_source_id = self._normalize_required_string(source_id, "source_id")
+        spec = get_path_pattern_spec(pattern)
+        normalized_pattern = spec.pattern
         path_window = self._build_path_window(base_date, window_days)
         LOGGER.info(
-            "Starting patient pattern path flow in service: patient_id=%s, pattern=%s, query_family=%s, base_date=%s, window_days=%s",
-            patient_id,
+            "Starting pattern path flow in service: source_id=%s, source_parameter=%s, pattern=%s, query_mode=%s, base_date=%s, window_days=%s",
+            normalized_source_id,
+            spec.source_parameter,
             normalized_pattern.value,
-            normalized_query_family.value,
+            spec.query_mode.value,
             path_window["base_date"],
             path_window["window_days"],
         )
 
-        training_context = self._build_training_context(patient_id)
-        self._log_training_context(training_context)
+        if spec.query_mode == PatternQueryMode.DIRECT_PATH:
+            if query_family is not None:
+                raise ValueError(
+                    f"Pattern {normalized_pattern.value} does not support query_family."
+                )
+            return self._get_direct_pattern_paths(
+                source_id=normalized_source_id,
+                pattern=normalized_pattern,
+                source_parameter=spec.source_parameter,
+                path_window=path_window,
+            )
+        elif spec.query_mode == PatternQueryMode.PAIRED_STATISTICS:
+                return self._get_paired_statistics_pattern_paths(
+                    source_id=normalized_source_id,
+                    pattern=normalized_pattern,
+                    source_parameter=spec.source_parameter,
+                    query_family=query_family,
+                    path_window=path_window,
+                )
+        else:
+            raise ValueError(
+                f"Unsupported pattern query mode for {normalized_pattern.value}: "
+                f"{spec.query_mode}"
+            )
+
+    def _get_paired_statistics_pattern_paths(
+        self,
+        *,
+        source_id: str,
+        pattern: PathPattern,
+        source_parameter: str,
+        query_family: PatternQueryFamily | str | None,
+        path_window: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Run a statistics-guided randomized path query for one pattern family."""
+        normalized_query_family = (
+            PatternQueryFamily.TRAINING_ORDER
+            if query_family is None
+            else self._normalize_pattern_query_family(query_family)
+        )
+        source_context = self._build_source_context(
+            source_id,
+            source_parameter,
+        )
+        self._log_source_context(source_context)
 
         statistics, active_statistics = self._load_window_statistics(
-            patient_id,
-            normalized_pattern,
+            source_id,
+            pattern,
             normalized_query_family,
             path_window,
         )
 
         total_paths = int(active_statistics.get("totalPaths", 0))
         group_count = self._extract_pattern_group_count(
-            normalized_pattern,
+            pattern,
             active_statistics,
         )
         p2_count = int(active_statistics.get("p2Count", 0))
 
         if total_paths <= 0:
             LOGGER.warning(
-                "No available paths after statistics evaluation: patient_id=%s, active_statistics=%s",
-                patient_id,
+                "No available paths after statistics evaluation: source_id=%s, active_statistics=%s",
+                source_id,
                 active_statistics,
             )
             return self._build_pattern_result(
-                training_context=training_context,
-                pattern=normalized_pattern,
+                source_context=source_context,
+                pattern=pattern,
                 query_family=normalized_query_family,
                 statistics=statistics,
                 limit_recommendation=None,
@@ -506,21 +544,21 @@ class UserService:
         }
 
         LOGGER.info(
-            "Calculated path limit recommendation: patient_id=%s, per_g=%s, limit=%s",
-            patient_id,
+            "Calculated path limit recommendation: source_id=%s, per_g=%s, limit=%s",
+            source_id,
             recommendation.per_g,
             recommendation.limit,
         )
 
         if recommendation.limit <= 0:
             LOGGER.warning(
-                "Recommendation limit is non-positive: patient_id=%s, limit_recommendation=%s",
-                patient_id,
+                "Recommendation limit is non-positive: source_id=%s, limit_recommendation=%s",
+                source_id,
                 limit_recommendation,
             )
             return self._build_pattern_result(
-                training_context=training_context,
-                pattern=normalized_pattern,
+                source_context=source_context,
+                pattern=pattern,
                 query_family=normalized_query_family,
                 statistics=statistics,
                 limit_recommendation=limit_recommendation,
@@ -528,9 +566,9 @@ class UserService:
             )
 
         paths = self.kg_repository.get_pattern_randomized_paths(
-            pattern=normalized_pattern,
+            pattern=pattern,
             query_family=normalized_query_family,
-            patient_id=patient_id,
+            patient_id=source_id,
             start_date=path_window["start_date"],
             end_date=path_window["end_date"],
             per_group=recommendation.per_g,
@@ -538,24 +576,62 @@ class UserService:
         )
 
         LOGGER.info(
-            "Loaded randomized paths: patient_id=%s, path_count=%s",
-            patient_id,
+            "Loaded randomized paths: source_id=%s, path_count=%s",
+            source_id,
             len(paths),
         )
 
         LOGGER.debug(
-            "Patient pattern path flow result in service: patient_id=%s, statistics_summary=%s, limit_recommendation=%s",
-            patient_id,
+            "Pattern path flow result in service: source_id=%s, statistics_summary=%s, limit_recommendation=%s",
+            source_id,
             self._summarize_statistics_for_logging(statistics),
             limit_recommendation,
         )
 
         return self._build_pattern_result(
-            training_context=training_context,
-            pattern=normalized_pattern,
+            source_context=source_context,
+            pattern=pattern,
             query_family=normalized_query_family,
             statistics=statistics,
             limit_recommendation=limit_recommendation,
+            paths=paths,
+        )
+
+    def _get_direct_pattern_paths(
+        self,
+        *,
+        source_id: str,
+        pattern: PathPattern,
+        source_parameter: str,
+        path_window: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Run a direct path query for a source-driven pattern."""
+        if pattern != PathPattern.DISEASE_TASKSET_PATIENT:
+            raise ValueError(f"Unsupported direct path pattern: {pattern.value}")
+
+        paths = self.kg_repository.get_disease_taskset_patient_randomized_paths(
+            source_id,
+            start_date=path_window["start_date"],
+            end_date=path_window["end_date"],
+        )
+        LOGGER.info(
+            "Loaded direct randomized paths: source_id=%s, pattern=%s, path_count=%s",
+            source_id,
+            pattern.value,
+            len(paths),
+        )
+        statistics = {
+            "base_date": path_window["base_date"],
+            "query_family": None,
+            "path_window": path_window,
+            "window_statistics": None,
+        }
+        return self._build_pattern_result(
+            source_context=self._build_source_context(source_id, source_parameter),
+            pattern=pattern,
+            query_family=None,
+            statistics=statistics,
+            limit_recommendation=None,
             paths=paths,
         )
 
@@ -629,50 +705,39 @@ class UserService:
         return statistics, window_statistics
 
     @staticmethod
-    def _build_training_context(
-        patient_id: str,
+    def _build_source_context(
+        source_id: str,
+        source_parameter: str,
     ) -> dict[str, Any]:
         """Build a normalized context payload for path generation."""
-        return {
-            "patient_id": patient_id,
+        context: dict[str, Any] = {
+            "source_id": source_id,
+            "source_parameter": source_parameter,
+            source_parameter: source_id,
             "ordered_training_dates": [],
             "first_training_date": None,
             "last_training_date": None,
             "training_date_count": 0,
         }
-
-    @staticmethod
-    def _build_empty_pattern_result(patient_id: str) -> dict[str, Any]:
-        """Build the empty result payload for patients without training dates."""
-        return {
-            "patient_id": patient_id,
-            "pattern": PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-            "ordered_training_dates": [],
-            "first_training_date": None,
-            "last_training_date": None,
-            "training_date_count": 0,
-            "retrieval_context": None,
-        }
+        return context
 
     @staticmethod
     def _build_pattern_result(
         *,
-        training_context: dict[str, Any],
+        source_context: dict[str, Any],
         pattern: PathPattern,
-        query_family: PatternQueryFamily,
+        query_family: PatternQueryFamily | None,
         statistics: dict[str, Any] | None,
         limit_recommendation: dict[str, int] | None,
         paths: list[dict[str, object]],
     ) -> dict[str, Any]:
-        """Build the standard patient pattern path result payload."""
-        source_id = str(training_context["patient_id"])
-        source_parameter = get_path_pattern_spec(pattern).source_parameter
+        """Build the standard pattern path result payload."""
         retrieval_context = (
             None
             if statistics is None and limit_recommendation is None and not paths
             else {
                 "base_date": statistics.get("base_date") if isinstance(statistics, dict) else None,
-                "query_family": query_family.value,
+                "query_family": query_family.value if query_family is not None else None,
                 "path_window": statistics.get("path_window") if isinstance(statistics, dict) else None,
                 "window_statistics": (
                     statistics.get("window_statistics")
@@ -684,10 +749,7 @@ class UserService:
             }
         )
         return {
-            **training_context,
-            "source_id": source_id,
-            "source_parameter": source_parameter,
-            source_parameter: source_id,
+            **source_context,
             "pattern": pattern.value,
             "retrieval_context": retrieval_context,
         }
@@ -704,12 +766,20 @@ class UserService:
         raise ValueError("query_family must be a supported pattern query family.")
 
     @staticmethod
-    def _log_training_context(training_context: dict[str, Any]) -> None:
-        """Log the basic context for the patient path flow."""
+    def _log_source_context(source_context: dict[str, Any]) -> None:
+        """Log the basic context for the pattern path flow."""
         LOGGER.info(
-            "Initialized path flow context: patient_id=%s",
-            training_context["patient_id"],
+            "Initialized path flow context: source_id=%s, source_parameter=%s",
+            source_context["source_id"],
+            source_context["source_parameter"],
         )
+
+    @staticmethod
+    def _normalize_required_string(value: object, field_name: str) -> str:
+        """Normalize and validate a required string."""
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field_name} must be a non-empty string.")
+        return value.strip()
 
     @staticmethod
     def _extract_statistics(records: list[dict[str, Any]]) -> dict[str, int]:

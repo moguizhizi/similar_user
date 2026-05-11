@@ -9,7 +9,6 @@ from pathlib import Path
 from src.similar_user.utils.pattern_storage import (
     PatternResultStore,
     StoredPatternResult,
-    get_patient_pattern_result_output_path,
     get_pattern_result_output_path,
     get_pattern_result_output_dir,
     save_pattern_result,
@@ -73,7 +72,7 @@ class PatternStorageTest(unittest.TestCase):
             Path("custom/output/PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"),
         )
 
-    def test_get_patient_pattern_result_output_path_uses_bucketed_layout(self) -> None:
+    def test_get_pattern_result_output_path_uses_bucketed_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
@@ -94,7 +93,7 @@ class PatternStorageTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            output_path = get_patient_pattern_result_output_path(
+            output_path = get_pattern_result_output_path(
                 config_path,
                 "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 "30010096",

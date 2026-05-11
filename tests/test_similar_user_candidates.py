@@ -611,7 +611,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
     @patch("scripts.run_similar_user_pipeline.time.perf_counter")
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
-    @patch("scripts.run_similar_user_pipeline.run_patient_pattern_path_flow")
+    @patch("scripts.run_similar_user_pipeline.run_pattern_path_flow")
     def test_run_similar_user_pipeline_builds_paths_then_candidates(
         self,
         mock_run_path_flow: Mock,
@@ -671,6 +671,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             config_path="config/custom.yaml",
             base_date="2022-01-17",
             window_days=14,
+            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
         )
         mock_build_candidates.assert_called_once_with(
             "30010096",
@@ -679,7 +680,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         )
 
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
-    @patch("scripts.run_similar_user_pipeline.run_patient_pattern_path_flow")
+    @patch("scripts.run_similar_user_pipeline.run_pattern_path_flow")
     def test_run_similar_user_pipeline_rejects_empty_path_result(
         self,
         mock_run_path_flow: Mock,
@@ -714,7 +715,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_build_candidates.assert_not_called()
 
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
-    @patch("scripts.run_similar_user_pipeline.run_patient_pattern_path_flow")
+    @patch("scripts.run_similar_user_pipeline.run_pattern_path_flow")
     def test_run_similar_user_pipeline_can_skip_path_build(
         self,
         mock_run_path_flow: Mock,

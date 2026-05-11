@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.similar_user.domain.graph_schema import (
+    DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     PathPattern,
@@ -820,7 +821,7 @@ class UserServiceTest(unittest.TestCase):
                 )
                 getattr(mock_repository, method_name).assert_called_once_with(*args)
 
-    def test_get_patient_pattern_paths_returns_statistics_only_when_no_paths(
+    def test_get_pattern_paths_returns_statistics_only_when_no_paths(
         self,
     ) -> None:
         mock_repository = Mock()
@@ -833,7 +834,7 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.get_pattern_randomized_paths.return_value = []
         service = UserService(kg_repository=mock_repository)
 
-        result = service.get_patient_pattern_paths(
+        result = service.get_pattern_paths(
             "30010096",
             base_date="2022-01-17",
             window_days=14,
@@ -848,6 +849,9 @@ class UserServiceTest(unittest.TestCase):
             "range_semantics": "[start_date, end_date)",
         }
         self.assertEqual(result["ordered_training_dates"], [])
+        self.assertEqual(result["source_id"], "30010096")
+        self.assertEqual(result["source_parameter"], "patient_id")
+        self.assertEqual(result["patient_id"], "30010096")
         self.assertEqual(
             result["retrieval_context"],
             {
@@ -873,7 +877,7 @@ class UserServiceTest(unittest.TestCase):
             end_date="2022-01-17",
         )
 
-    def test_get_patient_pattern_paths_returns_paths_with_recommendation(self) -> None:
+    def test_get_pattern_paths_returns_paths_with_recommendation(self) -> None:
         mock_repository = Mock()
         mock_repository.config_path = "config/settings.yaml"
         mock_repository.get_pattern_statistics.return_value = [
@@ -896,7 +900,7 @@ class UserServiceTest(unittest.TestCase):
         ]
         service = UserService(kg_repository=mock_repository)
 
-        result = service.get_patient_pattern_paths(
+        result = service.get_pattern_paths(
             "30010096",
             base_date="2022-01-17",
             window_days=14,
@@ -905,6 +909,9 @@ class UserServiceTest(unittest.TestCase):
         self.assertEqual(result["first_training_date"], None)
         self.assertEqual(result["last_training_date"], None)
         self.assertEqual(result["training_date_count"], 0)
+        self.assertEqual(result["source_id"], "30010096")
+        self.assertEqual(result["source_parameter"], "patient_id")
+        self.assertEqual(result["patient_id"], "30010096")
         self.assertEqual(
             result["pattern"],
             PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
@@ -954,7 +961,7 @@ class UserServiceTest(unittest.TestCase):
             limit=10,
         )
 
-    def test_get_patient_pattern_paths_uses_pattern_specific_group_count(self) -> None:
+    def test_get_pattern_paths_uses_pattern_specific_group_count(self) -> None:
         mock_repository = Mock()
         mock_repository.config_path = "config/settings.yaml"
         mock_repository.get_pattern_statistics.return_value = [
@@ -965,7 +972,7 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.get_pattern_randomized_paths.return_value = []
         service = UserService(kg_repository=mock_repository)
 
-        result = service.get_patient_pattern_paths(
+        result = service.get_pattern_paths(
             "30010096",
             base_date="2022-01-17",
             window_days=14,
@@ -989,13 +996,86 @@ class UserServiceTest(unittest.TestCase):
             limit=10,
         )
 
-    def test_get_patient_pattern_paths_rejects_invalid_window(
+    def test_get_pattern_paths_loads_direct_disease_patient_paths(self) -> None:
+        mock_repository = Mock()
+        mock_repository.config_path = "config/settings.yaml"
+        mock_repository.get_disease_taskset_patient_randomized_paths.return_value = [
+            {
+                "row": {
+                    "d": {"id": "AU_DIS_0013"},
+                    "s": {"id": "40_20220516"},
+                    "p": {"id": "40"},
+                }
+            }
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_pattern_paths(
+            "AU_DIS_0013",
+            base_date="2022-01-17",
+            window_days=14,
+            pattern="disease_patient",
+        )
+
+        path_window = {
+            "base_date": "2022-01-17",
+            "start_date": "2022-01-03",
+            "end_date": "2022-01-17",
+            "window_days": 14,
+            "range_semantics": "[start_date, end_date)",
+        }
+        self.assertEqual(result["source_id"], "AU_DIS_0013")
+        self.assertEqual(result["source_parameter"], "disease_id")
+        self.assertEqual(result["disease_id"], "AU_DIS_0013")
+        self.assertNotIn("patient_id", result)
+        self.assertEqual(result["pattern"], DISEASE_TASKSET_PATIENT)
+        self.assertEqual(
+            result["retrieval_context"],
+            {
+                "base_date": "2022-01-17",
+                "query_family": None,
+                "path_window": path_window,
+                "window_statistics": None,
+                "limit_recommendation": None,
+                "paths": [
+                    {
+                        "row": {
+                            "d": {"id": "AU_DIS_0013"},
+                            "s": {"id": "40_20220516"},
+                            "p": {"id": "40"},
+                        }
+                    }
+                ],
+            },
+        )
+        mock_repository.get_disease_taskset_patient_randomized_paths.assert_called_once_with(
+            "AU_DIS_0013",
+            start_date="2022-01-03",
+            end_date="2022-01-17",
+        )
+        mock_repository.get_pattern_statistics.assert_not_called()
+        mock_repository.recommend_graph_path_limit.assert_not_called()
+        mock_repository.get_pattern_randomized_paths.assert_not_called()
+
+    def test_get_pattern_paths_rejects_query_family_for_direct_pattern(self) -> None:
+        service = UserService(kg_repository=Mock())
+
+        with self.assertRaisesRegex(ValueError, "does not support query_family"):
+            service.get_pattern_paths(
+                "AU_DIS_0013",
+                base_date="2022-01-17",
+                window_days=14,
+                pattern="disease_patient",
+                query_family=PatternQueryFamily.DATE_WINDOW,
+            )
+
+    def test_get_pattern_paths_rejects_invalid_window(
         self,
     ) -> None:
         service = UserService(kg_repository=Mock())
 
         with self.assertRaises(ValueError):
-            service.get_patient_pattern_paths(
+            service.get_pattern_paths(
                 "30010096",
                 base_date="2022-01-17",
                 window_days=0,

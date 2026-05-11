@@ -1,27 +1,34 @@
-"""Build and persist patient pattern paths from Neo4j.
+"""Build and persist pattern paths from Neo4j.
 
-这个脚本是相似用户流程的第一步：
+这个脚本是路径生成流程的统一入口：
 
-1. 按 `patient_id`、日期窗口、路径模式和查询族从 Neo4j 查询 paths。
+1. 按 `source_id`、日期窗口和路径模式从 Neo4j 查询 paths。
 2. 将查询结果组装为带 `retrieval_context` 的离线结果。
-3. 把结果保存到配置中的 pattern path 存储目录，供 path 打分和候选用户构建脚本继续使用。
+3. 把结果保存到配置中的 pattern path 存储目录，供后续流程继续使用。
 
-它只负责“构建并保存 paths”，不会给 path 打分，也不会聚合候选相似用户。
+它只负责“构建并保存 paths”，不会给 path 打分，也不会聚合候选结果。
 
 外层参数只表达业务选择：
 
+- 位置参数 `source_id` 是当前模式的起点 ID，例如 patient 模式下是 patient_id，
+  disease_patient 模式下是 disease_id。
 - `--pattern` 选择路径模式，只接受公开别名。默认 `patient_game_patient`。
-- `--query-family` 选择同一路径模式下的查询语义族。默认 `training_order`。
+- `--query-family` 只适用于带 statistics 的 patient 系列模式。默认 `training_order`。
   `training_order` 会要求 s1/s2 满足训练日期顺序；`date_window` 只按 s1 的训练日期窗口取路径。
 - `--base-date` 是右开窗口的结束日期，`--window-days` 决定向前回看多少天。
 
 常用执行方式：
 
-    python scripts/build_patient_pattern_paths.py 30010096 \
+    python scripts/build_pattern_paths.py 30010096 \
         --base-date 2022-05-22 \
         --window-days 14 \
         --pattern patient_game_patient \
         --query-family training_order
+
+    python scripts/build_pattern_paths.py AU_DIS_0013 \
+        --base-date 2022-05-22 \
+        --window-days 14 \
+        --pattern disease_patient
 """
 
 from __future__ import annotations
@@ -47,16 +54,15 @@ from similar_user.utils.pattern_storage import save_pattern_result
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 DEFAULT_PATTERN = "patient_game_patient"
-DEFAULT_QUERY_FAMILY = "training_order"
 LOGGER = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for building one patient's offline pattern paths."""
+    """Parse CLI arguments for building one source's offline pattern paths."""
     parser = argparse.ArgumentParser(
-        description="Build and persist patient fixed-pattern paths."
+        description="Build and persist fixed-pattern paths."
     )
-    parser.add_argument("patient_id", help="Patient ID used as the start node.")
+    parser.add_argument("source_id", help="Source node ID for the selected pattern.")
     parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
@@ -83,10 +89,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--query-family",
-        default=DEFAULT_QUERY_FAMILY,
+        default=None,
         choices=("training_order", "date_window"),
         help=(
-            "Query family for both statistics and randomized paths. "
+            "Query family for paired-statistics patterns. Defaults to training_order "
+            "for patient-series patterns and is not allowed for direct patterns. "
             "training_order enforces s1/s2 training-date order; "
             "date_window only filters by the s1 date window."
         ),
@@ -94,19 +101,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_patient_pattern_path_flow(
-    patient_id: str,
+def run_pattern_path_flow(
+    source_id: str,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     *,
     base_date: str,
     window_days: int,
     pattern: str = DEFAULT_PATTERN,
-    query_family: str = DEFAULT_QUERY_FAMILY,
+    query_family: str | None = None,
 ) -> dict[str, object]:
-    """Build one patient's pattern paths from Neo4j and persist the result."""
+    """Build one source's pattern paths from Neo4j and persist the result."""
     LOGGER.info(
-        "Starting patient pattern path build: patient_id=%s, pattern=%s, query_family=%s, base_date=%s, window_days=%s, config_path=%s",
-        patient_id,
+        "Starting pattern path build: source_id=%s, pattern=%s, query_family=%s, base_date=%s, window_days=%s, config_path=%s",
+        source_id,
         pattern,
         query_family,
         base_date,
@@ -116,8 +123,8 @@ def run_patient_pattern_path_flow(
     with Neo4jClient.from_config(config_path) as client:
         repository = KgRepository(client=client, config_path=Path(config_path))
         service = UserService(kg_repository=repository)
-        result = service.get_patient_pattern_paths(
-            patient_id,
+        result = service.get_pattern_paths(
+            source_id,
             base_date=base_date,
             window_days=window_days,
             pattern=pattern,
@@ -126,8 +133,8 @@ def run_patient_pattern_path_flow(
         output_path = save_pattern_result(result, repository.config_path)
         retrieval_context = result.get("retrieval_context") or {}
         LOGGER.info(
-            "Completed patient pattern path build: patient_id=%s, path_window=%s, path_count=%s, output_path=%s",
-            patient_id,
+            "Completed pattern path build: source_id=%s, path_window=%s, path_count=%s, output_path=%s",
+            source_id,
             retrieval_context.get("path_window"),
             len(retrieval_context.get("paths", [])),
             output_path,
@@ -136,21 +143,21 @@ def run_patient_pattern_path_flow(
 
 
 def main() -> int:
-    """CLI entrypoint for building and saving one patient's pattern paths."""
+    """CLI entrypoint for building and saving one source's pattern paths."""
     args = parse_args()
     try:
-        run_patient_pattern_path_flow(
-            args.patient_id,
+        run_pattern_path_flow(
+            args.source_id,
             config_path=args.config,
             base_date=args.base_date,
             window_days=args.window_days,
             pattern=getattr(args, "pattern", DEFAULT_PATTERN),
-            query_family=getattr(args, "query_family", DEFAULT_QUERY_FAMILY),
+            query_family=getattr(args, "query_family", None),
         )
     except Exception as exc:
         LOGGER.exception(
-            "Patient pattern path build failed: patient_id=%s, config_path=%s",
-            args.patient_id,
+            "Pattern path build failed: source_id=%s, config_path=%s",
+            args.source_id,
             args.config,
         )
         return 1
