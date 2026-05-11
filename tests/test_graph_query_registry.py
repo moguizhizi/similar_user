@@ -88,6 +88,15 @@ class GraphQueryRegistryTest(unittest.TestCase):
             ),
         )
 
+    def test_registered_patient_identity_query_declares_contract(self) -> None:
+        spec = get_graph_query_spec("patient_ids_with_training_on_date")
+
+        self.assertEqual(spec.category, GraphQueryCategory.PATIENT_IDENTITY)
+        self.assertEqual(spec.source_label, "Patient")
+        self.assertEqual(spec.source_parameters, ("base_date",))
+        self.assertEqual(spec.path_shape, "(p:Patient)--(s:TaskInstanceSet)")
+        self.assertEqual(spec.row_fields, ("patient_id",))
+
     def test_registered_patient_training_history_query_declares_contract(self) -> None:
         spec = get_graph_query_spec("patient_training_task_history")
 
@@ -111,6 +120,10 @@ class GraphQueryRegistryTest(unittest.TestCase):
         self.assertEqual(spec.row_fields, ("games1", "games2"))
 
     def test_list_graph_query_specs_can_filter_patient_categories(self) -> None:
+        self.assertEqual(
+            len(list_graph_query_specs(category=GraphQueryCategory.PATIENT_IDENTITY)),
+            2,
+        )
         self.assertEqual(
             len(
                 list_graph_query_specs(

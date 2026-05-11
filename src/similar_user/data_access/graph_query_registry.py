@@ -33,6 +33,8 @@ from .cypher_queries import (
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
+    PATIENT_IDS_QUERY,
+    PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -52,6 +54,7 @@ class GraphQueryCategory(str, Enum):
     """High-level purpose of a reusable graph query."""
 
     ENTITY_EXPANSION = "entity_expansion"
+    PATIENT_IDENTITY = "patient_identity"
     PATIENT_TRAINING_HISTORY = "patient_training_history"
     PATIENT_GAME_COLLECTION = "patient_game_collection"
     PATIENT_ENTITY_COLLECTION = "patient_entity_collection"
@@ -138,6 +141,29 @@ UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     row_fields=("un", "s", "i", "g"),
     group_field="g",
     query=UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+)
+
+PATIENT_IDENTITY_SPECS = (
+    _spec(
+        name="patient_ids",
+        category=GraphQueryCategory.PATIENT_IDENTITY,
+        description="查询全库患者 ID",
+        source_label="Patient",
+        source_parameters=(),
+        path_shape="(p:Patient)",
+        row_fields=("patient_id",),
+        query=PATIENT_IDS_QUERY,
+    ),
+    _spec(
+        name="patient_ids_with_training_on_date",
+        category=GraphQueryCategory.PATIENT_IDENTITY,
+        description="查询指定日期有训练记录的患者 ID",
+        source_label="Patient",
+        source_parameters=("base_date",),
+        path_shape="(p:Patient)--(s:TaskInstanceSet)",
+        row_fields=("patient_id",),
+        query=PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
+    ),
 )
 
 PATIENT_TRAINING_HISTORY_SPECS = (
@@ -430,6 +456,7 @@ GRAPH_QUERY_SPEC_LIST = (
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC,
+    *PATIENT_IDENTITY_SPECS,
     *PATIENT_TRAINING_HISTORY_SPECS,
     *PATIENT_GAME_COLLECTION_SPECS,
     *PATIENT_ENTITY_COLLECTION_SPECS,
