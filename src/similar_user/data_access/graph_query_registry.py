@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from .cypher_queries import DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY
+from .cypher_queries import (
+    DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+    SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+    UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+)
 
 
 class GraphQueryCategory(str, Enum):
@@ -42,9 +46,41 @@ DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = GraphQuerySpec(
 )
 
 
+SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = GraphQuerySpec(
+    name="symptom_taskset_task_game_sampled_per_game",
+    category=GraphQueryCategory.ENTITY_EXPANSION,
+    description="从症状扩展到相关游戏，每个游戏随机保留一条路径",
+    source_label="Symptom",
+    source_parameter="symptom_id",
+    path_shape="(sym:Symptom)--(s:TaskInstanceSet)--(i:TaskInstance)--(g:Game)",
+    row_fields=("sym", "s", "i", "g"),
+    group_field="g",
+    query=SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+)
+
+
+UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = GraphQuerySpec(
+    name="unknown_taskset_task_game_sampled_per_game",
+    category=GraphQueryCategory.ENTITY_EXPANSION,
+    description="从未知节点扩展到相关游戏，每个游戏随机保留一条路径",
+    source_label="Unknown",
+    source_parameter="unknown_id",
+    path_shape="(un:Unknown)--(s:TaskInstanceSet)--(i:TaskInstance)--(g:Game)",
+    row_fields=("un", "s", "i", "g"),
+    group_field="g",
+    query=UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+)
+
+
 GRAPH_QUERY_SPECS: dict[str, GraphQuerySpec] = {
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC.name: (
         DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC
+    ),
+    SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC.name: (
+        SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC
+    ),
+    UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC.name: (
+        UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC
     ),
 }
 
