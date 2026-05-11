@@ -665,6 +665,8 @@ class UserService:
         paths: list[dict[str, object]],
     ) -> dict[str, Any]:
         """Build the standard patient pattern path result payload."""
+        source_id = str(training_context["patient_id"])
+        source_parameter = get_path_pattern_spec(pattern).source_parameter
         retrieval_context = (
             None
             if statistics is None and limit_recommendation is None and not paths
@@ -683,6 +685,9 @@ class UserService:
         )
         return {
             **training_context,
+            "source_id": source_id,
+            "source_parameter": source_parameter,
+            source_parameter: source_id,
             "pattern": pattern.value,
             "retrieval_context": retrieval_context,
         }
