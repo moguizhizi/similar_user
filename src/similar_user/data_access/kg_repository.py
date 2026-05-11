@@ -13,8 +13,6 @@ from ..utils.logger import get_logger
 
 from .cypher_queries import (
     DISTINCT_TRAINING_GAMES_QUERY,
-    PATIENT_IDS_QUERY,
-    PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -59,6 +57,7 @@ from .cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
 )
 from .neo4j_client import Neo4jClient
+from .graph_query_registry import get_graph_query_spec
 from .pattern_registry import (
     PatternQuerySet,
     QueryDateWindow,
@@ -96,8 +95,9 @@ class KgRepository:
 
     def get_patient_ids(self) -> list[str]:
         """Return all patient IDs in the graph."""
+        spec = get_graph_query_spec("patient_ids")
         rows = self.client.run_query(
-            query=PATIENT_IDS_QUERY,
+            query=spec.query,
             parameters={},
         )
         return self._extract_patient_ids(rows)
@@ -105,8 +105,9 @@ class KgRepository:
     def get_patient_ids_with_training_on_date(self, base_date: str) -> list[str]:
         """Return patient IDs with training records on base_date."""
         normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        spec = get_graph_query_spec("patient_ids_with_training_on_date")
         rows = self.client.run_query(
-            query=PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
+            query=spec.query,
             parameters={"base_date": normalized_base_date},
         )
         return self._extract_patient_ids(rows)
