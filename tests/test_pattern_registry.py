@@ -5,6 +5,10 @@ from __future__ import annotations
 import unittest
 
 from src.similar_user.data_access.cypher_queries import (
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
@@ -72,6 +76,7 @@ from src.similar_user.data_access.cypher_queries import (
 )
 from src.similar_user.data_access.pattern_registry import (
     PATH_PATTERN_SPECS,
+    PatternQueryMode,
     PatternQuerySet,
     QueryDateVariant,
     QueryDateWindow,
@@ -82,6 +87,7 @@ from src.similar_user.data_access.pattern_registry import (
 )
 from src.similar_user.domain.graph_schema import PathPattern
 from src.similar_user.domain.path_models import (
+    DiseaseTasksetPatientPath,
     PatientTasksetDiseaseTasksetPatientPath,
     PatientTasksetSymptomTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
@@ -417,6 +423,40 @@ class PathPatternRegistryTest(unittest.TestCase):
             PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
         )
 
+    def test_registered_direct_disease_patient_pattern_declares_contract(self) -> None:
+        spec = get_path_pattern_spec(PathPattern.DISEASE_TASKSET_PATIENT)
+
+        self.assertEqual(spec.pattern, PathPattern.DISEASE_TASKSET_PATIENT)
+        self.assertEqual(spec.description, "疾病-任务集-患者")
+        self.assertEqual(spec.path_shape, "(d:Disease)--(s:TaskInstanceSet)--(p:Patient)")
+        self.assertEqual(spec.row_fields, ("d", "s", "p"))
+        self.assertEqual(spec.group_field, "p")
+        self.assertIs(spec.path_model, DiseaseTasksetPatientPath)
+        self.assertEqual(spec.query_mode, PatternQueryMode.DIRECT_PATH)
+        self.assertEqual(spec.source_parameter, "disease_id")
+        self.assertEqual(spec.queries.families, {})
+        self.assertIsNotNone(spec.direct_queries)
+        assert spec.direct_queries is not None
+        self.assertEqual(
+            spec.direct_queries.randomized_path.base,
+            DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+        )
+        self.assertEqual(
+            spec.direct_queries.randomized_path.by_start_date,
+            DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+        )
+        self.assertEqual(
+            spec.direct_queries.randomized_path.by_end_date,
+            DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+        )
+        self.assertEqual(
+            spec.direct_queries.randomized_path.by_date_range,
+            DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+        )
+
+        with self.assertRaisesRegex(ValueError, "Supported query families: none"):
+            spec.queries.family("date_window")
+
     def test_query_date_window_selects_matching_query_variant(self) -> None:
         variants = get_path_pattern_spec(
             "patient_game_patient"
@@ -522,10 +562,21 @@ class PathPatternRegistryTest(unittest.TestCase):
             get_path_pattern_spec(PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT),
         )
 
+    def test_disease_patient_alias_resolves_to_registered_pattern(self) -> None:
+        self.assertEqual(
+            resolve_path_pattern("disease_patient"),
+            PathPattern.DISEASE_TASKSET_PATIENT,
+        )
+        self.assertIs(
+            get_path_pattern_spec("disease_patient"),
+            get_path_pattern_spec(PathPattern.DISEASE_TASKSET_PATIENT),
+        )
+
     def test_available_path_pattern_aliases_returns_public_aliases_only(self) -> None:
         self.assertEqual(
             available_path_pattern_aliases(),
             (
+                "disease_patient",
                 "patient_disease_patient",
                 "patient_game_patient",
                 "patient_symptom_patient",

@@ -8,12 +8,17 @@ from typing import TypeAlias
 
 from ..domain.graph_schema import PathPattern
 from ..domain.path_models import (
+    DiseaseTasksetPatientPath,
     PatientTasksetDiseaseTasksetPatientPath,
     PatientTasksetSymptomTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
     PatientTasksetUnknownTasksetPatientPath,
 )
 from .cypher_queries import (
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
@@ -86,6 +91,7 @@ PathModel: TypeAlias = (
     | type[PatientTasksetDiseaseTasksetPatientPath]
     | type[PatientTasksetSymptomTasksetPatientPath]
     | type[PatientTasksetUnknownTasksetPatientPath]
+    | type[DiseaseTasksetPatientPath]
 )
 
 
@@ -146,6 +152,13 @@ class QueryVariants:
         return self.base
 
 
+class PatternQueryMode(str, Enum):
+    """High-level query contract exposed by a registered path pattern."""
+
+    PAIRED_STATISTICS = "paired_statistics"
+    DIRECT_PATH = "direct_path"
+
+
 @dataclass(frozen=True)
 class PatternQueryFamilySpec:
     """Paired Cypher queries for one candidate-space family."""
@@ -166,11 +179,18 @@ class PatternQuerySet:
         try:
             return self.families[normalized_name]
         except KeyError as exc:
-            supported = ", ".join(sorted(self.families))
+            supported = ", ".join(sorted(self.families)) or "none"
             raise ValueError(
                 f"Pattern does not support query family: {name}. "
                 f"Supported query families: {supported}"
             ) from exc
+
+
+@dataclass(frozen=True)
+class DirectPathQuerySet:
+    """Direct randomized path queries for patterns without statistics queries."""
+
+    randomized_path: QueryVariants
 
 
 @dataclass(frozen=True)
@@ -184,6 +204,9 @@ class PathPatternSpec:
     group_field: str
     path_model: PathModel
     queries: PatternQuerySet
+    query_mode: PatternQueryMode = PatternQueryMode.PAIRED_STATISTICS
+    source_parameter: str = "patient_id"
+    direct_queries: DirectPathQuerySet | None = None
 
 
 PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC = PathPatternSpec(
@@ -351,14 +374,37 @@ PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC = PathPatternSpec(
 )
 
 
+DISEASE_TASKSET_PATIENT_SPEC = PathPatternSpec(
+    pattern=PathPattern.DISEASE_TASKSET_PATIENT,
+    description="疾病-任务集-患者",
+    path_shape="(d:Disease)--(s:TaskInstanceSet)--(p:Patient)",
+    row_fields=("d", "s", "p"),
+    group_field="p",
+    path_model=DiseaseTasksetPatientPath,
+    queries=PatternQuerySet(families={}),
+    query_mode=PatternQueryMode.DIRECT_PATH,
+    source_parameter="disease_id",
+    direct_queries=DirectPathQuerySet(
+        randomized_path=QueryVariants(
+            base=DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+            by_start_date=DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+            by_end_date=DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+            by_date_range=DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+        ),
+    ),
+)
+
+
 PATH_PATTERN_SPECS: dict[PathPattern, PathPatternSpec] = {
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SPEC,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC,
+    DISEASE_TASKSET_PATIENT_SPEC.pattern: DISEASE_TASKSET_PATIENT_SPEC,
 }
 
 PATH_PATTERN_ALIASES: dict[str, PathPattern] = {
+    "disease_patient": PathPattern.DISEASE_TASKSET_PATIENT,
     "patient_game_patient": PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     "patient_disease_patient": PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     "patient_symptom_patient": PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
