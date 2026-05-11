@@ -177,6 +177,36 @@ class KgRepository:
             parameters=parameters,
         )
 
+    def get_symptom_taskset_patient_randomized_paths(
+        self,
+        symptom_id: str,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Return one randomized Symptom-TaskInstanceSet-Patient path per patient."""
+        normalized_symptom_id = symptom_id.strip()
+        normalized_start_date = self._normalize_optional_string(start_date, "start_date")
+        normalized_end_date = self._normalize_optional_string(end_date, "end_date")
+        date_window = QueryDateWindow(
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+        )
+        if not normalized_symptom_id:
+            raise ValueError("symptom_id must be a non-empty string.")
+
+        spec = get_path_pattern_spec(PathPattern.SYMPTOM_TASKSET_PATIENT)
+        if spec.direct_queries is None:
+            raise ValueError("SYMPTOM_TASKSET_PATIENT has no direct path queries.")
+        query = spec.direct_queries.randomized_path.select(date_window)
+        parameters: dict[str, object] = {"symptom_id": normalized_symptom_id}
+        parameters.update(date_window.parameters())
+
+        return self.client.run_query(
+            query=query,
+            parameters=parameters,
+        )
+
     def get_patient_distinct_games_by_end_date(
         self,
         patient_id: str,

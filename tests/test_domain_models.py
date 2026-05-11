@@ -6,6 +6,7 @@ import unittest
 
 from src.similar_user.domain import (
     DISEASE_TASKSET_PATIENT,
+    SYMPTOM_TASKSET_PATIENT,
     TASK_INSTANCE_EXCLUSIVE_TYPE_VALUES,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
@@ -25,6 +26,7 @@ from src.similar_user.domain import (
     PatientTasksetUnknownTasksetPatientPath,
     PatternPathResult,
     SymptomNode,
+    SymptomTasksetPatientPath,
     TaskInstanceNode,
     TaskInstanceSetNode,
     UnknownNode,
@@ -52,6 +54,10 @@ class DomainModelsTest(unittest.TestCase):
         self.assertEqual(
             DISEASE_TASKSET_PATIENT,
             PathPattern.DISEASE_TASKSET_PATIENT.value,
+        )
+        self.assertEqual(
+            SYMPTOM_TASKSET_PATIENT,
+            PathPattern.SYMPTOM_TASKSET_PATIENT.value,
         )
 
     def test_patient_taskset_task_game_task_taskset_patient_path_can_be_built(
@@ -306,6 +312,40 @@ class DomainModelsTest(unittest.TestCase):
                     },
                 }
             )
+
+    def test_symptom_taskset_patient_path_can_be_built(self) -> None:
+        path = SymptomTasksetPatientPath(
+            pattern=PathPattern.SYMPTOM_TASKSET_PATIENT,
+            sym=SymptomNode(id="AU_SYM_0007", name="睡眠障碍"),
+            s=TaskInstanceSetNode(id="40_20220401", 训练日期="2022-04-01"),
+            p=PatientNode(id="40", name="患者_40", 性别="女"),
+        )
+        result = PatternPathResult(
+            patient_id="AU_SYM_0007",
+            pattern=PathPattern.SYMPTOM_TASKSET_PATIENT,
+            paths=[path],
+        )
+
+        self.assertEqual(result.pattern, PathPattern.SYMPTOM_TASKSET_PATIENT)
+        self.assertEqual(result.paths[0].sym.name, "睡眠障碍")
+        self.assertEqual(result.paths[0].p.id, "40")
+
+    def test_symptom_taskset_patient_path_can_be_built_from_dict(self) -> None:
+        path = SymptomTasksetPatientPath.from_dict(
+            {
+                "pattern": SYMPTOM_TASKSET_PATIENT,
+                "row": {
+                    "sym": {"id": "AU_SYM_0007", "name": "睡眠障碍"},
+                    "s": {"id": "40_20220401", "训练日期": "2022-04-01"},
+                    "p": {"id": "40", "name": "患者_40", "性别": "女"},
+                },
+            }
+        )
+
+        self.assertEqual(path.pattern, PathPattern.SYMPTOM_TASKSET_PATIENT)
+        self.assertEqual(path.sym.id, "AU_SYM_0007")
+        self.assertEqual(path.s.训练日期, "2022-04-01")
+        self.assertEqual(path.p.id, "40")
 
     def test_task_instance_set_education_values_are_bound_to_domain_field(self) -> None:
         self.assertIn("高中以后", TASK_INSTANCE_SET_EDUCATION_VALUES)
