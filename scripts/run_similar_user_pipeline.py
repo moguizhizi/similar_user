@@ -2,7 +2,7 @@
 
 这个脚本把相似用户候选生成流程串成一个入口：
 
-1. 默认先调用 `scripts/build_patient_pattern_paths.py`，按时间窗口构建并保存固定模式 paths。
+1. 默认先调用 `scripts/build_pattern_paths.py`，按时间窗口构建并保存固定模式 paths。
 2. 再调用候选构建逻辑，读取已保存 paths、完成 path 打分，并聚合候选相似用户。
 3. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
 
@@ -35,7 +35,7 @@ from similar_user.domain.graph_schema import (
 from similar_user.utils.logger import get_logger
 
 from scripts.build_similar_user_candidates import build_similar_user_candidates
-from scripts.build_patient_pattern_paths import run_patient_pattern_path_flow
+from scripts.build_pattern_paths import run_pattern_path_flow
 from scripts.score_patient_pattern_paths import DEFAULT_CONFIG_PATH
 
 
@@ -106,11 +106,12 @@ def run_similar_user_pipeline(
     )
     path_generation = None
     if not skip_path_build:
-        path_result = run_patient_pattern_path_flow(
+        path_result = run_pattern_path_flow(
             patient_id,
             config_path=resolved_config_path,
             base_date=base_date,
             window_days=window_days,
+            pattern=pattern,
         )
         path_generation = _summarize_path_result(path_result)
         _raise_if_path_result_empty(

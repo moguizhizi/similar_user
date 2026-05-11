@@ -9,9 +9,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from config.settings import load_neo4j_settings
-from scripts.build_patient_pattern_paths import parse_args
-from scripts.build_patient_pattern_paths import main as patient_path_main
-from scripts.build_patient_pattern_paths import run_patient_pattern_path_flow
+from scripts.build_pattern_paths import parse_args
+from scripts.build_pattern_paths import main as pattern_path_main
+from scripts.build_pattern_paths import run_pattern_path_flow
 from scripts.debug_query import main, run_debug_query
 from src.similar_user.data_access.neo4j_client import Neo4jClient
 
@@ -124,11 +124,11 @@ class DebugQueryScriptTest(unittest.TestCase):
         )
 
 
-class DebugPatientPatternPathsScriptTest(unittest.TestCase):
+class DebugPatternPathsScriptTest(unittest.TestCase):
     @patch(
         "sys.argv",
         [
-            "build_patient_pattern_paths.py",
+            "build_pattern_paths.py",
             "30010096",
             "--base-date",
             "2022-05-22",
@@ -146,7 +146,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
     @patch(
         "sys.argv",
         [
-            "build_patient_pattern_paths.py",
+            "build_pattern_paths.py",
             "30010096",
             "--base-date",
             "2022-05-22",
@@ -160,10 +160,10 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             parse_args()
 
-    @patch("scripts.build_patient_pattern_paths.LOGGER")
-    @patch("scripts.build_patient_pattern_paths.save_pattern_result")
-    @patch("scripts.build_patient_pattern_paths.Neo4jClient.from_config")
-    def test_run_patient_pattern_path_flow_returns_service_result(
+    @patch("scripts.build_pattern_paths.LOGGER")
+    @patch("scripts.build_pattern_paths.save_pattern_result")
+    @patch("scripts.build_pattern_paths.Neo4jClient.from_config")
+    def test_run_pattern_path_flow_returns_service_result(
         self,
         mock_from_config: Mock,
         mock_save_pattern_result: Mock,
@@ -174,8 +174,9 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         mock_repository = Mock()
         mock_repository.config_path = "config/settings.yaml"
         mock_service = Mock()
-        mock_service.get_patient_pattern_paths.return_value = {
-            "patient_id": "30010096",
+        mock_service.get_pattern_paths.return_value = {
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "retrieval_context": None,
         }
@@ -184,13 +185,13 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         )
 
         with patch(
-                "scripts.build_patient_pattern_paths.KgRepository",
+                "scripts.build_pattern_paths.KgRepository",
             return_value=mock_repository,
         ) as mock_repository_cls, patch(
-                "scripts.build_patient_pattern_paths.UserService",
+                "scripts.build_pattern_paths.UserService",
             return_value=mock_service,
         ) as mock_service_cls:
-            result = run_patient_pattern_path_flow(
+            result = run_pattern_path_flow(
                 "30010096",
                 base_date="2022-05-22",
                 window_days=14,
@@ -199,7 +200,8 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         self.assertEqual(
             result,
             {
-                "patient_id": "30010096",
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 "retrieval_context": None,
             },
@@ -209,16 +211,17 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
             config_path=Path("config/settings.yaml"),
         )
         mock_service_cls.assert_called_once_with(kg_repository=mock_repository)
-        mock_service.get_patient_pattern_paths.assert_called_once_with(
+        mock_service.get_pattern_paths.assert_called_once_with(
             "30010096",
             base_date="2022-05-22",
             window_days=14,
             pattern="patient_game_patient",
-            query_family="training_order",
+            query_family=None,
         )
         mock_save_pattern_result.assert_called_once_with(
             {
-                "patient_id": "30010096",
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 "retrieval_context": None,
             },
@@ -226,9 +229,9 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         )
         mock_logger.info.assert_called()
 
-    @patch("scripts.build_patient_pattern_paths.LOGGER")
-    @patch("scripts.build_patient_pattern_paths.run_patient_pattern_path_flow")
-    @patch("scripts.build_patient_pattern_paths.parse_args")
+    @patch("scripts.build_pattern_paths.LOGGER")
+    @patch("scripts.build_pattern_paths.run_pattern_path_flow")
+    @patch("scripts.build_pattern_paths.parse_args")
     def test_main_returns_zero_on_success_without_logging_error(
         self,
         mock_parse_args: Mock,
@@ -236,7 +239,7 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
         mock_logger: Mock,
     ) -> None:
         mock_parse_args.return_value = Mock(
-            patient_id="30010096",
+            source_id="30010096",
             config="config/settings.yaml",
             base_date="2022-05-22",
             window_days=14,
@@ -244,12 +247,13 @@ class DebugPatientPatternPathsScriptTest(unittest.TestCase):
             query_family="date_window",
         )
         mock_run_flow.return_value = {
-            "patient_id": "30010096",
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "retrieval_context": None,
         }
 
-        exit_code = patient_path_main()
+        exit_code = pattern_path_main()
 
         self.assertEqual(exit_code, 0)
         mock_run_flow.assert_called_once_with(

@@ -237,15 +237,6 @@ def get_pattern_result_output_dir(config_path: str | Path, pattern: str) -> Path
     return Path(settings.pattern_path_storage.output_dir) / normalized_pattern.value
 
 
-def get_patient_pattern_result_output_path(
-    config_path: str | Path,
-    pattern: str,
-    patient_id: str,
-) -> Path:
-    """Return the bucketed JSON output path for one patient's pattern result."""
-    return get_pattern_result_output_path(config_path, pattern, patient_id)
-
-
 def get_pattern_result_output_path(
     config_path: str | Path,
     pattern: str,
@@ -308,16 +299,12 @@ class PatternResultStore:
         )
         return output_path
 
-    def load(self, pattern: str, patient_id: str) -> StoredPatternResult:
-        """Load one saved result by source ID.
-
-        The argument is still named patient_id for existing callers; for direct
-        source patterns it should contain that pattern's source ID.
-        """
+    def load(self, pattern: str, source_id: str) -> StoredPatternResult:
+        """Load one saved result by source ID."""
         output_path = get_pattern_result_output_path(
             self.config_path,
             pattern,
-            patient_id,
+            source_id,
         )
         with output_path.open("r", encoding="utf-8") as file:
             result = StoredPatternResult.from_dict(json.load(file))
