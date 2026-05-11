@@ -24,6 +24,7 @@ class GraphQueryRegistryTest(unittest.TestCase):
         self.assertEqual(spec.name, "disease_taskset_task_game_sampled_per_game")
         self.assertEqual(spec.category, GraphQueryCategory.ENTITY_EXPANSION)
         self.assertEqual(spec.source_label, "Disease")
+        self.assertEqual(spec.source_parameters, ("disease_id",))
         self.assertEqual(spec.source_parameter, "disease_id")
         self.assertEqual(
             spec.path_shape,
@@ -87,10 +88,73 @@ class GraphQueryRegistryTest(unittest.TestCase):
             ),
         )
 
+    def test_registered_patient_training_history_query_declares_contract(self) -> None:
+        spec = get_graph_query_spec("patient_training_task_history")
+
+        self.assertEqual(spec.category, GraphQueryCategory.PATIENT_TRAINING_HISTORY)
+        self.assertEqual(spec.source_label, "Patient")
+        self.assertEqual(spec.source_parameters, ("patient_id",))
+        self.assertEqual(
+            spec.path_shape,
+            "(p:Patient)--(s:TaskInstanceSet)--(i:TaskInstance)--(g:Game)",
+        )
+        self.assertEqual(spec.row_fields, ("trainingDate", "s", "i", "g"))
+
+    def test_registered_patient_comparison_query_declares_contract(self) -> None:
+        spec = get_graph_query_spec("patient_game_set_comparison_by_date_range")
+
+        self.assertEqual(spec.category, GraphQueryCategory.PATIENT_SET_COMPARISON)
+        self.assertEqual(
+            spec.source_parameters,
+            ("primary_patient_id", "comparison_patient_id", "start_date", "end_date"),
+        )
+        self.assertEqual(spec.row_fields, ("games1", "games2"))
+
+    def test_list_graph_query_specs_can_filter_patient_categories(self) -> None:
+        self.assertEqual(
+            len(
+                list_graph_query_specs(
+                    category=GraphQueryCategory.PATIENT_TRAINING_HISTORY
+                )
+            ),
+            4,
+        )
+        self.assertEqual(
+            len(list_graph_query_specs(category=GraphQueryCategory.PATIENT_GAME_COLLECTION)),
+            7,
+        )
+        self.assertEqual(
+            len(
+                list_graph_query_specs(
+                    category=GraphQueryCategory.PATIENT_ENTITY_COLLECTION
+                )
+            ),
+            12,
+        )
+        self.assertEqual(
+            len(list_graph_query_specs(category=GraphQueryCategory.PATIENT_SET_COMPARISON)),
+            12,
+        )
+        self.assertEqual(
+            len(
+                list_graph_query_specs(
+                    category=GraphQueryCategory.PATIENT_SCORE_COMPARISON
+                )
+            ),
+            1,
+        )
+
     def test_registered_specs_are_keyed_by_name(self) -> None:
         for name, spec in GRAPH_QUERY_SPECS.items():
             with self.subTest(name=name):
                 self.assertEqual(name, spec.name)
+
+    def test_registered_specs_have_query_contracts(self) -> None:
+        for spec in GRAPH_QUERY_SPECS.values():
+            with self.subTest(name=spec.name):
+                self.assertTrue(spec.query)
+                self.assertTrue(spec.path_shape)
+                self.assertTrue(spec.row_fields)
 
     def test_get_graph_query_spec_rejects_unknown_name(self) -> None:
         with self.assertRaisesRegex(ValueError, "Supported graph queries"):

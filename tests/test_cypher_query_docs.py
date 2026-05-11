@@ -12,7 +12,11 @@ CYPHER_QUERY_DIR = PROJECT_ROOT / "src/similar_user/data_access/cypher_queries"
 QUERY_MODULES = (
     CYPHER_QUERY_DIR / "entity_expansions.py",
     CYPHER_QUERY_DIR / "patients.py",
-    CYPHER_QUERY_DIR / "patient_dates.py",
+    CYPHER_QUERY_DIR / "patient_comparison_queries.py",
+    CYPHER_QUERY_DIR / "patient_entity_queries.py",
+    CYPHER_QUERY_DIR / "patient_game_queries.py",
+    CYPHER_QUERY_DIR / "patient_score_queries.py",
+    CYPHER_QUERY_DIR / "patient_training_history.py",
     CYPHER_QUERY_DIR / "pattern_paths.py",
     CYPHER_QUERY_DIR / "pattern_statistics.py",
 )
