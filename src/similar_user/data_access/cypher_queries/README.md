@@ -11,37 +11,54 @@
 | 查询全库患者 ID | `PATIENT_IDS_QUERY` | `patients.py` | 无 | `patient_id` |
 | 查询指定日期有训练记录的患者 ID | `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | `patients.py` | `base_date` | `patient_id` |
 
-### 训练日期与游戏
+### 患者训练历史
 
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
-| 查询全库训练记录中出现过的去重游戏 | `DISTINCT_TRAINING_GAMES_QUERY` | `patient_dates.py` | 无 | `g` |
-| 查询患者从某日期开始的训练日期与游戏集合 | `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | `patient_dates.py` | `patient_id`, `start_date` | `trainingDate`, `games` |
-| 查询患者训练任务历史明细 | `PATIENT_TRAINING_TASK_HISTORY_QUERY` | `patient_dates.py` | `patient_id` | `trainingDate`, `s`, `i`, `g` |
-| 查询患者左闭右开日期窗口内的游戏历史 | `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | `patient_dates.py` | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
-| 查询患者早于 end_date 的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY` | `patient_dates.py` | `patient_id`, `end_date` | `g` |
-| 查询患者从某日期开始的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY` | `patient_dates.py` | `patient_id`, `start_date` | `g` |
-| 查询患者左闭右开日期区间内的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY` | `patient_dates.py` | `patient_id`, `start_date`, `end_date` | `g` |
-| 查询患者早于 end_date 的游戏记录（不去重） | `PATIENT_GAMES_BY_END_DATE_QUERY` | `patient_dates.py` | `patient_id`, `end_date` | `g` |
-| 查询患者从某日期开始的游戏记录（不去重） | `PATIENT_GAMES_BY_START_DATE_QUERY` | `patient_dates.py` | `patient_id`, `start_date` | `g` |
-| 查询患者左闭右开日期区间内的游戏记录（不去重） | `PATIENT_GAMES_BY_DATE_RANGE_QUERY` | `patient_dates.py` | `patient_id`, `start_date`, `end_date` | `g` |
+| 查询患者从某日期开始的训练日期与游戏集合 | `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | `patient_training_history.py` | `patient_id`, `start_date` | `trainingDate`, `games` |
+| 查询患者训练日期的有序列表 | `PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY` | `patient_training_history.py` | `patient_id` | `orderedDatesa` |
+| 查询患者训练任务历史明细 | `PATIENT_TRAINING_TASK_HISTORY_QUERY` | `patient_training_history.py` | `patient_id` | `trainingDate`, `s`, `i`, `g` |
+| 查询患者左闭右开日期窗口内的游戏历史 | `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | `patient_training_history.py` | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
+
+### 患者游戏集合
+
+| 场景 | Query | 文件 | 主要参数 | 返回 |
+|---|---|---|---|---|
+| 查询全库训练记录中出现过的去重游戏 | `DISTINCT_TRAINING_GAMES_QUERY` | `patient_game_queries.py` | 无 | `g` |
+| 查询患者早于 end_date 的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY` | `patient_game_queries.py` | `patient_id`, `end_date` | `g` |
+| 查询患者从某日期开始的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY` | `patient_game_queries.py` | `patient_id`, `start_date` | `g` |
+| 查询患者左闭右开日期区间内的去重游戏 | `PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY` | `patient_game_queries.py` | `patient_id`, `start_date`, `end_date` | `g` |
+| 查询患者早于 end_date 的游戏记录（不去重） | `PATIENT_GAMES_BY_END_DATE_QUERY` | `patient_game_queries.py` | `patient_id`, `end_date` | `g` |
+| 查询患者从某日期开始的游戏记录（不去重） | `PATIENT_GAMES_BY_START_DATE_QUERY` | `patient_game_queries.py` | `patient_id`, `start_date` | `g` |
+| 查询患者左闭右开日期区间内的游戏记录（不去重） | `PATIENT_GAMES_BY_DATE_RANGE_QUERY` | `patient_game_queries.py` | `patient_id`, `start_date`, `end_date` | `g` |
+
+### 患者实体集合
+
+| 场景 | Query | 文件 | 主要参数 | 返回 |
+|---|---|---|---|---|
+| 查询患者从某日期开始的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date` | `i1` |
+| 查询患者早于 end_date 的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `end_date` | `i1` |
+| 查询患者左闭右开日期区间内的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date`, `end_date` | `i1` |
+| 查询患者左闭右开日期区间内的去重症状 | `PATIENT_DISTINCT_SYMPTOMS_BY_DATE_RANGE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date`, `end_date` | `sym` |
+| 查询患者左闭右开日期区间内的去重疾病 | `PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date`, `end_date` | `dis` |
+| 查询患者左闭右开日期区间内的去重 unknown 节点 | `PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date`, `end_date` | `un` |
 
 ### 两个患者的集合比较
 
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
-| 早于 end_date 比较游戏集合 | `PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY` | `patient_dates.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `games1`, `games2` |
-| 从某日期开始比较游戏集合 | `PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY` | `patient_dates.py` | `primary_patient_id`, `comparison_patient_id`, `start_date` | `games1`, `games2` |
-| 在左闭右开日期区间内比较游戏集合 | `PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY` | `patient_dates.py` | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `games1`, `games2` |
-| 早于 end_date 比较症状集合 | `PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY` | `patient_dates.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `symptoms1`, `symptoms2` |
-| 早于 end_date 比较疾病集合 | `PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY` | `patient_dates.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `diseases1`, `diseases2` |
-| 早于 end_date 比较 unknown 集合 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY` | `patient_dates.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `unknowns1`, `unknowns2` |
+| 早于 end_date 比较游戏集合 | `PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY` | `patient_comparison_queries.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `games1`, `games2` |
+| 从某日期开始比较游戏集合 | `PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY` | `patient_comparison_queries.py` | `primary_patient_id`, `comparison_patient_id`, `start_date` | `games1`, `games2` |
+| 在左闭右开日期区间内比较游戏集合 | `PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY` | `patient_comparison_queries.py` | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `games1`, `games2` |
+| 早于 end_date 比较症状集合 | `PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY` | `patient_comparison_queries.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `symptoms1`, `symptoms2` |
+| 早于 end_date 比较疾病集合 | `PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY` | `patient_comparison_queries.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `diseases1`, `diseases2` |
+| 早于 end_date 比较 unknown 集合 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY` | `patient_comparison_queries.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `unknowns1`, `unknowns2` |
 
 ### 候选用户评分
 
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
-| 查询两个患者共同游戏上的常模分序列 | `PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY` | `patient_dates.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `game`, `scores_p1`, `scores_p2` |
+| 查询两个患者共同游戏上的常模分序列 | `PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY` | `patient_score_queries.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `game`, `scores_p1`, `scores_p2` |
 
 ### 实体扩展查询
 
@@ -158,46 +175,66 @@ Disease -- TaskInstanceSet -- Patient
 | `PATIENT_IDS_QUERY` | 查询全库患者 ID | 无 | `patient_id` |
 | `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | 查询指定日期有训练记录的患者 ID | `base_date` | `patient_id` |
 
-### `patient_dates.py`
+### `patient_training_history.py`
+
+| Query | 用途 | 主要参数 | 返回 |
+|---|---|---|---|
+| `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的训练日期与游戏集合 | `patient_id`, `start_date` | `trainingDate`, `games` |
+| `PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY` | 查询患者训练日期的有序列表 | `patient_id` | `orderedDatesa` |
+| `PATIENT_TRAINING_TASK_HISTORY_QUERY` | 查询患者训练任务历史明细 | `patient_id` | `trainingDate`, `s`, `i`, `g` |
+| `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | 查询患者左闭右开日期窗口内的游戏历史 | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
+
+### `patient_game_queries.py`
 
 | Query | 用途 | 主要参数 | 返回 |
 |---|---|---|---|
 | `DISTINCT_TRAINING_GAMES_QUERY` | 查询全库训练记录中出现过的去重游戏 | 无 | `g` |
-| `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的训练日期与游戏集合 | `patient_id`, `start_date` | `trainingDate`, `games` |
-| `PATIENT_TRAINING_TASK_HISTORY_QUERY` | 查询患者训练任务历史明细 | `patient_id` | `trainingDate`, `s`, `i`, `g` |
-| `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | 查询患者左闭右开日期窗口内的游戏历史 | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
 | `PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重游戏 | `patient_id`, `end_date` | `g` |
 | `PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重游戏 | `patient_id`, `start_date` | `g` |
 | `PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重游戏 | `patient_id`, `start_date`, `end_date` | `g` |
 | `PATIENT_GAMES_BY_END_DATE_QUERY` | 查询患者早于 end_date 的游戏记录（不去重） | `patient_id`, `end_date` | `g` |
 | `PATIENT_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的游戏记录（不去重） | `patient_id`, `start_date` | `g` |
 | `PATIENT_GAMES_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的游戏记录（不去重） | `patient_id`, `start_date`, `end_date` | `g` |
-| `PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的游戏集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `games1`, `games2` |
-| `PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY` | 从某日期开始比较两个患者的游戏集合 | `primary_patient_id`, `comparison_patient_id`, `start_date` | `games1`, `games2` |
-| `PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY` | 在左闭右开日期区间内比较两个患者的游戏集合 | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `games1`, `games2` |
-| `PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY` | 查询两个患者共同游戏上的常模分序列 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `game`, `scores_p1`, `scores_p2` |
+
+### `patient_entity_queries.py`
+
+| Query | 用途 | 主要参数 | 返回 |
+|---|---|---|---|
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重任务实例 | `patient_id`, `start_date` | `i1` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重任务实例 | `patient_id`, `end_date` | `i1` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重任务实例 | `patient_id`, `start_date`, `end_date` | `i1` |
-| `PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重症状 | `patient_id`, `end_date` | `sym` |
-| `PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的症状集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `symptoms1`, `symptoms2` |
 | `PATIENT_DISTINCT_SYMPTOMS_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重症状 | `patient_id`, `start_date` | `sym` |
-| `PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY` | 从某日期开始比较两个患者的症状集合 | `primary_patient_id`, `comparison_patient_id`, `start_date` | `symptoms1`, `symptoms2` |
+| `PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重症状 | `patient_id`, `end_date` | `sym` |
 | `PATIENT_DISTINCT_SYMPTOMS_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重症状 | `patient_id`, `start_date`, `end_date` | `sym` |
+| `PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重疾病 | `patient_id`, `start_date` | `dis` |
+| `PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重疾病 | `patient_id`, `end_date` | `dis` |
+| `PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重疾病 | `patient_id`, `start_date`, `end_date` | `dis` |
+| `PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重 unknown 节点 | `patient_id`, `start_date` | `un` |
+| `PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重 unknown 节点 | `patient_id`, `end_date` | `un` |
+| `PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重 unknown 节点 | `patient_id`, `start_date`, `end_date` | `un` |
+
+### `patient_comparison_queries.py`
+
+| Query | 用途 | 主要参数 | 返回 |
+|---|---|---|---|
+| `PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY` | 从某日期开始比较两个患者的游戏集合 | `primary_patient_id`, `comparison_patient_id`, `start_date` | `games1`, `games2` |
+| `PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的游戏集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `games1`, `games2` |
+| `PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY` | 在左闭右开日期区间内比较两个患者的游戏集合 | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `games1`, `games2` |
+| `PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY` | 从某日期开始比较两个患者的症状集合 | `primary_patient_id`, `comparison_patient_id`, `start_date` | `symptoms1`, `symptoms2` |
+| `PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的症状集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `symptoms1`, `symptoms2` |
 | `PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY` | 在左闭右开日期区间内比较两个患者的症状集合 | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `symptoms1`, `symptoms2` |
-| `PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重疾病 | `patient_id`, `end_date` | `d` |
-| `PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的疾病集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `diseases1`, `diseases2` |
 | `PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY` | 从某日期开始比较两个患者的疾病集合 | `primary_patient_id`, `comparison_patient_id`, `start_date` | `diseases1`, `diseases2` |
+| `PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的疾病集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `diseases1`, `diseases2` |
 | `PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY` | 在左闭右开日期区间内比较两个患者的疾病集合 | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `diseases1`, `diseases2` |
-| `PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重疾病 | `patient_id`, `start_date` | `d` |
-| `PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重疾病 | `patient_id`, `start_date`, `end_date` | `d` |
-| `PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重 unknown 节点 | `patient_id`, `end_date` | `u` |
-| `PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `unknowns1`, `unknowns2` |
-| `PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重 unknown 节点 | `patient_id`, `start_date` | `u` |
 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY` | 从某日期开始比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `start_date` | `unknowns1`, `unknowns2` |
-| `PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重 unknown 节点 | `patient_id`, `start_date`, `end_date` | `u` |
+| `PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `unknowns1`, `unknowns2` |
 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY` | 在左闭右开日期区间内比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `unknowns1`, `unknowns2` |
-| `PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY` | 查询患者训练日期的有序列表 | `patient_id` | `orderedDatesa` |
+
+### `patient_score_queries.py`
+
+| Query | 用途 | 主要参数 | 返回 |
+|---|---|---|---|
+| `PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY` | 查询两个患者共同游戏上的常模分序列 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `game`, `scores_p1`, `scores_p2` |
 
 ### `entity_expansions.py`
 
