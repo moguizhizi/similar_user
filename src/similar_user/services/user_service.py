@@ -618,6 +618,12 @@ class UserService:
                 start_date=path_window["start_date"],
                 end_date=path_window["end_date"],
             )
+        elif pattern == PathPattern.UNKNOWN_TASKSET_PATIENT:
+            paths = self.kg_repository.get_unknown_taskset_patient_randomized_paths(
+                source_id,
+                start_date=path_window["start_date"],
+                end_date=path_window["end_date"],
+            )
         else:
             raise ValueError(f"Unsupported direct path pattern: {pattern.value}")
 

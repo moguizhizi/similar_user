@@ -17,6 +17,10 @@ from src.similar_user.data_access.cypher_queries import (
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
     DISTINCT_TRAINING_GAMES_QUERY,
     PATIENT_IDS_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
@@ -345,6 +349,102 @@ class KgRepositoryTest(unittest.TestCase):
             repository.get_symptom_taskset_patient_randomized_paths(
                 "AU_SYM_0007",
                 end_date="   ",
+            )
+
+    def test_get_unknown_taskset_patient_randomized_paths_selects_base_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"un": {"id": "AU_UNKOWN_0005"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_unknown_taskset_patient_randomized_paths(
+            " AU_UNKOWN_0005 "
+        )
+
+        self.assertEqual(result, [{"row": {"un": {"id": "AU_UNKOWN_0005"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+            parameters={"unknown_id": "AU_UNKOWN_0005"},
+        )
+
+    def test_get_unknown_taskset_patient_randomized_paths_selects_start_date_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = []
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_unknown_taskset_patient_randomized_paths(
+            " AU_UNKOWN_0005 ",
+            start_date=" 2022-01-01 ",
+        )
+
+        self.assertEqual(result, [])
+        mock_client.run_query.assert_called_once_with(
+            query=UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+            parameters={
+                "unknown_id": "AU_UNKOWN_0005",
+                "start_date": "2022-01-01",
+            },
+        )
+
+    def test_get_unknown_taskset_patient_randomized_paths_selects_end_date_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = []
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_unknown_taskset_patient_randomized_paths(
+            " AU_UNKOWN_0005 ",
+            end_date=" 2022-01-13 ",
+        )
+
+        self.assertEqual(result, [])
+        mock_client.run_query.assert_called_once_with(
+            query=UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+            parameters={
+                "unknown_id": "AU_UNKOWN_0005",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_unknown_taskset_patient_randomized_paths_selects_date_range_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = []
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_unknown_taskset_patient_randomized_paths(
+            " AU_UNKOWN_0005 ",
+            start_date=" 2022-01-01 ",
+            end_date=" 2022-01-13 ",
+        )
+
+        self.assertEqual(result, [])
+        mock_client.run_query.assert_called_once_with(
+            query=UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "unknown_id": "AU_UNKOWN_0005",
+                "start_date": "2022-01-01",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_unknown_taskset_patient_randomized_paths_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "unknown_id must be a non-empty string."):
+            repository.get_unknown_taskset_patient_randomized_paths("   ")
+
+        with self.assertRaisesRegex(ValueError, "start_date must be a non-empty string or None."):
+            repository.get_unknown_taskset_patient_randomized_paths(
+                "AU_UNKOWN_0005",
+                start_date="   ",
             )
 
     def test_get_patient_distinct_games_by_end_date(self) -> None:

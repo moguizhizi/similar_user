@@ -14,6 +14,7 @@ from ..domain.path_models import (
     PatientTasksetTaskGameTaskTasksetPatientPath,
     PatientTasksetUnknownTasksetPatientPath,
     SymptomTasksetPatientPath,
+    UnknownTasksetPatientPath,
 )
 from .cypher_queries import (
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
@@ -24,6 +25,10 @@ from .cypher_queries import (
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_START_DATE_QUERY,
@@ -98,6 +103,7 @@ PathModel: TypeAlias = (
     | type[PatientTasksetUnknownTasksetPatientPath]
     | type[DiseaseTasksetPatientPath]
     | type[SymptomTasksetPatientPath]
+    | type[UnknownTasksetPatientPath]
 )
 
 
@@ -422,6 +428,27 @@ SYMPTOM_TASKSET_PATIENT_SPEC = PathPatternSpec(
 )
 
 
+UNKNOWN_TASKSET_PATIENT_SPEC = PathPatternSpec(
+    pattern=PathPattern.UNKNOWN_TASKSET_PATIENT,
+    description="未知-任务集-患者",
+    path_shape="(un:Unknown)--(s:TaskInstanceSet)--(p:Patient)",
+    row_fields=("un", "s", "p"),
+    group_field="p",
+    path_model=UnknownTasksetPatientPath,
+    queries=PatternQuerySet(families={}),
+    query_mode=PatternQueryMode.DIRECT_PATH,
+    source_parameter="unknown_id",
+    direct_queries=DirectPathQuerySet(
+        randomized_path=QueryVariants(
+            base=UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+            by_start_date=UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+            by_end_date=UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+            by_date_range=UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+        ),
+    ),
+)
+
+
 PATH_PATTERN_SPECS: dict[PathPattern, PathPatternSpec] = {
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC,
@@ -429,6 +456,7 @@ PATH_PATTERN_SPECS: dict[PathPattern, PathPatternSpec] = {
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC.pattern: PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC,
     DISEASE_TASKSET_PATIENT_SPEC.pattern: DISEASE_TASKSET_PATIENT_SPEC,
     SYMPTOM_TASKSET_PATIENT_SPEC.pattern: SYMPTOM_TASKSET_PATIENT_SPEC,
+    UNKNOWN_TASKSET_PATIENT_SPEC.pattern: UNKNOWN_TASKSET_PATIENT_SPEC,
 }
 
 PATH_PATTERN_ALIASES: dict[str, PathPattern] = {
@@ -438,6 +466,7 @@ PATH_PATTERN_ALIASES: dict[str, PathPattern] = {
     "patient_symptom_patient": PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
     "patient_unknown_patient": PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
     "symptom_patient": PathPattern.SYMPTOM_TASKSET_PATIENT,
+    "unknown_patient": PathPattern.UNKNOWN_TASKSET_PATIENT,
 }
 
 
