@@ -12,10 +12,6 @@ from ..domain.graph_schema import PathPattern
 from ..utils.logger import get_logger
 
 from .cypher_queries import (
-    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-    DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
     DISTINCT_TRAINING_GAMES_QUERY,
     PATIENT_IDS_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
@@ -65,7 +61,6 @@ from .cypher_queries import (
 from .neo4j_client import Neo4jClient
 from .pattern_registry import (
     PatternQuerySet,
-    QueryDateVariant,
     QueryDateWindow,
     get_path_pattern_spec,
 )
@@ -170,7 +165,10 @@ class KgRepository:
         if not normalized_disease_id:
             raise ValueError("disease_id must be a non-empty string.")
 
-        query = self._select_disease_taskset_patient_randomized_path_query(date_window)
+        spec = get_path_pattern_spec(PathPattern.DISEASE_TASKSET_PATIENT)
+        if spec.direct_queries is None:
+            raise ValueError("DISEASE_TASKSET_PATIENT has no direct path queries.")
+        query = spec.direct_queries.randomized_path.select(date_window)
         parameters: dict[str, object] = {"disease_id": normalized_disease_id}
         parameters.update(date_window.parameters())
 
@@ -1333,19 +1331,6 @@ class KgRepository:
         }
         parameters.update(date_window.parameters())
         return parameters
-
-    @staticmethod
-    def _select_disease_taskset_patient_randomized_path_query(
-        date_window: QueryDateWindow,
-    ) -> str:
-        """Select the Disease-TaskInstanceSet-Patient query matching date bounds."""
-        if date_window.variant == QueryDateVariant.DATE_RANGE:
-            return DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY
-        if date_window.variant == QueryDateVariant.START_DATE:
-            return DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY
-        if date_window.variant == QueryDateVariant.END_DATE:
-            return DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY
-        return DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY
 
     def _run_patient_pair_query_by_end_date(
         self,
