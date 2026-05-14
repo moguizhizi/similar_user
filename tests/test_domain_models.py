@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import fields
 
 from src.similar_user.domain import (
     DISEASE_TASKSET_PATIENT,
@@ -408,6 +409,55 @@ class DomainModelsTest(unittest.TestCase):
 
         self.assertEqual(path.s1.执行学历, "高中以后")
         self.assertEqual(path.s2.执行学历, "专科")
+
+    def test_task_instance_set_node_maps_secondary_ability_scores(self) -> None:
+        expected_fields = {
+            "二级_书写能力",
+            "二级_任务切换",
+            "二级_冲突抑制",
+            "二级_前瞻记忆",
+            "二级_反应速度",
+            "二级_口语生成",
+            "二级_听理解",
+            "二级_客体识别",
+            "二级_工作记忆",
+            "二级_归纳与推理",
+            "二级_心算",
+            "二级_情景记忆",
+            "二级_情绪识别",
+            "二级_情绪调节",
+            "二级_手眼协调",
+            "二级_持续注意",
+            "二级_注意分配",
+            "二级_注意广度",
+            "二级_积极情绪",
+            "二级_空间知觉",
+            "二级_空间记忆",
+            "二级_联结记忆",
+            "二级_节律感知",
+            "二级_表象与想象",
+            "二级_记忆广度",
+            "二级_语义系统",
+            "二级_路径规划",
+            "二级_运动知觉",
+            "二级_选择注意",
+            "二级_问题解决",
+            "二级_阅读能力",
+        }
+        actual_fields = {field.name for field in fields(TaskInstanceSetNode)}
+        node = TaskInstanceSetNode.from_dict(
+            {
+                "id": "40_20220401",
+                "二级_书写能力": "20.9",
+                "二级_任务切换": 73.1,
+                "二级_阅读能力": "82.25",
+            }
+        )
+
+        self.assertTrue(expected_fields.issubset(actual_fields))
+        self.assertEqual(node.二级_书写能力, 20.9)
+        self.assertEqual(node.二级_任务切换, 73.1)
+        self.assertEqual(node.二级_阅读能力, 82.25)
 
     def test_task_instance_result_values_are_bound_to_domain_field(self) -> None:
         self.assertEqual(TASK_INSTANCE_RESULT_VALUES, ("完成", "未完成"))
