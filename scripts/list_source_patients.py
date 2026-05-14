@@ -1,4 +1,4 @@
-"""List source patients selected by a named eligibility rule."""
+"""按命名筛选规则生成 source patient 列表。"""
 
 from __future__ import annotations
 
@@ -31,24 +31,24 @@ LOGGER = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for source patient selection."""
+    """解析 source patient 筛选脚本的命令行参数。"""
     parser = argparse.ArgumentParser(
-        description="List source patients selected by a named eligibility rule."
+        description="按命名筛选规则生成 source patient 列表。"
     )
     parser.add_argument(
         "--rule",
         default=SECONDARY_ABILITY_ANY_RULE,
-        help="Registered source patient selection rule.",
+        help="已注册的 source patient 筛选规则。",
     )
     parser.add_argument(
         "--output",
         default=None,
-        help="Output JSON path. Defaults to data/source_patients/<rule>.json.",
+        help="输出 JSON 路径，默认写入 data/source_patients/<rule>.json。",
     )
     parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
-        help="Path to the YAML config file.",
+        help="YAML 配置文件路径。",
     )
     return parser.parse_args()
 
@@ -59,7 +59,7 @@ def list_source_patients(
     output_path: str | Path | None = None,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
 ) -> dict[str, Any]:
-    """Select source patients and save the result as JSON."""
+    """筛选 source patient，并将结果保存为 JSON。"""
     resolved_output_path = _resolve_output_path(rule, output_path)
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
@@ -80,7 +80,7 @@ def list_source_patients(
 
 
 def main() -> int:
-    """Write selected source patients to a JSON file."""
+    """执行 source patient 筛选并写入 JSON 文件。"""
     args = parse_args()
     output_path = _resolve_output_path(args.rule, args.output)
     try:
@@ -90,20 +90,21 @@ def main() -> int:
             config_path=args.config,
         )
     except Exception as exc:
-        LOGGER.exception("List source patients failed: %s", exc)
+        LOGGER.exception("生成 source patient 列表失败: %s", exc)
         return 1
 
     LOGGER.info(
-        "Wrote %s source patients for rule %s to %s",
+        "已将 %s 个 source patient 写入 %s，筛选规则: %s",
         result["count"],
-        result["rule"],
         output_path,
+        result["rule"],
     )
     LOGGER.info(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
 def _resolve_output_path(rule: str, output_path: str | Path | None) -> Path:
+    """根据显式输出路径或规则名解析最终输出文件路径。"""
     if output_path is not None:
         return Path(output_path)
     normalized_rule = rule.strip() if isinstance(rule, str) and rule.strip() else "rule"
