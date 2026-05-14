@@ -3,7 +3,7 @@
 这个脚本处在“path 生成”和“候选用户聚合”之间：
 
 1. `scripts/build_pattern_paths.py` 或 pipeline 先从 Neo4j 生成并保存某个患者的 paths。
-2. 本脚本从本地 JSON 存储读取这些 paths，用 `PathScorer` 给每条 path 打分。
+2. 本脚本从本地 JSON 存储读取这些 paths，用对应 pattern 的 scorer 给每条 path 打分。
 3. 下游 `scripts/build_similar_user_candidates.py` 会读取这里的评分结果，按 top-k path
    去重候选用户，再计算 candidate_score。
 
@@ -11,11 +11,11 @@
 
 常用执行方式：
 
-    python scripts/score_patient_pattern_paths.py 40 --top-k 50
+    python scripts/score_patient_pattern_paths.py 30010096 --top-k 50
 
 调试单条 path：
 
-    python scripts/score_patient_pattern_paths.py 40 --path-index 0
+    python scripts/score_patient_pattern_paths.py 30010096 --path-index 0
 """
 
 from __future__ import annotations
@@ -32,15 +32,14 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
-from similar_user.domain.graph_schema import (
-    PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-)
-from similar_user.services.path_scoring import PathScorer
+from similar_user.data_access.pattern_registry import available_path_pattern_aliases
+from similar_user.services.path_scoring import get_path_scorer
 from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore
 
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
+DEFAULT_PATTERN = "patient_game_patient"
 LOGGER = get_logger(__name__)
 
 
@@ -49,11 +48,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Score saved patient pattern paths from local JSON storage."
     )
-    parser.add_argument("patient_id", help="Patient identifier used in the stored file.")
+    parser.add_argument("source_id", help="Source node ID for the selected pattern.")
     parser.add_argument(
         "--pattern",
-        default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        help="Pattern name used to locate the saved result.",
+        default=DEFAULT_PATTERN,
+        choices=available_path_pattern_aliases(),
+        help="Path pattern alias used to locate the saved result.",
     )
     parser.add_argument(
         "--config",
@@ -77,23 +77,24 @@ def parse_args() -> argparse.Namespace:
 
 
 def score_patient_pattern_paths(
-    patient_id: str,
+    source_id: str,
     *,
-    pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    pattern: str = DEFAULT_PATTERN,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
     top_k: int | None = None,
 ) -> dict[str, object]:
     """Load a saved patient result and score its domain paths."""
     LOGGER.debug(
-        "Scoring patient pattern paths: patient_id=%s, pattern=%s, path_index=%s, top_k=%s, config_path=%s",
-        patient_id,
+        "Scoring patient pattern paths: source_id=%s, pattern=%s, path_index=%s, top_k=%s, config_path=%s",
+        source_id,
         pattern,
         path_index,
         top_k,
         config_path,
     )
-    stored_result = PatternResultStore(config_path).load(pattern, patient_id)
+    stored_result = PatternResultStore(config_path).load(pattern, source_id)
+    scorer = get_path_scorer(stored_result.pattern)
     domain_paths = stored_result.to_domain_paths()
 
     if top_k is not None and top_k <= 0:
@@ -108,7 +109,6 @@ def score_patient_pattern_paths(
     else:
         selected = list(enumerate(domain_paths))
 
-    scorer = PathScorer()
     scored_paths = [
         {
             "path_index": index,
@@ -141,7 +141,8 @@ def score_patient_pattern_paths(
             legacy_split_training_date = raw_split_training_date.strip()
 
     result = {
-        "patient_id": stored_result.patient_id,
+        "source_id": stored_result.source_id,
+        "source_parameter": stored_result.source_parameter,
         "pattern": stored_result.pattern,
         "path_count": len(domain_paths),
         "scored_path_count": len(scored_paths),
@@ -157,8 +158,9 @@ def score_patient_pattern_paths(
         "scores": scored_paths,
     }
     LOGGER.debug(
-        "Scored patient pattern result: patient_id=%s, path_count=%s, scored_path_count=%s",
-        stored_result.patient_id,
+        "Scored patient pattern result: source_id=%s, source_parameter=%s, path_count=%s, scored_path_count=%s",
+        stored_result.source_id,
+        stored_result.source_parameter,
         result["path_count"],
         result["scored_path_count"],
     )
@@ -203,7 +205,7 @@ def main() -> int:
     args = parse_args()
     try:
         result = score_patient_pattern_paths(
-            args.patient_id,
+            args.source_id,
             pattern=args.pattern,
             config_path=args.config,
             path_index=args.path_index,

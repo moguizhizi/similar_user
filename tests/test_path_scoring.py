@@ -8,7 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.score_patient_pattern_paths import main, score_patient_pattern_paths
+from scripts.score_patient_pattern_paths import main, parse_args, score_patient_pattern_paths
+from src.similar_user.data_access.pattern_registry import available_path_pattern_aliases
 from src.similar_user.domain import (
     GameNode,
     PathPattern,
@@ -17,13 +18,13 @@ from src.similar_user.domain import (
     TaskInstanceNode,
     TaskInstanceSetNode,
 )
-from src.similar_user.services.path_scoring import PathScorer
+from src.similar_user.services.path_scoring import PatientGamePatientPathScorer, get_path_scorer
 from src.similar_user.utils.pattern_storage import save_pattern_result
 
 
 class PathScoringTest(unittest.TestCase):
-    def test_path_scorer_supports_observed_education_values(self) -> None:
-        scorer = PathScorer()
+    def test_patient_game_patient_path_scorer_supports_observed_education_values(self) -> None:
+        scorer = PatientGamePatientPathScorer()
 
         self.assertEqual(scorer._map_education_rank("专科"), scorer._map_education_rank("大专"))
         self.assertEqual(scorer._map_education_rank("研究生"), scorer._map_education_rank("硕士"))
@@ -31,16 +32,42 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scorer._map_education_rank("初中3年级"), scorer._map_education_rank("初中"))
         self.assertIsNone(scorer._map_education_rank("保密"))
 
+    def test_get_path_scorer_returns_registered_patient_game_scorer(self) -> None:
+        scorer = get_path_scorer("patient_game_patient")
+
+        self.assertIsInstance(scorer, PatientGamePatientPathScorer)
+
+    def test_get_path_scorer_rejects_unsupported_pattern(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
+            get_path_scorer("patient_disease_patient")
+
+    @patch("sys.argv", ["score_patient_pattern_paths.py", "30010096"])
+    def test_parse_args_defaults_to_patient_game_alias(self) -> None:
+        args = parse_args()
+
+        self.assertEqual(args.pattern, "patient_game_patient")
+
+    def test_parse_args_accepts_all_public_pattern_aliases(self) -> None:
+        for pattern in available_path_pattern_aliases():
+            with self.subTest(pattern=pattern):
+                with patch(
+                    "sys.argv",
+                    ["score_patient_pattern_paths.py", "30010096", "--pattern", pattern],
+                ):
+                    args = parse_args()
+
+                self.assertEqual(args.pattern, pattern)
+
     def test_parse_int_supports_decimal_strings(self) -> None:
-        scorer = PathScorer()
+        scorer = PatientGamePatientPathScorer()
 
         self.assertEqual(scorer._parse_int("14.0"), 14)
         self.assertEqual(scorer._parse_int(" 14.8 "), 14)
         self.assertEqual(scorer._parse_int("14"), 14)
         self.assertIsNone(scorer._parse_int("abc"))
 
-    def test_path_scorer_returns_detailed_breakdown(self) -> None:
-        scorer = PathScorer()
+    def test_patient_game_patient_path_scorer_returns_detailed_breakdown(self) -> None:
+        scorer = PatientGamePatientPathScorer()
         path = PatientTasksetTaskGameTaskTasksetPatientPath(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
@@ -72,8 +99,8 @@ class PathScoringTest(unittest.TestCase):
         self.assertIn("专属类型一致", result.details["task_type"])
         self.assertIn("当前path上不足两个g", result.details["task_relevance"])
 
-    def test_path_scorer_scores_neighboring_observed_education_levels(self) -> None:
-        scorer = PathScorer()
+    def test_patient_game_patient_path_scorer_scores_neighboring_observed_education_levels(self) -> None:
+        scorer = PatientGamePatientPathScorer()
         path = PatientTasksetTaskGameTaskTasksetPatientPath(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
@@ -98,8 +125,8 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(result.education_score, 85.0)
         self.assertIn("学历相差1级", result.details["education"])
 
-    def test_path_scorer_completion_only_depends_on_result(self) -> None:
-        scorer = PathScorer()
+    def test_patient_game_patient_path_scorer_completion_only_depends_on_result(self) -> None:
+        scorer = PatientGamePatientPathScorer()
         base_path = PatientTasksetTaskGameTaskTasksetPatientPath(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
@@ -124,8 +151,8 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(result.completion_score, 100.0)
         self.assertEqual(result.details["completion"], "i1结果=完成, i2结果=完成")
 
-    def test_path_scorer_completion_compares_i1_and_i2_results(self) -> None:
-        scorer = PathScorer()
+    def test_patient_game_patient_path_scorer_completion_compares_i1_and_i2_results(self) -> None:
+        scorer = PatientGamePatientPathScorer()
         path = PatientTasksetTaskGameTaskTasksetPatientPath(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
@@ -147,8 +174,8 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(result.completion_score, 20.0)
         self.assertEqual(result.details["completion"], "i1结果=完成, i2结果=未完成")
 
-    def test_path_scorer_activity_only_supports_yes_or_no(self) -> None:
-        scorer = PathScorer()
+    def test_patient_game_patient_path_scorer_activity_only_supports_yes_or_no(self) -> None:
+        scorer = PatientGamePatientPathScorer()
         path = PatientTasksetTaskGameTaskTasksetPatientPath(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
@@ -170,8 +197,8 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(result.activity_score, 20.0)
         self.assertEqual(result.details["activity"], "活跃=否")
 
-    def test_path_scorer_task_type_scores_task_instance_exclusive_type(self) -> None:
-        scorer = PathScorer()
+    def test_patient_game_patient_path_scorer_task_type_scores_task_instance_exclusive_type(self) -> None:
+        scorer = PatientGamePatientPathScorer()
         path = PatientTasksetTaskGameTaskTasksetPatientPath(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
@@ -193,8 +220,8 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(result.task_type_score, 30.0)
         self.assertIn("专属类型不一致: 专属/自由", result.details["task_type"])
 
-    def test_path_scorer_task_type_returns_none_when_task_type_missing(self) -> None:
-        scorer = PathScorer()
+    def test_patient_game_patient_path_scorer_task_type_returns_none_when_task_type_missing(self) -> None:
+        scorer = PatientGamePatientPathScorer()
         path = PatientTasksetTaskGameTaskTasksetPatientPath(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
@@ -211,8 +238,8 @@ class PathScoringTest(unittest.TestCase):
         self.assertIsNone(result.task_type_score)
         self.assertEqual(result.details["task_type"], "任务类型缺失，跳过该项")
 
-    def test_path_scorer_task_relevance_returns_none_when_only_one_game_exists(self) -> None:
-        scorer = PathScorer()
+    def test_patient_game_patient_path_scorer_task_relevance_returns_none_when_only_one_game_exists(self) -> None:
+        scorer = PatientGamePatientPathScorer()
         path = PatientTasksetTaskGameTaskTasksetPatientPath(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
             p=PatientNode(id="30010096"),
@@ -378,6 +405,86 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scored["retrieval_context"]["score_end_date"], None)
         self.assertEqual(scored["scores"][0]["path_index"], 0)
 
+    def test_score_patient_pattern_paths_rejects_unsupported_pattern(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            output_dir = Path(temp_dir) / "pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "training_date_split:",
+                        "  min_training_dates: 5",
+                        "  before_ratio: 4",
+                        "  after_ratio: 1",
+                        "pattern_path_storage:",
+                        f'  output_dir: "{output_dir}"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+                "ordered_training_dates": [],
+                "first_training_date": None,
+                "last_training_date": None,
+                "training_date_count": 0,
+                "statistics": None,
+                "limit_recommendation": None,
+                "paths": [],
+            }
+            save_pattern_result(result, config_path)
+
+            with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
+                score_patient_pattern_paths(
+                    "30010096",
+                    pattern="PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+                    config_path=config_path,
+                )
+
+    def test_score_patient_pattern_paths_uses_source_id_for_non_patient_pattern(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            output_dir = Path(temp_dir) / "pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "training_date_split:",
+                        "  min_training_dates: 5",
+                        "  before_ratio: 4",
+                        "  after_ratio: 1",
+                        "pattern_path_storage:",
+                        f'  output_dir: "{output_dir}"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = {
+                "disease_id": "AU_DIS_0013",
+                "pattern": "DISEASE_TASKSET_PATIENT",
+                "ordered_training_dates": [],
+                "first_training_date": None,
+                "last_training_date": None,
+                "training_date_count": 0,
+                "statistics": None,
+                "limit_recommendation": None,
+                "paths": [],
+            }
+            save_pattern_result(result, config_path)
+
+            with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
+                score_patient_pattern_paths(
+                    "AU_DIS_0013",
+                    pattern="disease_patient",
+                    config_path=config_path,
+                )
+
     @patch("scripts.score_patient_pattern_paths.LOGGER")
     @patch("scripts.score_patient_pattern_paths.parse_args")
     def test_main_prints_scored_result(
@@ -441,7 +548,7 @@ class PathScoringTest(unittest.TestCase):
                 config_path=config_path,
             )
             mock_parse_args.return_value = Mock(
-                patient_id="30010096",
+                source_id="30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config=str(config_path),
                 path_index=None,
@@ -463,7 +570,7 @@ class PathScoringTest(unittest.TestCase):
         mock_logger: Mock,
     ) -> None:
         mock_parse_args.return_value = Mock(
-            patient_id="missing",
+            source_id="missing",
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="missing.yaml",
             path_index=None,
