@@ -31,24 +31,24 @@ LOGGER = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
-    """解析 source patient 筛选脚本的命令行参数。"""
+    """Parse command-line arguments for source patient selection."""
     parser = argparse.ArgumentParser(
-        description="按命名筛选规则生成 source patient 列表。"
+        description="List source patients selected by a named eligibility rule."
     )
     parser.add_argument(
         "--rule",
         default=SECONDARY_ABILITY_ANY_RULE,
-        help="已注册的 source patient 筛选规则。",
+        help="Registered source patient selection rule.",
     )
     parser.add_argument(
         "--output",
         default=None,
-        help="输出 JSON 路径，默认写入 data/source_patients/<rule>.json。",
+        help="Output JSON path. Defaults to data/source_patients/<rule>.json.",
     )
     parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
-        help="YAML 配置文件路径。",
+        help="Path to the YAML config file.",
     )
     return parser.parse_args()
 
