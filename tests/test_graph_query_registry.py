@@ -6,6 +6,8 @@ import unittest
 
 from src.similar_user.data_access.cypher_queries import (
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+    PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY,
+    PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
@@ -108,6 +110,27 @@ class GraphQueryRegistryTest(unittest.TestCase):
             "(p:Patient)--(s:TaskInstanceSet)--(i:TaskInstance)--(g:Game)",
         )
         self.assertEqual(spec.row_fields, ("trainingDate", "s", "i", "g"))
+
+    def test_registered_patient_game_collection_queries_declare_contracts(self) -> None:
+        distinct_spec = get_graph_query_spec("patient_distinct_games_by_start_date")
+        game_rows_spec = get_graph_query_spec("patient_games_by_date_range")
+
+        self.assertEqual(
+            distinct_spec.category, GraphQueryCategory.PATIENT_GAME_COLLECTION
+        )
+        self.assertEqual(distinct_spec.source_parameters, ("patient_id", "start_date"))
+        self.assertEqual(distinct_spec.row_fields, ("g",))
+        self.assertEqual(distinct_spec.query, PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY)
+
+        self.assertEqual(
+            game_rows_spec.category, GraphQueryCategory.PATIENT_GAME_COLLECTION
+        )
+        self.assertEqual(
+            game_rows_spec.source_parameters,
+            ("patient_id", "start_date", "end_date"),
+        )
+        self.assertEqual(game_rows_spec.row_fields, ("g",))
+        self.assertEqual(game_rows_spec.query, PATIENT_GAMES_BY_DATE_RANGE_QUERY)
 
     def test_registered_patient_comparison_query_declares_contract(self) -> None:
         spec = get_graph_query_spec("patient_game_set_comparison_by_date_range")
