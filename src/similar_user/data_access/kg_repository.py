@@ -11,51 +11,6 @@ from config.settings import GraphPathLimitSettings, load_query_settings
 from ..domain.graph_schema import PathPattern
 from ..utils.logger import get_logger
 
-from .cypher_queries import (
-    DISTINCT_TRAINING_GAMES_QUERY,
-    PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
-    PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
-    PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
-    PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY,
-    PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
-    PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
-    PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY,
-    PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
-    PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY,
-    PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY,
-    PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY,
-    PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY,
-    PATIENT_DISTINCT_SYMPTOMS_BY_DATE_RANGE_QUERY,
-    PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY,
-    PATIENT_DISTINCT_SYMPTOMS_BY_START_DATE_QUERY,
-    PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
-    PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
-    PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
-    PATIENT_GAMES_BY_DATE_RANGE_QUERY,
-    PATIENT_GAMES_BY_END_DATE_QUERY,
-    PATIENT_GAMES_BY_START_DATE_QUERY,
-    PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
-    PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
-    PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
-    PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
-    PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
-    PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
-    PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
-    PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
-    PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY,
-    PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
-    PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-    PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
-    PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
-    PATIENT_TRAINING_TASK_HISTORY_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
-    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-)
 from .neo4j_client import Neo4jClient
 from .graph_query_registry import get_graph_query_spec
 from .pattern_registry import (
@@ -124,8 +79,9 @@ class KgRepository:
 
     def get_distinct_training_games(self) -> list[dict[str, object]]:
         """Return distinct games that appear in training records."""
+        spec = get_graph_query_spec("distinct_training_games")
         return self.client.run_query(
-            query=DISTINCT_TRAINING_GAMES_QUERY,
+            query=spec.query,
             parameters={},
         )
 
@@ -140,8 +96,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_training_date_games_by_start_date")
         return self.client.run_query(
-            query=PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -249,8 +206,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_games_by_end_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "end_date": normalized_end_date,
@@ -268,8 +226,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_games_by_start_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -289,8 +248,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_games_by_date_range")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -309,8 +269,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_games_by_end_date")
         return self.client.run_query(
-            query=PATIENT_GAMES_BY_END_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "end_date": normalized_end_date,
@@ -328,8 +289,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_games_by_start_date")
         return self.client.run_query(
-            query=PATIENT_GAMES_BY_START_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -349,8 +311,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_games_by_date_range")
         return self.client.run_query(
-            query=PATIENT_GAMES_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -365,8 +328,9 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, object]]:
         """Return game sets for two patients before an end date."""
+        spec = get_graph_query_spec("patient_game_set_comparison_by_end_date")
         return self._run_patient_pair_query_by_end_date(
-            query=PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             end_date=end_date,
@@ -379,8 +343,9 @@ class KgRepository:
         start_date: str,
     ) -> list[dict[str, object]]:
         """Return game sets for two patients from a start date."""
+        spec = get_graph_query_spec("patient_game_set_comparison_by_start_date")
         return self._run_patient_pair_query_by_start_date(
-            query=PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             start_date=start_date,
@@ -394,8 +359,9 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, object]]:
         """Return game sets for two patients within a date range."""
+        spec = get_graph_query_spec("patient_game_set_comparison_by_date_range")
         return self._run_patient_pair_query_by_date_range(
-            query=PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             start_date=start_date,
@@ -417,8 +383,11 @@ class KgRepository:
         if not normalized_comparison_patient_id:
             raise ValueError("comparison_patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec(
+            "patient_game_norm_score_series_comparison_by_end_date"
+        )
         return self.client.run_query(
-            query=PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "primary_patient_id": normalized_primary_patient_id,
                 "comparison_patient_id": normalized_comparison_patient_id,
@@ -437,8 +406,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_task_instances_by_start_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -456,8 +426,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_task_instances_by_end_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "end_date": normalized_end_date,
@@ -477,8 +448,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_task_instances_by_date_range")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -497,8 +469,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_symptoms_by_end_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_SYMPTOMS_BY_END_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "end_date": normalized_end_date,
@@ -512,8 +485,9 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, object]]:
         """Return symptom sets for two patients before an end date."""
+        spec = get_graph_query_spec("patient_symptom_set_comparison_by_end_date")
         return self._run_patient_pair_query_by_end_date(
-            query=PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             end_date=end_date,
@@ -530,8 +504,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_symptoms_by_start_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_SYMPTOMS_BY_START_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -545,8 +520,9 @@ class KgRepository:
         start_date: str,
     ) -> list[dict[str, object]]:
         """Return symptom sets for two patients from a start date."""
+        spec = get_graph_query_spec("patient_symptom_set_comparison_by_start_date")
         return self._run_patient_pair_query_by_start_date(
-            query=PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             start_date=start_date,
@@ -565,8 +541,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_symptoms_by_date_range")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_SYMPTOMS_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -582,8 +559,9 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, object]]:
         """Return symptom sets for two patients within a date range."""
+        spec = get_graph_query_spec("patient_symptom_set_comparison_by_date_range")
         return self._run_patient_pair_query_by_date_range(
-            query=PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             start_date=start_date,
@@ -601,8 +579,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_diseases_by_end_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "end_date": normalized_end_date,
@@ -616,8 +595,9 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, object]]:
         """Return disease sets for two patients before an end date."""
+        spec = get_graph_query_spec("patient_disease_set_comparison_by_end_date")
         return self._run_patient_pair_query_by_end_date(
-            query=PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             end_date=end_date,
@@ -630,8 +610,9 @@ class KgRepository:
         start_date: str,
     ) -> list[dict[str, object]]:
         """Return disease sets for two patients from a start date."""
+        spec = get_graph_query_spec("patient_disease_set_comparison_by_start_date")
         return self._run_patient_pair_query_by_start_date(
-            query=PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             start_date=start_date,
@@ -645,8 +626,9 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, object]]:
         """Return disease sets for two patients within a date range."""
+        spec = get_graph_query_spec("patient_disease_set_comparison_by_date_range")
         return self._run_patient_pair_query_by_date_range(
-            query=PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             start_date=start_date,
@@ -664,8 +646,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_diseases_by_start_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -685,8 +668,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_diseases_by_date_range")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -705,8 +689,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_unknowns_by_end_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "end_date": normalized_end_date,
@@ -720,8 +705,9 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, object]]:
         """Return unknown-category sets for two patients before an end date."""
+        spec = get_graph_query_spec("patient_unknown_set_comparison_by_end_date")
         return self._run_patient_pair_query_by_end_date(
-            query=PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             end_date=end_date,
@@ -738,8 +724,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_unknowns_by_start_date")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -753,8 +740,9 @@ class KgRepository:
         start_date: str,
     ) -> list[dict[str, object]]:
         """Return unknown-category sets for two patients from a start date."""
+        spec = get_graph_query_spec("patient_unknown_set_comparison_by_start_date")
         return self._run_patient_pair_query_by_start_date(
-            query=PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             start_date=start_date,
@@ -773,8 +761,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_distinct_unknowns_by_date_range")
         return self.client.run_query(
-            query=PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
@@ -790,8 +779,9 @@ class KgRepository:
         end_date: str,
     ) -> list[dict[str, object]]:
         """Return unknown-category sets for two patients within a date range."""
+        spec = get_graph_query_spec("patient_unknown_set_comparison_by_date_range")
         return self._run_patient_pair_query_by_date_range(
-            query=PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY,
+            query=spec.query,
             primary_patient_id=primary_patient_id,
             comparison_patient_id=comparison_patient_id,
             start_date=start_date,
@@ -807,8 +797,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_task_instance_set_ordered_training_dates")
         return self.client.run_query(
-            query=PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
+            query=spec.query,
             parameters={"patient_id": normalized_patient_id},
         )
 
@@ -821,8 +812,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_training_task_history")
         return self.client.run_query(
-            query=PATIENT_TRAINING_TASK_HISTORY_QUERY,
+            query=spec.query,
             parameters={"patient_id": normalized_patient_id},
         )
 
@@ -839,8 +831,9 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
+        spec = get_graph_query_spec("patient_training_task_history_by_date_window")
         return self.client.run_query(
-            query=PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+            query=spec.query,
             parameters={
                 "patient_id": normalized_patient_id,
                 "start_date": normalized_start_date,
