@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
@@ -46,7 +46,6 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
-    PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
@@ -644,11 +643,16 @@ class KgRepositoryTest(unittest.TestCase):
         ]
         repository = KgRepository(client=mock_client)
 
-        result = repository.get_patient_game_set_comparison_by_end_date(
-            " 40 ",
-            " 20121011 ",
-            " 2022-05-22 ",
-        )
+        with patch(
+            "src.similar_user.data_access.kg_repository.get_graph_query_spec"
+        ) as mock_get_graph_query_spec:
+            mock_get_graph_query_spec.return_value = Mock(query="REGISTERED QUERY")
+
+            result = repository.get_patient_game_set_comparison_by_end_date(
+                " 40 ",
+                " 20121011 ",
+                " 2022-05-22 ",
+            )
 
         self.assertEqual(
             result,
@@ -659,8 +663,11 @@ class KgRepositoryTest(unittest.TestCase):
                 }
             ],
         )
+        mock_get_graph_query_spec.assert_called_once_with(
+            "patient_game_set_comparison_by_end_date"
+        )
         mock_client.run_query.assert_called_once_with(
-            query=PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
+            query="REGISTERED QUERY",
             parameters={
                 "primary_patient_id": "40",
                 "comparison_patient_id": "20121011",
