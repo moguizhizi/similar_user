@@ -209,7 +209,7 @@ PATIENT_TRAINING_HISTORY_SPECS = (
     ),
 )
 
-PATIENT_GAME_COLLECTION_SPECS = (
+_PATIENT_GAME_COLLECTION_BASE_SPECS = (
     _spec(
         name="distinct_training_games",
         category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
@@ -220,65 +220,55 @@ PATIENT_GAME_COLLECTION_SPECS = (
         row_fields=("g",),
         query=DISTINCT_TRAINING_GAMES_QUERY,
     ),
-    _spec(
-        name="patient_distinct_games_by_end_date",
-        category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
-        description="查询患者早于 end_date 的去重游戏",
-        source_label="Patient",
-        source_parameters=("patient_id", "end_date"),
-        path_shape="(p:Patient)--(s1:TaskInstanceSet)--(i1:TaskInstance)--(g:Game)",
-        row_fields=("g",),
-        query=PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
+)
+
+_PATIENT_GAME_COLLECTION_DEFINITIONS = (
+    (
+        "patient_distinct_games",
+        "去重游戏",
+        PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY,
+        PATIENT_DISTINCT_GAMES_BY_END_DATE_QUERY,
+        PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY,
     ),
-    _spec(
-        name="patient_distinct_games_by_start_date",
-        category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
-        description="查询患者从某日期开始的去重游戏",
-        source_label="Patient",
-        source_parameters=("patient_id", "start_date"),
-        path_shape="(p:Patient)--(s1:TaskInstanceSet)--(i1:TaskInstance)--(g:Game)",
-        row_fields=("g",),
-        query=PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY,
+    (
+        "patient_games",
+        "游戏记录",
+        PATIENT_GAMES_BY_START_DATE_QUERY,
+        PATIENT_GAMES_BY_END_DATE_QUERY,
+        PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     ),
-    _spec(
-        name="patient_distinct_games_by_date_range",
-        category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
-        description="查询患者左闭右开日期区间内的去重游戏",
-        source_label="Patient",
-        source_parameters=("patient_id", "start_date", "end_date"),
-        path_shape="(p:Patient)--(s1:TaskInstanceSet)--(i1:TaskInstance)--(g:Game)",
-        row_fields=("g",),
-        query=PATIENT_DISTINCT_GAMES_BY_DATE_RANGE_QUERY,
-    ),
-    _spec(
-        name="patient_games_by_end_date",
-        category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
-        description="查询患者早于 end_date 的游戏记录",
-        source_label="Patient",
-        source_parameters=("patient_id", "end_date"),
-        path_shape="(p:Patient)--(s1:TaskInstanceSet)--(i1:TaskInstance)--(g:Game)",
-        row_fields=("g",),
-        query=PATIENT_GAMES_BY_END_DATE_QUERY,
-    ),
-    _spec(
-        name="patient_games_by_start_date",
-        category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
-        description="查询患者从某日期开始的游戏记录",
-        source_label="Patient",
-        source_parameters=("patient_id", "start_date"),
-        path_shape="(p:Patient)--(s1:TaskInstanceSet)--(i1:TaskInstance)--(g:Game)",
-        row_fields=("g",),
-        query=PATIENT_GAMES_BY_START_DATE_QUERY,
-    ),
-    _spec(
-        name="patient_games_by_date_range",
-        category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
-        description="查询患者左闭右开日期区间内的游戏记录",
-        source_label="Patient",
-        source_parameters=("patient_id", "start_date", "end_date"),
-        path_shape="(p:Patient)--(s1:TaskInstanceSet)--(i1:TaskInstance)--(g:Game)",
-        row_fields=("g",),
-        query=PATIENT_GAMES_BY_DATE_RANGE_QUERY,
+)
+
+PATIENT_GAME_COLLECTION_SPECS = (
+    *_PATIENT_GAME_COLLECTION_BASE_SPECS,
+    *tuple(
+        _spec(
+            name=f"{prefix}_by_{date_variant}",
+            category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
+            description=f"查询患者{date_description}的{description_suffix}",
+            source_label="Patient",
+            source_parameters=source_parameters,
+            path_shape="(p:Patient)--(s1:TaskInstanceSet)--(i1:TaskInstance)--(g:Game)",
+            row_fields=("g",),
+            query=query,
+        )
+        for (
+            prefix,
+            description_suffix,
+            start_query,
+            end_query,
+            range_query,
+        ) in _PATIENT_GAME_COLLECTION_DEFINITIONS
+        for date_variant, date_description, source_parameters, query in (
+            ("start_date", "从某日期开始", ("patient_id", "start_date"), start_query),
+            ("end_date", "早于 end_date", ("patient_id", "end_date"), end_query),
+            (
+                "date_range",
+                "左闭右开日期区间内",
+                ("patient_id", "start_date", "end_date"),
+                range_query,
+            ),
+        )
     ),
 )
 
