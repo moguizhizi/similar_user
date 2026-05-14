@@ -67,6 +67,15 @@ class KgRepository:
         )
         return self._extract_patient_ids(rows)
 
+    def get_source_patient_ids_with_secondary_ability_scores(self) -> list[str]:
+        """Return source patient IDs with secondary ability training records."""
+        spec = get_graph_query_spec("source_patient_ids_with_secondary_ability_scores")
+        rows = self.client.run_query(
+            query=spec.query,
+            parameters={},
+        )
+        return self._extract_patient_ids(rows)
+
     @staticmethod
     def _extract_patient_ids(rows: list[dict[str, object]]) -> list[str]:
         """Extract non-empty patient IDs from query rows."""

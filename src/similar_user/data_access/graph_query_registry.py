@@ -35,6 +35,7 @@ from .cypher_queries import (
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_IDS_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
+    SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -163,6 +164,16 @@ PATIENT_IDENTITY_SPECS = (
         path_shape="(p:Patient)--(s:TaskInstanceSet)",
         row_fields=("patient_id",),
         query=PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
+    ),
+    _spec(
+        name="source_patient_ids_with_secondary_ability_scores",
+        category=GraphQueryCategory.PATIENT_IDENTITY,
+        description="查询可作为 source patient 的二级脑能力患者 ID",
+        source_label="Patient",
+        source_parameters=(),
+        path_shape="(p:Patient)--(s:TaskInstanceSet)--(:TaskInstance)--(:Game)",
+        row_fields=("patient_id",),
+        query=SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
     ),
 )
 
