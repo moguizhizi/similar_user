@@ -1,6 +1,6 @@
 """Application services."""
 
-from .path_scoring import PathScoreBreakdown, PathScorer
+from .path_scoring import PathScoreBreakdown, PatientGamePatientPathScorer
 from .source_patient_selection import (
     SECONDARY_ABILITY_ANY_RULE,
     SourcePatientSelectionRule,
@@ -10,7 +10,7 @@ from .source_patient_selection import (
 
 __all__ = [
     "PathScoreBreakdown",
-    "PathScorer",
+    "PatientGamePatientPathScorer",
     "SECONDARY_ABILITY_ANY_RULE",
     "SourcePatientSelectionRule",
     "SourcePatientSelectionService",

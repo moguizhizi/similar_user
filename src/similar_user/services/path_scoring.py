@@ -5,8 +5,28 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..data_access.pattern_registry import resolve_path_pattern
+from ..domain.graph_schema import PathPattern
 from ..domain.item import GameNode
 from ..domain.path_models import PatientTasksetTaskGameTaskTasksetPatientPath
+
+
+SUPPORTED_SCORING_PATTERNS = (
+    PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+)
+
+
+def get_path_scorer(pattern: PathPattern | str) -> "PatientGamePatientPathScorer":
+    """Return the scorer registered for a path pattern."""
+    normalized_pattern = resolve_path_pattern(pattern)
+    if normalized_pattern == PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT:
+        return PatientGamePatientPathScorer()
+
+    supported = ", ".join(pattern.value for pattern in SUPPORTED_SCORING_PATTERNS)
+    raise ValueError(
+        f"Unsupported scoring pattern: {normalized_pattern.value}. "
+        f"Supported scoring patterns: {supported}"
+    )
 
 
 @dataclass(frozen=True)
@@ -39,8 +59,8 @@ class PathScoreBreakdown:
 
 
 @dataclass
-class PathScorer:
-    """Score one patient path using explainable rule-based heuristics."""
+class PatientGamePatientPathScorer:
+    """Score one patient-game-patient path using explainable rule-based heuristics."""
 
     education_weight: float = 0.15
     age_weight: float = 0.20
