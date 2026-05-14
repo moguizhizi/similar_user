@@ -14,8 +14,6 @@ from .item import (
     SymptomNode,
     UnknownNode,
     TaskActivityValue,
-    EducationValue,
-    TASK_INSTANCE_SET_EDUCATION_VALUES,
     GameNode,
     TaskExclusiveTypeValue,
     TaskResultValue,
@@ -276,13 +274,7 @@ def _build_task_instance_set_node(
 ) -> TaskInstanceSetNode:
     """Build a task-instance-set node from raw JSON content."""
     data = _require_mapping(value, field_name)
-    return TaskInstanceSetNode(
-        id=_require_string(data.get("id"), f"{field_name}.id"),
-        name=_optional_string(data.get("name")),
-        训练日期=_optional_string(data.get("训练日期")),
-        执行年龄=_optional_string(data.get("执行年龄")),
-        执行学历=_optional_education_value(data.get("执行学历"), f"{field_name}.执行学历"),
-    )
+    return TaskInstanceSetNode.from_dict(data, field_name=field_name)
 
 
 def _build_task_instance_node(value: object, field_name: str) -> TaskInstanceNode:
@@ -345,22 +337,6 @@ def _optional_string(value: object) -> str | None:
     if not isinstance(value, str):
         return str(value)
     return value
-
-
-def _optional_education_value(value: object, field_name: str) -> EducationValue | None:
-    """Normalize and validate TaskInstanceSet.执行学历."""
-    normalized = _optional_string(value)
-    if normalized is None:
-        return None
-    normalized = normalized.strip()
-    if not normalized:
-        return None
-    if normalized not in TASK_INSTANCE_SET_EDUCATION_VALUES:
-        raise ValueError(
-            f"{field_name} has unsupported value {normalized!r}; "
-            "expected one of the observed TaskInstanceSet.执行学历 values."
-        )
-    return normalized
 
 
 def _optional_result_value(value: object, field_name: str) -> TaskResultValue | None:

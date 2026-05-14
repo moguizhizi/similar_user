@@ -81,6 +81,87 @@ class TaskInstanceSetNode:
     执行年龄: str | None = None
     # 基于当前库中 TaskInstanceSet.执行学历 的实际取值收紧字段类型。
     执行学历: EducationValue | None = None
+    二级_书写能力: float | None = None
+    二级_任务切换: float | None = None
+    二级_冲突抑制: float | None = None
+    二级_前瞻记忆: float | None = None
+    二级_反应速度: float | None = None
+    二级_口语生成: float | None = None
+    二级_听理解: float | None = None
+    二级_客体识别: float | None = None
+    二级_工作记忆: float | None = None
+    二级_归纳与推理: float | None = None
+    二级_心算: float | None = None
+    二级_情景记忆: float | None = None
+    二级_情绪识别: float | None = None
+    二级_情绪调节: float | None = None
+    二级_手眼协调: float | None = None
+    二级_持续注意: float | None = None
+    二级_注意分配: float | None = None
+    二级_注意广度: float | None = None
+    二级_积极情绪: float | None = None
+    二级_空间知觉: float | None = None
+    二级_空间记忆: float | None = None
+    二级_联结记忆: float | None = None
+    二级_节律感知: float | None = None
+    二级_表象与想象: float | None = None
+    二级_记忆广度: float | None = None
+    二级_语义系统: float | None = None
+    二级_路径规划: float | None = None
+    二级_运动知觉: float | None = None
+    二级_选择注意: float | None = None
+    二级_问题解决: float | None = None
+    二级_阅读能力: float | None = None
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+        *,
+        field_name: str = "s",
+    ) -> TaskInstanceSetNode:
+        """Build a task-instance-set node from raw JSON content."""
+        return cls(
+            id=_require_string(data.get("id"), f"{field_name}.id"),
+            name=_optional_string(data.get("name")),
+            训练日期=_optional_string(data.get("训练日期")),
+            执行年龄=_optional_string(data.get("执行年龄")),
+            执行学历=_optional_education_value(
+                data.get("执行学历"),
+                f"{field_name}.执行学历",
+            ),
+            二级_书写能力=_optional_float(data.get("二级_书写能力")),
+            二级_任务切换=_optional_float(data.get("二级_任务切换")),
+            二级_冲突抑制=_optional_float(data.get("二级_冲突抑制")),
+            二级_前瞻记忆=_optional_float(data.get("二级_前瞻记忆")),
+            二级_反应速度=_optional_float(data.get("二级_反应速度")),
+            二级_口语生成=_optional_float(data.get("二级_口语生成")),
+            二级_听理解=_optional_float(data.get("二级_听理解")),
+            二级_客体识别=_optional_float(data.get("二级_客体识别")),
+            二级_工作记忆=_optional_float(data.get("二级_工作记忆")),
+            二级_归纳与推理=_optional_float(data.get("二级_归纳与推理")),
+            二级_心算=_optional_float(data.get("二级_心算")),
+            二级_情景记忆=_optional_float(data.get("二级_情景记忆")),
+            二级_情绪识别=_optional_float(data.get("二级_情绪识别")),
+            二级_情绪调节=_optional_float(data.get("二级_情绪调节")),
+            二级_手眼协调=_optional_float(data.get("二级_手眼协调")),
+            二级_持续注意=_optional_float(data.get("二级_持续注意")),
+            二级_注意分配=_optional_float(data.get("二级_注意分配")),
+            二级_注意广度=_optional_float(data.get("二级_注意广度")),
+            二级_积极情绪=_optional_float(data.get("二级_积极情绪")),
+            二级_空间知觉=_optional_float(data.get("二级_空间知觉")),
+            二级_空间记忆=_optional_float(data.get("二级_空间记忆")),
+            二级_联结记忆=_optional_float(data.get("二级_联结记忆")),
+            二级_节律感知=_optional_float(data.get("二级_节律感知")),
+            二级_表象与想象=_optional_float(data.get("二级_表象与想象")),
+            二级_记忆广度=_optional_float(data.get("二级_记忆广度")),
+            二级_语义系统=_optional_float(data.get("二级_语义系统")),
+            二级_路径规划=_optional_float(data.get("二级_路径规划")),
+            二级_运动知觉=_optional_float(data.get("二级_运动知觉")),
+            二级_选择注意=_optional_float(data.get("二级_选择注意")),
+            二级_问题解决=_optional_float(data.get("二级_问题解决")),
+            二级_阅读能力=_optional_float(data.get("二级_阅读能力")),
+        )
 
 
 @dataclass(frozen=True)
@@ -358,3 +439,19 @@ def _optional_float(value: object) -> float | None:
         except ValueError:
             return None
     return None
+
+
+def _optional_education_value(value: object, field_name: str) -> EducationValue | None:
+    """Normalize and validate TaskInstanceSet.执行学历."""
+    normalized = _optional_string(value)
+    if normalized is None:
+        return None
+    normalized = normalized.strip()
+    if not normalized:
+        return None
+    if normalized not in TASK_INSTANCE_SET_EDUCATION_VALUES:
+        raise ValueError(
+            f"{field_name} has unsupported value {normalized!r}; "
+            "expected one of the observed TaskInstanceSet.执行学历 values."
+        )
+    return normalized
