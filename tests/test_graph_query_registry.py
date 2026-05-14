@@ -8,6 +8,7 @@ from src.similar_user.data_access.cypher_queries import (
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY,
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
+    SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
@@ -99,6 +100,24 @@ class GraphQueryRegistryTest(unittest.TestCase):
         self.assertEqual(spec.path_shape, "(p:Patient)--(s:TaskInstanceSet)")
         self.assertEqual(spec.row_fields, ("patient_id",))
 
+    def test_registered_source_patient_query_declares_contract(self) -> None:
+        spec = get_graph_query_spec(
+            "source_patient_ids_with_secondary_ability_scores"
+        )
+
+        self.assertEqual(spec.category, GraphQueryCategory.PATIENT_IDENTITY)
+        self.assertEqual(spec.source_label, "Patient")
+        self.assertEqual(spec.source_parameters, ())
+        self.assertEqual(
+            spec.path_shape,
+            "(p:Patient)--(s:TaskInstanceSet)--(:TaskInstance)--(:Game)",
+        )
+        self.assertEqual(spec.row_fields, ("patient_id",))
+        self.assertEqual(
+            spec.query,
+            SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
+        )
+
     def test_registered_patient_training_history_query_declares_contract(self) -> None:
         spec = get_graph_query_spec("patient_training_task_history")
 
@@ -145,7 +164,7 @@ class GraphQueryRegistryTest(unittest.TestCase):
     def test_list_graph_query_specs_can_filter_patient_categories(self) -> None:
         self.assertEqual(
             len(list_graph_query_specs(category=GraphQueryCategory.PATIENT_IDENTITY)),
-            2,
+            3,
         )
         self.assertEqual(
             len(

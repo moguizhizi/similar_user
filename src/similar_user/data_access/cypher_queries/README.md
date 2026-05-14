@@ -10,6 +10,7 @@
 |---|---|---|---|---|
 | 查询全库患者 ID | `PATIENT_IDS_QUERY` | `patients.py` | 无 | `patient_id` |
 | 查询指定日期有训练记录的患者 ID | `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | `patients.py` | `base_date` | `patient_id` |
+| 查询可作为 source patient 的二级脑能力患者 ID | `SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY` | `patients.py` | 无 | `patient_id` |
 
 ### 患者训练历史
 
@@ -174,6 +175,7 @@ Disease -- TaskInstanceSet -- Patient
 |---|---|---|---|
 | `PATIENT_IDS_QUERY` | 查询全库患者 ID | 无 | `patient_id` |
 | `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | 查询指定日期有训练记录的患者 ID | `base_date` | `patient_id` |
+| `SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY` | 查询可作为 source patient 的二级脑能力患者 ID | 无 | `patient_id` |
 
 ### `patient_training_history.py`
 

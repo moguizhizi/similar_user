@@ -58,6 +58,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY,
     PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
     PATIENT_TRAINING_TASK_HISTORY_QUERY,
+    SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
@@ -133,6 +134,24 @@ class KgRepositoryTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "base_date must be a non-empty string."):
             repository.get_patient_ids_with_training_on_date("   ")
+
+    def test_get_source_patient_ids_with_secondary_ability_scores(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"patient_id": "40"},
+            {"patient_id": " 41 "},
+            {"patient_id": ""},
+            {"patient_id": None},
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_source_patient_ids_with_secondary_ability_scores()
+
+        self.assertEqual(result, ["40", "41"])
+        mock_client.run_query.assert_called_once_with(
+            query=SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
+            parameters={},
+        )
 
     def test_get_distinct_training_games(self) -> None:
         mock_client = Mock()

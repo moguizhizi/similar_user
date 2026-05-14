@@ -32,6 +32,10 @@ class UserService:
         """Return patient IDs with training records on base_date."""
         return self.kg_repository.get_patient_ids_with_training_on_date(base_date)
 
+    def get_source_patient_ids_with_secondary_ability_scores(self) -> list[str]:
+        """Return source patient IDs with secondary ability training records."""
+        return self.kg_repository.get_source_patient_ids_with_secondary_ability_scores()
+
     def get_distinct_training_games(self) -> list[dict[str, object]]:
         """Return distinct games that appear in training records."""
         return self.kg_repository.get_distinct_training_games()
