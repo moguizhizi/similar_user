@@ -13,13 +13,9 @@
 
     python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --top-k 50
 
-调试单条 path：
+调试单条 path，不保存评分文件：
 
     python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --path-index 0
-
-保存评分明细和摘要：
-
-    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --top-k 50 --save
 
 对 disease_patient / symptom_patient / unknown_patient 评分时，需要显式提供源节点年龄和学历：
 
@@ -114,14 +110,9 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--save",
-        action="store_true",
-        help="Save scored detail and summary JSON files.",
-    )
-    parser.add_argument(
-        "--scored-output-dir",
+        "--scored-paths-dir",
         default=str(DEFAULT_SCORED_OUTPUT_DIR),
-        help="Directory used by --save to store scored result files.",
+        help="Directory used to store scored path detail and summary JSON files.",
     )
     args = parser.parse_args()
     _validate_source_demographic_args(parser, args)
@@ -418,10 +409,10 @@ def main() -> int:
             path_index=args.path_index,
             top_k=args.top_k,
         )
-        if args.save:
+        if args.path_index is None:
             output_paths = save_scored_pattern_result(
                 result,
-                output_dir=args.scored_output_dir,
+                output_dir=args.scored_paths_dir,
             )
             LOGGER.info(
                 "Saved scored pattern result: detail_path=%s, summary_path=%s",
