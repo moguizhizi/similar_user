@@ -22,13 +22,19 @@ from src.similar_user.domain import (
     PathPattern,
     PatientNode,
     PatientTasksetDiseaseTasksetPatientPath,
+    PatientTasksetSymptomTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
+    PatientTasksetUnknownTasksetPatientPath,
+    SymptomNode,
     TaskInstanceNode,
     TaskInstanceSetNode,
+    UnknownNode,
 )
 from src.similar_user.services.path_scoring import (
     PatientDiseasePatientPathScorer,
     PatientGamePatientPathScorer,
+    PatientSymptomPatientPathScorer,
+    PatientUnknownPatientPathScorer,
     PathScoringRules,
     get_path_scorer,
 )
@@ -55,9 +61,21 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertIsInstance(scorer, PatientDiseasePatientPathScorer)
 
+    def test_get_path_scorer_returns_registered_patient_symptom_scorer(self) -> None:
+        scorer = get_path_scorer("patient_symptom_patient")
+
+        self.assertIsInstance(scorer, PatientSymptomPatientPathScorer)
+
+    def test_get_path_scorer_returns_registered_patient_unknown_scorer(self) -> None:
+        scorer = get_path_scorer("patient_unknown_patient")
+
+        self.assertIsInstance(scorer, PatientUnknownPatientPathScorer)
+
     def test_path_scorers_share_rules_without_inheriting_each_other(self) -> None:
         self.assertTrue(issubclass(PatientGamePatientPathScorer, PathScoringRules))
         self.assertTrue(issubclass(PatientDiseasePatientPathScorer, PathScoringRules))
+        self.assertTrue(issubclass(PatientSymptomPatientPathScorer, PathScoringRules))
+        self.assertTrue(issubclass(PatientUnknownPatientPathScorer, PathScoringRules))
         self.assertFalse(
             issubclass(PatientDiseasePatientPathScorer, PatientGamePatientPathScorer)
         )
@@ -221,6 +239,46 @@ class PathScoringTest(unittest.TestCase):
         self.assertIsNone(result.age_score)
         self.assertEqual(result.total_score, 85.0)
         self.assertEqual(result.used_weights, {"education": 1.0})
+
+    def test_patient_symptom_patient_path_scorer_uses_age_and_education_only(self) -> None:
+        scorer = PatientSymptomPatientPathScorer()
+        path = PatientTasksetSymptomTasksetPatientPath(
+            pattern=PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
+            p=PatientNode(id="30010096"),
+            s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
+            sym=SymptomNode(id="AU_SYM_0007", name="记忆下降"),
+            s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="大专"),
+            p2=PatientNode(id="20113562"),
+        )
+
+        result = scorer.score(path)
+
+        self.assertEqual(result.total_score, 91.0)
+        self.assertEqual(result.used_weights, {"education": 0.6, "age": 0.4})
+        self.assertIn(
+            PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT.value,
+            result.details["activity"],
+        )
+
+    def test_patient_unknown_patient_path_scorer_uses_age_and_education_only(self) -> None:
+        scorer = PatientUnknownPatientPathScorer()
+        path = PatientTasksetUnknownTasksetPatientPath(
+            pattern=PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
+            p=PatientNode(id="30010096"),
+            s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
+            un=UnknownNode(id="AU_UNKOWN_0005", name="未知实体"),
+            s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="大专"),
+            p2=PatientNode(id="20113562"),
+        )
+
+        result = scorer.score(path)
+
+        self.assertEqual(result.total_score, 91.0)
+        self.assertEqual(result.used_weights, {"education": 0.6, "age": 0.4})
+        self.assertIn(
+            PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT.value,
+            result.details["task_type"],
+        )
 
     def test_patient_game_patient_path_scorer_completion_only_depends_on_result(self) -> None:
         scorer = PatientGamePatientPathScorer()
@@ -746,6 +804,134 @@ class PathScoringTest(unittest.TestCase):
             scored = score_pattern_paths(
                 "30010096",
                 pattern="PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+                config_path=config_path,
+            )
+
+        self.assertEqual(scored["path_count"], 1)
+        self.assertEqual(scored["scored_path_count"], 1)
+        self.assertEqual(scored["scores"][0]["score"]["total_score"], 91.0)
+        self.assertEqual(scored["scores"][0]["score"]["education_score"], 85.0)
+        self.assertEqual(scored["scores"][0]["score"]["age_score"], 100.0)
+        self.assertIsNone(scored["scores"][0]["score"]["completion_score"])
+
+    def test_score_pattern_paths_scores_saved_patient_symptom_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            output_dir = Path(temp_dir) / "pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "training_date_split:",
+                        "  min_training_dates: 5",
+                        "  before_ratio: 4",
+                        "  after_ratio: 1",
+                        "pattern_path_storage:",
+                        f'  output_dir: "{output_dir}"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT",
+                "ordered_training_dates": [],
+                "first_training_date": None,
+                "last_training_date": None,
+                "training_date_count": 0,
+                "statistics": None,
+                "limit_recommendation": None,
+                "paths": [
+                    {
+                        "row": {
+                            "p": {"id": "30010096"},
+                            "s1": {
+                                "id": "30010096_20220522",
+                                "执行年龄": "66",
+                                "执行学历": "本科",
+                            },
+                            "sym": {"id": "AU_SYM_0007", "name": "记忆下降"},
+                            "s2": {
+                                "id": "20113562_20211214",
+                                "执行年龄": "64",
+                                "执行学历": "大专",
+                            },
+                            "p2": {"id": "20113562"},
+                        }
+                    }
+                ],
+            }
+            save_pattern_result(result, config_path)
+
+            scored = score_pattern_paths(
+                "30010096",
+                pattern="PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT",
+                config_path=config_path,
+            )
+
+        self.assertEqual(scored["path_count"], 1)
+        self.assertEqual(scored["scored_path_count"], 1)
+        self.assertEqual(scored["scores"][0]["score"]["total_score"], 91.0)
+        self.assertEqual(scored["scores"][0]["score"]["education_score"], 85.0)
+        self.assertEqual(scored["scores"][0]["score"]["age_score"], 100.0)
+        self.assertIsNone(scored["scores"][0]["score"]["completion_score"])
+
+    def test_score_pattern_paths_scores_saved_patient_unknown_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            output_dir = Path(temp_dir) / "pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "training_date_split:",
+                        "  min_training_dates: 5",
+                        "  before_ratio: 4",
+                        "  after_ratio: 1",
+                        "pattern_path_storage:",
+                        f'  output_dir: "{output_dir}"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT",
+                "ordered_training_dates": [],
+                "first_training_date": None,
+                "last_training_date": None,
+                "training_date_count": 0,
+                "statistics": None,
+                "limit_recommendation": None,
+                "paths": [
+                    {
+                        "row": {
+                            "p": {"id": "30010096"},
+                            "s1": {
+                                "id": "30010096_20220522",
+                                "执行年龄": "66",
+                                "执行学历": "本科",
+                            },
+                            "un": {"id": "AU_UNKOWN_0005", "name": "未知实体"},
+                            "s2": {
+                                "id": "20113562_20211214",
+                                "执行年龄": "64",
+                                "执行学历": "大专",
+                            },
+                            "p2": {"id": "20113562"},
+                        }
+                    }
+                ],
+            }
+            save_pattern_result(result, config_path)
+
+            scored = score_pattern_paths(
+                "30010096",
+                pattern="PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT",
                 config_path=config_path,
             )
 

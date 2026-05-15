@@ -10,25 +10,38 @@ from ..domain.graph_schema import PathPattern
 from ..domain.item import GameNode
 from ..domain.path_models import (
     PatientTasksetDiseaseTasksetPatientPath,
+    PatientTasksetSymptomTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
+    PatientTasksetUnknownTasksetPatientPath,
 )
 
 
 SUPPORTED_SCORING_PATTERNS = (
     PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
+    PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
+    PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
 )
 
 
 def get_path_scorer(
     pattern: PathPattern | str,
-) -> "PatientGamePatientPathScorer | PatientDiseasePatientPathScorer":
+) -> (
+    "PatientGamePatientPathScorer"
+    " | PatientDiseasePatientPathScorer"
+    " | PatientSymptomPatientPathScorer"
+    " | PatientUnknownPatientPathScorer"
+):
     """Return the scorer registered for a path pattern."""
     normalized_pattern = resolve_path_pattern(pattern)
     if normalized_pattern == PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT:
         return PatientGamePatientPathScorer()
     if normalized_pattern == PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT:
         return PatientDiseasePatientPathScorer()
+    if normalized_pattern == PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT:
+        return PatientSymptomPatientPathScorer()
+    if normalized_pattern == PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT:
+        return PatientUnknownPatientPathScorer()
 
     supported = ", ".join(pattern.value for pattern in SUPPORTED_SCORING_PATTERNS)
     raise ValueError(
@@ -370,5 +383,87 @@ class PatientDiseasePatientPathScorer(PathScoringRules):
                 "activity": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT 模式不适用活跃度评分",
                 "task_type": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT 模式不适用任务类型评分",
                 "task_relevance": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT 模式不适用任务相关度评分",
+            },
+        )
+
+
+@dataclass
+class PatientSymptomPatientPathScorer(PathScoringRules):
+    """Score one patient-symptom-patient path by age and education similarity."""
+
+    def score(
+        self,
+        path: PatientTasksetSymptomTasksetPatientPath,
+    ) -> PathScoreBreakdown:
+        """Score a symptom path using only age and education dimensions."""
+        education_score, education_detail = self._score_education(path)
+        age_score, age_detail = self._score_age(path)
+        scores = {
+            "education": education_score,
+            "age": age_score,
+        }
+        weights = {
+            "education": self.education_weight,
+            "age": self.age_weight,
+        }
+        total_score, used_weights = self._calculate_weighted_score(scores, weights)
+
+        return PathScoreBreakdown(
+            total_score=total_score,
+            education_score=education_score,
+            age_score=age_score,
+            completion_score=None,
+            activity_score=None,
+            task_type_score=None,
+            task_relevance_score=None,
+            used_weights=used_weights,
+            details={
+                "education": education_detail,
+                "age": age_detail,
+                "completion": "PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT 模式不适用完成情况评分",
+                "activity": "PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT 模式不适用活跃度评分",
+                "task_type": "PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT 模式不适用任务类型评分",
+                "task_relevance": "PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT 模式不适用任务相关度评分",
+            },
+        )
+
+
+@dataclass
+class PatientUnknownPatientPathScorer(PathScoringRules):
+    """Score one patient-unknown-patient path by age and education similarity."""
+
+    def score(
+        self,
+        path: PatientTasksetUnknownTasksetPatientPath,
+    ) -> PathScoreBreakdown:
+        """Score an unknown path using only age and education dimensions."""
+        education_score, education_detail = self._score_education(path)
+        age_score, age_detail = self._score_age(path)
+        scores = {
+            "education": education_score,
+            "age": age_score,
+        }
+        weights = {
+            "education": self.education_weight,
+            "age": self.age_weight,
+        }
+        total_score, used_weights = self._calculate_weighted_score(scores, weights)
+
+        return PathScoreBreakdown(
+            total_score=total_score,
+            education_score=education_score,
+            age_score=age_score,
+            completion_score=None,
+            activity_score=None,
+            task_type_score=None,
+            task_relevance_score=None,
+            used_weights=used_weights,
+            details={
+                "education": education_detail,
+                "age": age_detail,
+                "completion": "PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT 模式不适用完成情况评分",
+                "activity": "PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT 模式不适用活跃度评分",
+                "task_type": "PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT 模式不适用任务类型评分",
+                "task_relevance": "PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT 模式不适用任务相关度评分",
             },
         )
