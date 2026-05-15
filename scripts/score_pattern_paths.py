@@ -47,7 +47,7 @@ from similar_user.data_access.pattern_registry import (
     resolve_path_pattern,
 )
 from similar_user.domain.graph_schema import PathPattern
-from similar_user.services.path_scoring import get_path_scorer
+from similar_user.services.path_scoring import PathScoringRules, get_path_scorer
 from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore
 
@@ -370,6 +370,24 @@ def _validate_source_demographic_args(
         parser.error(
             f"{', '.join(missing)} must be provided for {aliases} scoring patterns."
         )
+
+    if PathScoringRules._parse_int(args.age) is None:
+        parser.error("--age must be a numeric age value.")
+
+    supported_education_values = _supported_cli_education_values()
+    education = args.education.strip()
+    if education not in supported_education_values:
+        supported = ", ".join(supported_education_values)
+        parser.error(f"--education must be one of: {supported}")
+
+
+def _supported_cli_education_values() -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            set(PathScoringRules.EDUCATION_RANKS)
+            | set(PathScoringRules.EDUCATION_NORMALIZATION)
+        )
+    )
 
 
 def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
