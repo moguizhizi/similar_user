@@ -16,13 +16,19 @@
 调试单条 path：
 
     python scripts/score_pattern_paths.py 30010096 --path-index 0
+
+保存评分明细和摘要：
+
+    python scripts/score_pattern_paths.py 30010096 --top-k 50 --save
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -40,11 +46,12 @@ from similar_user.utils.pattern_storage import PatternResultStore
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 DEFAULT_PATTERN = "patient_game_patient"
+DEFAULT_SCORED_OUTPUT_DIR = Path("data/scored_pattern_paths")
 LOGGER = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for scoring saved patient results."""
+    """Parse command-line arguments for scoring saved pattern results."""
     parser = argparse.ArgumentParser(
         description="Score saved pattern paths from local JSON storage."
     )
@@ -72,6 +79,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Return the top-k scored paths ordered by total_score descending.",
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save scored detail and summary JSON files.",
+    )
+    parser.add_argument(
+        "--scored-output-dir",
+        default=str(DEFAULT_SCORED_OUTPUT_DIR),
+        help="Directory used by --save to store scored result files.",
     )
     return parser.parse_args()
 
@@ -167,6 +184,73 @@ def score_pattern_paths(
     return result
 
 
+def save_scored_pattern_result(
+    result: dict[str, object],
+    output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+) -> dict[str, Path]:
+    """Save full scored details and a compact summary as two JSON files."""
+    detail_path, summary_path = get_scored_pattern_output_paths(result, output_dir)
+    _write_json_atomic(detail_path, result)
+    _write_json_atomic(summary_path, build_scored_pattern_summary(result))
+    LOGGER.debug(
+        "Saved scored pattern result: source_id=%s, pattern=%s, detail_path=%s, summary_path=%s",
+        result.get("source_id"),
+        result.get("pattern"),
+        detail_path,
+        summary_path,
+    )
+    return {"detail": detail_path, "summary": summary_path}
+
+
+def get_scored_pattern_output_paths(
+    result: dict[str, object],
+    output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+) -> tuple[Path, Path]:
+    """Return detail and summary output paths for one scored result."""
+    source_id = _normalize_result_string(result.get("source_id"), "source_id")
+    pattern = _normalize_result_string(result.get("pattern"), "pattern")
+    bucket = source_id[:2] or "unknown"
+    output_base = Path(output_dir) / pattern / bucket
+    return (
+        output_base / f"{source_id}.detail.json",
+        output_base / f"{source_id}.summary.json",
+    )
+
+
+def build_scored_pattern_summary(result: dict[str, object]) -> dict[str, object]:
+    """Build a compact scored result summary for quick score inspection."""
+    summary_scores = []
+    raw_scores = result.get("scores")
+    scores = raw_scores if isinstance(raw_scores, list) else []
+    for rank, item in enumerate(scores, start=1):
+        if not isinstance(item, dict):
+            continue
+        score = item.get("score")
+        score_data = score if isinstance(score, dict) else {}
+        row = _extract_path_row(item.get("path"))
+        summary_scores.append(
+            {
+                "rank": rank,
+                "path_index": item.get("path_index"),
+                "total_score": score_data.get("total_score"),
+                "candidate_id": _extract_node_id(row, "p2"),
+                "game_id": _extract_node_id(row, "g"),
+                "game_name": _extract_node_name(row, "g"),
+                "score": score_data,
+            }
+        )
+
+    return {
+        "source_id": result.get("source_id"),
+        "source_parameter": result.get("source_parameter"),
+        "pattern": result.get("pattern"),
+        "path_count": result.get("path_count"),
+        "scored_path_count": result.get("scored_path_count"),
+        "retrieval_context": result.get("retrieval_context"),
+        "scores": summary_scores,
+    }
+
+
 def _extract_score_end_date(
     path_window: dict[str, object] | None,
     legacy_split_training_date: str | None,
@@ -200,6 +284,50 @@ def _build_path_scope(
     return "当前评分结果中的 paths 来自已保存的检索集合"
 
 
+def _extract_path_row(path: object) -> dict[str, object]:
+    if not isinstance(path, dict):
+        return {}
+    row = path.get("row")
+    return row if isinstance(row, dict) else {}
+
+
+def _extract_node_id(row: dict[str, object], key: str) -> object:
+    node = row.get(key)
+    if isinstance(node, dict):
+        return node.get("id")
+    return None
+
+
+def _extract_node_name(row: dict[str, object], key: str) -> object:
+    node = row.get(key)
+    if isinstance(node, dict):
+        return node.get("name")
+    return None
+
+
+def _normalize_result_string(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string.")
+    return value.strip()
+
+
+def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f"{path.stem}.",
+        suffix=".tmp",
+        delete=False,
+    ) as temp_file:
+        temp_file.write(serialized)
+        temp_path = Path(temp_file.name)
+
+    os.replace(temp_path, path)
+
+
 def main() -> int:
     """Score saved pattern paths and log JSON output."""
     args = parse_args()
@@ -211,6 +339,16 @@ def main() -> int:
             path_index=args.path_index,
             top_k=args.top_k,
         )
+        if args.save:
+            output_paths = save_scored_pattern_result(
+                result,
+                output_dir=args.scored_output_dir,
+            )
+            LOGGER.info(
+                "Saved scored pattern result: detail_path=%s, summary_path=%s",
+                output_paths["detail"],
+                output_paths["summary"],
+            )
     except Exception as exc:
         LOGGER.exception("Score pattern paths failed: %s", exc)
         return 1
