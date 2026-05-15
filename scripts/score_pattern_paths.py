@@ -20,6 +20,10 @@
 保存评分明细和摘要：
 
     python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --top-k 50 --save
+
+对 disease_patient / symptom_patient / unknown_patient 评分时，需要显式提供源节点年龄和学历：
+
+    python scripts/score_pattern_paths.py --source-id AU_DIS_0013 --pattern disease_patient --age 66 --education 本科
 """
 
 from __future__ import annotations
@@ -38,7 +42,11 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
-from similar_user.data_access.pattern_registry import available_path_pattern_aliases
+from similar_user.data_access.pattern_registry import (
+    available_path_pattern_aliases,
+    resolve_path_pattern,
+)
+from similar_user.domain.graph_schema import PathPattern
 from similar_user.services.path_scoring import get_path_scorer
 from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore
@@ -47,6 +55,11 @@ from similar_user.utils.pattern_storage import PatternResultStore
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 DEFAULT_PATTERN = "patient_game_patient"
 DEFAULT_SCORED_OUTPUT_DIR = Path("data/scored_pattern_paths")
+SOURCE_DEMOGRAPHIC_PATTERNS = (
+    PathPattern.DISEASE_TASKSET_PATIENT,
+    PathPattern.SYMPTOM_TASKSET_PATIENT,
+    PathPattern.UNKNOWN_TASKSET_PATIENT,
+)
 LOGGER = get_logger(__name__)
 
 
@@ -85,6 +98,22 @@ def parse_args() -> argparse.Namespace:
         help="Return the top-k scored paths ordered by total_score descending.",
     )
     parser.add_argument(
+        "--age",
+        default=None,
+        help=(
+            "Source age used by disease_patient, symptom_patient, and unknown_patient "
+            "scoring."
+        ),
+    )
+    parser.add_argument(
+        "--education",
+        default=None,
+        help=(
+            "Source education used by disease_patient, symptom_patient, and "
+            "unknown_patient scoring."
+        ),
+    )
+    parser.add_argument(
         "--save",
         action="store_true",
         help="Save scored detail and summary JSON files.",
@@ -94,7 +123,9 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_SCORED_OUTPUT_DIR),
         help="Directory used by --save to store scored result files.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    _validate_source_demographic_args(parser, args)
+    return args
 
 
 def score_pattern_paths(
@@ -313,6 +344,32 @@ def _normalize_result_string(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string.")
     return value.strip()
+
+
+def _requires_source_demographics(pattern: PathPattern | str) -> bool:
+    return resolve_path_pattern(pattern) in SOURCE_DEMOGRAPHIC_PATTERNS
+
+
+def _validate_source_demographic_args(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+) -> None:
+    pattern = resolve_path_pattern(args.pattern)
+    if not _requires_source_demographics(pattern):
+        return
+    missing = [
+        option
+        for option, value in (
+            ("--age", args.age),
+            ("--education", args.education),
+        )
+        if not isinstance(value, str) or not value.strip()
+    ]
+    if missing:
+        aliases = "disease_patient, symptom_patient, unknown_patient"
+        parser.error(
+            f"{', '.join(missing)} must be provided for {aliases} scoring patterns."
+        )
 
 
 def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
