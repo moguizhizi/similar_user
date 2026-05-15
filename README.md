@@ -115,6 +115,8 @@ python scripts/score_pattern_paths.py <patient_id>
 python scripts/score_pattern_paths.py <patient_id> --config config/settings.yaml
 python scripts/score_pattern_paths.py <patient_id> --path-index 0
 python scripts/score_pattern_paths.py <patient_id> --top-k 20
+python scripts/score_pattern_paths.py <patient_id> --top-k 20 --save
+python scripts/score_pattern_paths.py <patient_id> --top-k 20 --save --scored-output-dir data/scored_pattern_paths
 
 # 读取已保存的固定模式路径结果
 python scripts/read_patient_pattern_result.py <patient_id>

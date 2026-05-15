@@ -8,7 +8,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.score_pattern_paths import main, parse_args, score_pattern_paths
+from scripts.score_pattern_paths import (
+    build_scored_pattern_summary,
+    main,
+    parse_args,
+    save_scored_pattern_result,
+    score_pattern_paths,
+)
 from src.similar_user.data_access.pattern_registry import available_path_pattern_aliases
 from src.similar_user.domain import (
     GameNode,
@@ -405,6 +411,77 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scored["retrieval_context"]["score_end_date"], None)
         self.assertEqual(scored["scores"][0]["path_index"], 0)
 
+    def test_save_scored_pattern_result_writes_detail_and_summary_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = {
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "path_count": 1,
+                "scored_path_count": 1,
+                "retrieval_context": {"score_end_date": "2022-05-22"},
+                "scores": [
+                    {
+                        "path_index": 3,
+                        "score": {
+                            "total_score": 95.0,
+                            "education_score": 100.0,
+                            "details": {"education": "学历一致"},
+                        },
+                        "path": {
+                            "row": {
+                                "g": {"id": "348", "name": "真假句辨别"},
+                                "p2": {"id": "20113562"},
+                            }
+                        },
+                    }
+                ],
+            }
+
+            output_paths = save_scored_pattern_result(result, Path(temp_dir))
+
+            detail = json.loads(output_paths["detail"].read_text(encoding="utf-8"))
+            summary = json.loads(output_paths["summary"].read_text(encoding="utf-8"))
+
+        self.assertEqual(detail, result)
+        self.assertEqual(
+            output_paths["detail"].name,
+            "30010096.detail.json",
+        )
+        self.assertEqual(
+            output_paths["summary"].name,
+            "30010096.summary.json",
+        )
+        self.assertEqual(summary["scores"][0]["rank"], 1)
+        self.assertEqual(summary["scores"][0]["path_index"], 3)
+        self.assertEqual(summary["scores"][0]["total_score"], 95.0)
+        self.assertEqual(summary["scores"][0]["candidate_id"], "20113562")
+        self.assertEqual(summary["scores"][0]["game_id"], "348")
+        self.assertEqual(summary["scores"][0]["game_name"], "真假句辨别")
+        self.assertNotIn("path", summary["scores"][0])
+
+    def test_build_scored_pattern_summary_does_not_include_full_path_rows(self) -> None:
+        summary = build_scored_pattern_summary(
+            {
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "path_count": 1,
+                "scored_path_count": 1,
+                "retrieval_context": {},
+                "scores": [
+                    {
+                        "path_index": 0,
+                        "score": {"total_score": 88.0},
+                        "path": {"row": {"p2": {"id": "20113562"}}},
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(summary["scores"][0]["candidate_id"], "20113562")
+        self.assertNotIn("path", summary["scores"][0])
+
     def test_score_pattern_paths_rejects_unsupported_pattern(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
@@ -553,6 +630,8 @@ class PathScoringTest(unittest.TestCase):
                 config=str(config_path),
                 path_index=None,
                 top_k=None,
+                save=False,
+                scored_output_dir="data/scored_pattern_paths",
             )
 
             exit_code = main()
@@ -575,6 +654,8 @@ class PathScoringTest(unittest.TestCase):
             config="missing.yaml",
             path_index=None,
             top_k=None,
+            save=False,
+            scored_output_dir="data/scored_pattern_paths",
         )
 
         exit_code = main()
