@@ -161,6 +161,46 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(args.age, "66")
         self.assertEqual(args.education, "本科")
 
+    @patch(
+        "sys.argv",
+        [
+            "score_pattern_paths.py",
+            "--source-id",
+            "AU_DIS_0013",
+            "--pattern",
+            "disease_patient",
+            "--age",
+            "66",
+            "--education",
+            "未知学历",
+        ],
+    )
+    def test_parse_args_rejects_unsupported_education_for_direct_demographic_patterns(
+        self,
+    ) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
+
+    @patch(
+        "sys.argv",
+        [
+            "score_pattern_paths.py",
+            "--source-id",
+            "AU_DIS_0013",
+            "--pattern",
+            "disease_patient",
+            "--age",
+            "abc",
+            "--education",
+            "本科",
+        ],
+    )
+    def test_parse_args_rejects_non_numeric_age_for_direct_demographic_patterns(
+        self,
+    ) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
+
     @patch("sys.argv", ["score_pattern_paths.py", "30010096", "--pattern", "patient_game_patient"])
     def test_parse_args_rejects_positional_source_id(self) -> None:
         with self.assertRaises(SystemExit):
