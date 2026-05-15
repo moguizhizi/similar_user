@@ -10,25 +10,27 @@
 
 外层参数只表达业务选择：
 
-- 位置参数 `source_id` 是当前模式的起点 ID，例如 patient 模式下是 patient_id，
+- `--source-id` 是当前模式的起点 ID，例如 patient 模式下是 patient_id，
   disease_patient 模式下是 disease_id。
-- `--pattern` 选择路径模式，只接受公开别名。默认 `patient_game_patient`。
+- `--pattern` 选择路径模式，只接受公开别名。
 - `--query-family` 只适用于带 statistics 的 patient 系列模式。默认 `training_order`。
   `training_order` 会要求 s1/s2 满足训练日期顺序；`date_window` 只按 s1 的训练日期窗口取路径。
 - `--base-date` 是右开窗口的结束日期，`--window-days` 决定向前回看多少天。
 
 常用执行方式：
 
-    python scripts/build_pattern_paths.py 30010096 \
+    python scripts/build_pattern_paths.py \
+        --source-id 30010096 \
+        --pattern patient_game_patient \
         --base-date 2022-05-22 \
         --window-days 14 \
-        --pattern patient_game_patient \
         --query-family training_order
 
-    python scripts/build_pattern_paths.py AU_DIS_0013 \
+    python scripts/build_pattern_paths.py \
+        --source-id AU_DIS_0013 \
+        --pattern disease_patient \
         --base-date 2022-05-22 \
-        --window-days 14 \
-        --pattern disease_patient
+        --window-days 14
 """
 
 from __future__ import annotations
@@ -62,7 +64,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build and persist fixed-pattern paths."
     )
-    parser.add_argument("source_id", help="Source node ID for the selected pattern.")
+    parser.add_argument(
+        "--source-id",
+        required=True,
+        help="Source node ID for the selected pattern.",
+    )
     parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
@@ -81,7 +87,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--pattern",
-        default=DEFAULT_PATTERN,
+        required=True,
         choices=available_path_pattern_aliases(),
         help=(
             "Path pattern alias. Supported aliases are shown in the choices list."

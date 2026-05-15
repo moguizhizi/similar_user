@@ -11,15 +11,15 @@
 
 常用执行方式：
 
-    python scripts/score_pattern_paths.py 30010096 --top-k 50
+    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --top-k 50
 
 调试单条 path：
 
-    python scripts/score_pattern_paths.py 30010096 --path-index 0
+    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --path-index 0
 
 保存评分明细和摘要：
 
-    python scripts/score_pattern_paths.py 30010096 --top-k 50 --save
+    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --top-k 50 --save
 """
 
 from __future__ import annotations
@@ -55,10 +55,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Score saved pattern paths from local JSON storage."
     )
-    parser.add_argument("source_id", help="Source node ID for the selected pattern.")
+    parser.add_argument(
+        "--source-id",
+        required=True,
+        help="Source node ID for the selected pattern.",
+    )
     parser.add_argument(
         "--pattern",
-        default=DEFAULT_PATTERN,
+        required=True,
         choices=available_path_pattern_aliases(),
         help="Path pattern alias used to locate the saved result.",
     )

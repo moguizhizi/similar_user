@@ -47,10 +47,20 @@ class PathScoringTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
             get_path_scorer("patient_disease_patient")
 
-    @patch("sys.argv", ["score_pattern_paths.py", "30010096"])
-    def test_parse_args_defaults_to_patient_game_alias(self) -> None:
+    @patch(
+        "sys.argv",
+        [
+            "score_pattern_paths.py",
+            "--source-id",
+            "30010096",
+            "--pattern",
+            "patient_game_patient",
+        ],
+    )
+    def test_parse_args_requires_explicit_source_id_and_pattern(self) -> None:
         args = parse_args()
 
+        self.assertEqual(args.source_id, "30010096")
         self.assertEqual(args.pattern, "patient_game_patient")
 
     def test_parse_args_accepts_all_public_pattern_aliases(self) -> None:
@@ -58,11 +68,27 @@ class PathScoringTest(unittest.TestCase):
             with self.subTest(pattern=pattern):
                 with patch(
                     "sys.argv",
-                    ["score_pattern_paths.py", "30010096", "--pattern", pattern],
+                    [
+                        "score_pattern_paths.py",
+                        "--source-id",
+                        "30010096",
+                        "--pattern",
+                        pattern,
+                    ],
                 ):
                     args = parse_args()
 
                 self.assertEqual(args.pattern, pattern)
+
+    @patch("sys.argv", ["score_pattern_paths.py", "30010096", "--pattern", "patient_game_patient"])
+    def test_parse_args_rejects_positional_source_id(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
+
+    @patch("sys.argv", ["score_pattern_paths.py", "--source-id", "30010096"])
+    def test_parse_args_requires_pattern_option(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
 
     def test_parse_int_supports_decimal_strings(self) -> None:
         scorer = PatientGamePatientPathScorer()
@@ -100,7 +126,7 @@ class PathScoringTest(unittest.TestCase):
 
         result = scorer.score(path)
 
-        self.assertEqual(result.total_score, 90.0)
+        self.assertEqual(result.total_score, 91.25)
         self.assertEqual(result.education_score, 100.0)
         self.assertEqual(result.age_score, 100.0)
         self.assertEqual(result.activity_score, 100.0)
@@ -455,7 +481,7 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scored["path_count"], 1)
         self.assertEqual(scored["scored_path_count"], 1)
         self.assertEqual(scored["retrieval_context"]["score_end_date"], None)
-        self.assertEqual(scored["scores"][0]["score"]["total_score"], 90.0)
+        self.assertEqual(scored["scores"][0]["score"]["total_score"], 91.25)
 
     def test_score_pattern_paths_returns_top_k_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
