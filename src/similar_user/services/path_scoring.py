@@ -62,10 +62,10 @@ class PathScoreBreakdown:
 class PatientGamePatientPathScorer:
     """Score one patient-game-patient path using explainable rule-based heuristics."""
 
-    education_weight: float = 0.15
+    education_weight: float = 0.30
     age_weight: float = 0.20
-    completion_weight: float = 0.25
-    activity_weight: float = 0.15
+    completion_weight: float = 0.10
+    activity_weight: float = 0.10
     task_type_weight: float = 0.10
     task_relevance_weight: float = 0.15
 
@@ -213,7 +213,7 @@ class PatientGamePatientPathScorer:
             return None, "i1/i2 结果缺失，跳过该项"
         if left not in {"完成", "未完成"} or right not in {"完成", "未完成"}:
             return None, f"i1结果={left}, i2结果={right}，不在支持范围内，跳过该项"
-        if left == right:
+        if left == "完成" and right == "完成":
             return 100.0, f"i1结果={left}, i2结果={right}"
         return 20.0, f"i1结果={left}, i2结果={right}"
 
@@ -221,14 +221,15 @@ class PatientGamePatientPathScorer:
         self,
         path: PatientTasksetTaskGameTaskTasksetPatientPath,
     ) -> tuple[float | None, str]:
-        activity = self._normalize_text(path.i2.活跃)
-        if activity is None:
-            return None, "活跃度缺失，跳过该项"
-        if activity == "是":
-            return 100.0, f"活跃={activity}"
-        if activity == "否":
-            return 20.0, f"活跃={activity}"
-        return None, f"活跃={activity}，不在支持范围内，跳过该项"
+        left = self._normalize_text(path.i1.活跃)
+        right = self._normalize_text(path.i2.活跃)
+        if left is None or right is None:
+            return None, f"i1活跃={left}, i2活跃={right}，活跃度缺失，跳过该项"
+        if left not in {"是", "否"} or right not in {"是", "否"}:
+            return None, f"i1活跃={left}, i2活跃={right}，不在支持范围内，跳过该项"
+        if left == "是" and right == "是":
+            return 100.0, f"i1活跃={left}, i2活跃={right}"
+        return 20.0, f"i1活跃={left}, i2活跃={right}"
 
     def _score_task_type(
         self,
@@ -238,9 +239,11 @@ class PatientGamePatientPathScorer:
         task2 = self._normalize_text(path.i2.任务类型)
         if task1 is None or task2 is None:
             return None, "任务类型缺失，跳过该项"
-        if task1 == task2:
-            return 100.0, f"专属类型一致: {task1}"
-        return 30.0, f"专属类型不一致: {task1}/{task2}"
+        if task1 == "自由" and task2 == "自由":
+            return 100.0, f"任务类型均为自由: {task1}/{task2}"
+        if task1 == "专属" and task2 == "专属":
+            return 30.0, f"任务类型均为专属: {task1}/{task2}"
+        return 30.0, f"任务类型不一致: {task1}/{task2}"
 
     def _score_task_relevance(
         self,
