@@ -42,6 +42,12 @@ from src.similar_user.utils.pattern_storage import save_pattern_result
 
 
 class PathScoringTest(unittest.TestCase):
+    SOURCE_DEMOGRAPHIC_PATTERN_ALIASES = {
+        "disease_patient",
+        "symptom_patient",
+        "unknown_patient",
+    }
+
     def test_patient_game_patient_path_scorer_supports_observed_education_values(self) -> None:
         scorer = PatientGamePatientPathScorer()
 
@@ -102,20 +108,58 @@ class PathScoringTest(unittest.TestCase):
 
     def test_parse_args_accepts_all_public_pattern_aliases(self) -> None:
         for pattern in available_path_pattern_aliases():
+            args = [
+                "score_pattern_paths.py",
+                "--source-id",
+                "30010096",
+                "--pattern",
+                pattern,
+            ]
+            if pattern in self.SOURCE_DEMOGRAPHIC_PATTERN_ALIASES:
+                args.extend(["--age", "66", "--education", "本科"])
             with self.subTest(pattern=pattern):
-                with patch(
-                    "sys.argv",
-                    [
-                        "score_pattern_paths.py",
-                        "--source-id",
-                        "30010096",
-                        "--pattern",
-                        pattern,
-                    ],
-                ):
+                with patch("sys.argv", args):
                     args = parse_args()
 
                 self.assertEqual(args.pattern, pattern)
+
+    @patch(
+        "sys.argv",
+        [
+            "score_pattern_paths.py",
+            "--source-id",
+            "AU_DIS_0013",
+            "--pattern",
+            "disease_patient",
+        ],
+    )
+    def test_parse_args_requires_age_and_education_for_direct_demographic_patterns(
+        self,
+    ) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
+
+    @patch(
+        "sys.argv",
+        [
+            "score_pattern_paths.py",
+            "--source-id",
+            "AU_DIS_0013",
+            "--pattern",
+            "disease_patient",
+            "--age",
+            "66",
+            "--education",
+            "本科",
+        ],
+    )
+    def test_parse_args_accepts_age_and_education_for_direct_demographic_patterns(
+        self,
+    ) -> None:
+        args = parse_args()
+
+        self.assertEqual(args.age, "66")
+        self.assertEqual(args.education, "本科")
 
     @patch("sys.argv", ["score_pattern_paths.py", "30010096", "--pattern", "patient_game_patient"])
     def test_parse_args_rejects_positional_source_id(self) -> None:
@@ -1050,6 +1094,8 @@ class PathScoringTest(unittest.TestCase):
                 config=str(config_path),
                 path_index=None,
                 top_k=None,
+                age=None,
+                education=None,
                 save=False,
                 scored_output_dir="data/scored_pattern_paths",
             )
@@ -1074,6 +1120,8 @@ class PathScoringTest(unittest.TestCase):
             config="missing.yaml",
             path_index=None,
             top_k=None,
+            age=None,
+            education=None,
             save=False,
             scored_output_dir="data/scored_pattern_paths",
         )
