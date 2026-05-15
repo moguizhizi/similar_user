@@ -129,34 +129,70 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
         "sys.argv",
         [
             "build_pattern_paths.py",
+            "--source-id",
             "30010096",
+            "--pattern",
+            "patient_disease_patient",
             "--base-date",
             "2022-05-22",
             "--window-days",
             "14",
-            "--pattern",
-            "patient_disease_patient",
         ],
     )
     def test_parse_args_accepts_registered_pattern_alias(self) -> None:
         args = parse_args()
 
+        self.assertEqual(args.source_id, "30010096")
         self.assertEqual(args.pattern, "patient_disease_patient")
 
     @patch(
         "sys.argv",
         [
             "build_pattern_paths.py",
+            "--source-id",
+            "30010096",
+            "--pattern",
+            "patient_dis_patient",
+            "--base-date",
+            "2022-05-22",
+            "--window-days",
+            "14",
+        ],
+    )
+    def test_parse_args_rejects_unregistered_pattern_alias(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
+
+    @patch(
+        "sys.argv",
+        [
+            "build_pattern_paths.py",
+            "30010096",
+            "--pattern",
+            "patient_game_patient",
+            "--base-date",
+            "2022-05-22",
+            "--window-days",
+            "14",
+        ],
+    )
+    def test_parse_args_rejects_positional_source_id(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
+
+    @patch(
+        "sys.argv",
+        [
+            "build_pattern_paths.py",
+            "--source-id",
             "30010096",
             "--base-date",
             "2022-05-22",
             "--window-days",
             "14",
-            "--pattern",
-            "patient_dis_patient",
         ],
     )
-    def test_parse_args_rejects_unregistered_pattern_alias(self) -> None:
+    def test_parse_args_requires_pattern_option(self) -> None:
         with self.assertRaises(SystemExit):
             parse_args()
 

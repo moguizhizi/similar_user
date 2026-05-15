@@ -17,7 +17,7 @@ similar_user/
 │   └── similar_user.log        # 默认日志文件
 ├── scripts/
 │   ├── build_similar_user_candidates.py  # 从 top-k 评分路径构建 top-k 候选相似用户
-│   ├── build_patient_pattern_paths.py    # 构建并保存固定模式路径
+│   ├── build_pattern_paths.py            # 构建并保存固定模式路径
 │   ├── debug_query.py                    # 直接连接 Neo4j 并执行验证查询
 │   ├── read_patient_pattern_result.py    # 读取本地离线保存的路径结果
 │   ├── run_api.py                        # 启动本地 HTTP 调试服务
@@ -106,17 +106,17 @@ python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 
 python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --window-days 14 --output-level full
 
 # 运行固定模式路径检索并保存离线结果
-python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-22 --window-days 14
-python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-22 --window-days 14 --config config/settings.yaml
-python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-22 --window-days 14 --pattern patient_game_patient --query-family training_order
+python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14
+python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --config config/settings.yaml
+python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --query-family training_order
 
 # 对已保存的固定模式路径打分
-python scripts/score_pattern_paths.py <patient_id>
-python scripts/score_pattern_paths.py <patient_id> --config config/settings.yaml
-python scripts/score_pattern_paths.py <patient_id> --path-index 0
-python scripts/score_pattern_paths.py <patient_id> --top-k 20
-python scripts/score_pattern_paths.py <patient_id> --top-k 20 --save
-python scripts/score_pattern_paths.py <patient_id> --top-k 20 --save --scored-output-dir data/scored_pattern_paths
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --config config/settings.yaml
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --path-index 0
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20 --save
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20 --save --scored-output-dir data/scored_pattern_paths
 
 # 读取已保存的固定模式路径结果
 python scripts/read_patient_pattern_result.py <patient_id>
