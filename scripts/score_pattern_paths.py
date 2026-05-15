@@ -1,4 +1,4 @@
-"""Score saved patient pattern paths.
+"""Score saved pattern paths.
 
 这个脚本处在“path 生成”和“候选用户聚合”之间：
 
@@ -11,11 +11,11 @@
 
 常用执行方式：
 
-    python scripts/score_patient_pattern_paths.py 30010096 --top-k 50
+    python scripts/score_pattern_paths.py 30010096 --top-k 50
 
 调试单条 path：
 
-    python scripts/score_patient_pattern_paths.py 30010096 --path-index 0
+    python scripts/score_pattern_paths.py 30010096 --path-index 0
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ LOGGER = get_logger(__name__)
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for scoring saved patient results."""
     parser = argparse.ArgumentParser(
-        description="Score saved patient pattern paths from local JSON storage."
+        description="Score saved pattern paths from local JSON storage."
     )
     parser.add_argument("source_id", help="Source node ID for the selected pattern.")
     parser.add_argument(
@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def score_patient_pattern_paths(
+def score_pattern_paths(
     source_id: str,
     *,
     pattern: str = DEFAULT_PATTERN,
@@ -84,9 +84,9 @@ def score_patient_pattern_paths(
     path_index: int | None = None,
     top_k: int | None = None,
 ) -> dict[str, object]:
-    """Load a saved patient result and score its domain paths."""
+    """Load a saved pattern result and score its domain paths."""
     LOGGER.debug(
-        "Scoring patient pattern paths: source_id=%s, pattern=%s, path_index=%s, top_k=%s, config_path=%s",
+        "Scoring pattern paths: source_id=%s, pattern=%s, path_index=%s, top_k=%s, config_path=%s",
         source_id,
         pattern,
         path_index,
@@ -158,7 +158,7 @@ def score_patient_pattern_paths(
         "scores": scored_paths,
     }
     LOGGER.debug(
-        "Scored patient pattern result: source_id=%s, source_parameter=%s, path_count=%s, scored_path_count=%s",
+        "Scored pattern result: source_id=%s, source_parameter=%s, path_count=%s, scored_path_count=%s",
         stored_result.source_id,
         stored_result.source_parameter,
         result["path_count"],
@@ -201,10 +201,10 @@ def _build_path_scope(
 
 
 def main() -> int:
-    """Score saved patient pattern paths and log JSON output."""
+    """Score saved pattern paths and log JSON output."""
     args = parse_args()
     try:
-        result = score_patient_pattern_paths(
+        result = score_pattern_paths(
             args.source_id,
             pattern=args.pattern,
             config_path=args.config,
@@ -212,7 +212,7 @@ def main() -> int:
             top_k=args.top_k,
         )
     except Exception as exc:
-        LOGGER.exception("Score patient pattern paths failed: %s", exc)
+        LOGGER.exception("Score pattern paths failed: %s", exc)
         return 1
 
     LOGGER.info(json.dumps(result, ensure_ascii=False, indent=2, default=str))

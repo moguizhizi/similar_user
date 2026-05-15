@@ -2,7 +2,7 @@
 
 这个脚本处在“path 打分”和“训练任务推荐”之间：
 
-1. `scripts/score_patient_pattern_paths.py` 会读取已保存的 paths，并按规则给 path 打分。
+1. `scripts/score_pattern_paths.py` 会读取已保存的 paths，并按规则给 path 打分。
 2. 本脚本读取 top-k scored paths，把 path 中出现的 `p2` 患者去重成候选相似用户。
 3. 对每个候选用户继续查询 Neo4j 中的历史画像/游戏表现，计算 candidate_score。
 4. 下游推荐任务流程会使用这里输出的候选用户历史数据。
@@ -39,9 +39,9 @@ from similar_user.services.similarity.candidate_service import SimilarUserCandid
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 
-from scripts.score_patient_pattern_paths import (
+from scripts.score_pattern_paths import (
     DEFAULT_CONFIG_PATH,
-    score_patient_pattern_paths,
+    score_pattern_paths,
 )
 
 
@@ -93,7 +93,7 @@ def build_similar_user_candidates(
             )
         )
         candidate_service = SimilarUserCandidateService(user_service=user_service)
-        scored_result = score_patient_pattern_paths(
+        scored_result = score_pattern_paths(
             patient_id,
             pattern=pattern,
             config_path=resolved_config_path,

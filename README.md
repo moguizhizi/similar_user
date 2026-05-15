@@ -21,7 +21,7 @@ similar_user/
 │   ├── debug_query.py                    # 直接连接 Neo4j 并执行验证查询
 │   ├── read_patient_pattern_result.py    # 读取本地离线保存的路径结果
 │   ├── run_api.py                        # 启动本地 HTTP 调试服务
-│   └── score_patient_pattern_paths.py    # 对离线保存的 pattern paths 打分
+│   └── score_pattern_paths.py            # 对离线保存的 pattern paths 打分
 ├── src/similar_user/
 │   ├── api/
 │   │   ├── app.py              # 最小 HTTP 服务，提供 /health/neo4j 和 /query
@@ -111,10 +111,10 @@ python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-2
 python scripts/build_patient_pattern_paths.py <patient_id> --base-date 2022-05-22 --window-days 14 --pattern patient_game_patient --query-family training_order
 
 # 对已保存的固定模式路径打分
-python scripts/score_patient_pattern_paths.py <patient_id>
-python scripts/score_patient_pattern_paths.py <patient_id> --config config/settings.yaml
-python scripts/score_patient_pattern_paths.py <patient_id> --path-index 0
-python scripts/score_patient_pattern_paths.py <patient_id> --top-k 20
+python scripts/score_pattern_paths.py <patient_id>
+python scripts/score_pattern_paths.py <patient_id> --config config/settings.yaml
+python scripts/score_pattern_paths.py <patient_id> --path-index 0
+python scripts/score_pattern_paths.py <patient_id> --top-k 20
 
 # 读取已保存的固定模式路径结果
 python scripts/read_patient_pattern_result.py <patient_id>

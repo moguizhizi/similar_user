@@ -42,7 +42,7 @@ from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 
 from scripts.run_similar_user_pipeline import run_similar_user_pipeline
-from scripts.score_patient_pattern_paths import DEFAULT_CONFIG_PATH
+from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
 from similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
 )
