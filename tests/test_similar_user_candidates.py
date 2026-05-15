@@ -536,7 +536,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ) as mock_from_config, patch(
                 "scripts.build_similar_user_candidates.UserService",
             ) as mock_user_service_cls, patch(
-                "scripts.build_similar_user_candidates.score_patient_pattern_paths",
+                "scripts.build_similar_user_candidates.score_pattern_paths",
                 return_value=scored_result,
             ) as mock_score:
                 mock_client_context = Mock()

@@ -36,7 +36,7 @@ from similar_user.utils.logger import get_logger
 
 from scripts.build_similar_user_candidates import build_similar_user_candidates
 from scripts.build_pattern_paths import run_pattern_path_flow
-from scripts.score_patient_pattern_paths import DEFAULT_CONFIG_PATH
+from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
 
 
 LOGGER = get_logger(__name__)

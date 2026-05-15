@@ -44,7 +44,7 @@ from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 
 from scripts.predict_training_tasks import run_end_to_end_training_task_prediction
-from scripts.score_patient_pattern_paths import DEFAULT_CONFIG_PATH
+from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
 
 
 LOGGER = get_logger(__name__)

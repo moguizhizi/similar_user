@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.score_patient_pattern_paths import main, parse_args, score_patient_pattern_paths
+from scripts.score_pattern_paths import main, parse_args, score_pattern_paths
 from src.similar_user.data_access.pattern_registry import available_path_pattern_aliases
 from src.similar_user.domain import (
     GameNode,
@@ -41,7 +41,7 @@ class PathScoringTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
             get_path_scorer("patient_disease_patient")
 
-    @patch("sys.argv", ["score_patient_pattern_paths.py", "30010096"])
+    @patch("sys.argv", ["score_pattern_paths.py", "30010096"])
     def test_parse_args_defaults_to_patient_game_alias(self) -> None:
         args = parse_args()
 
@@ -52,7 +52,7 @@ class PathScoringTest(unittest.TestCase):
             with self.subTest(pattern=pattern):
                 with patch(
                     "sys.argv",
-                    ["score_patient_pattern_paths.py", "30010096", "--pattern", pattern],
+                    ["score_pattern_paths.py", "30010096", "--pattern", pattern],
                 ):
                     args = parse_args()
 
@@ -264,7 +264,7 @@ class PathScoringTest(unittest.TestCase):
             "当前path上不足两个g，无法计算两个g之间的相关度，跳过该项",
         )
 
-    def test_score_patient_pattern_paths_scores_saved_paths(self) -> None:
+    def test_score_pattern_paths_scores_saved_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
@@ -316,7 +316,7 @@ class PathScoringTest(unittest.TestCase):
             }
             save_pattern_result(result, config_path)
 
-            scored = score_patient_pattern_paths(
+            scored = score_pattern_paths(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
@@ -327,7 +327,7 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scored["retrieval_context"]["score_end_date"], None)
         self.assertGreater(scored["scores"][0]["score"]["total_score"], 90)
 
-    def test_score_patient_pattern_paths_returns_top_k_paths(self) -> None:
+    def test_score_pattern_paths_returns_top_k_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
@@ -393,7 +393,7 @@ class PathScoringTest(unittest.TestCase):
             }
             save_pattern_result(result, config_path)
 
-            scored = score_patient_pattern_paths(
+            scored = score_pattern_paths(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
@@ -405,7 +405,7 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scored["retrieval_context"]["score_end_date"], None)
         self.assertEqual(scored["scores"][0]["path_index"], 0)
 
-    def test_score_patient_pattern_paths_rejects_unsupported_pattern(self) -> None:
+    def test_score_pattern_paths_rejects_unsupported_pattern(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
@@ -439,13 +439,13 @@ class PathScoringTest(unittest.TestCase):
             save_pattern_result(result, config_path)
 
             with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
-                score_patient_pattern_paths(
+                score_pattern_paths(
                     "30010096",
                     pattern="PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
                     config_path=config_path,
                 )
 
-    def test_score_patient_pattern_paths_uses_source_id_for_non_patient_pattern(self) -> None:
+    def test_score_pattern_paths_uses_source_id_for_non_patient_pattern(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
@@ -479,14 +479,14 @@ class PathScoringTest(unittest.TestCase):
             save_pattern_result(result, config_path)
 
             with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
-                score_patient_pattern_paths(
+                score_pattern_paths(
                     "AU_DIS_0013",
                     pattern="disease_patient",
                     config_path=config_path,
                 )
 
-    @patch("scripts.score_patient_pattern_paths.LOGGER")
-    @patch("scripts.score_patient_pattern_paths.parse_args")
+    @patch("scripts.score_pattern_paths.LOGGER")
+    @patch("scripts.score_pattern_paths.parse_args")
     def test_main_prints_scored_result(
         self,
         mock_parse_args: Mock,
@@ -542,7 +542,7 @@ class PathScoringTest(unittest.TestCase):
                 ],
             }
             save_pattern_result(result, config_path)
-            expected = score_patient_pattern_paths(
+            expected = score_pattern_paths(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
@@ -562,8 +562,8 @@ class PathScoringTest(unittest.TestCase):
             json.dumps(expected, ensure_ascii=False, indent=2, default=str)
         )
 
-    @patch("scripts.score_patient_pattern_paths.LOGGER")
-    @patch("scripts.score_patient_pattern_paths.parse_args")
+    @patch("scripts.score_pattern_paths.LOGGER")
+    @patch("scripts.score_pattern_paths.parse_args")
     def test_main_logs_error_when_scoring_fails(
         self,
         mock_parse_args: Mock,
