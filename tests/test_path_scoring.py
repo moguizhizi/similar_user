@@ -17,14 +17,21 @@ from scripts.score_pattern_paths import (
 )
 from src.similar_user.data_access.pattern_registry import available_path_pattern_aliases
 from src.similar_user.domain import (
+    DiseaseNode,
     GameNode,
     PathPattern,
     PatientNode,
+    PatientTasksetDiseaseTasksetPatientPath,
     PatientTasksetTaskGameTaskTasksetPatientPath,
     TaskInstanceNode,
     TaskInstanceSetNode,
 )
-from src.similar_user.services.path_scoring import PatientGamePatientPathScorer, get_path_scorer
+from src.similar_user.services.path_scoring import (
+    PatientDiseasePatientPathScorer,
+    PatientGamePatientPathScorer,
+    PathScoringRules,
+    get_path_scorer,
+)
 from src.similar_user.utils.pattern_storage import save_pattern_result
 
 
@@ -43,9 +50,21 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertIsInstance(scorer, PatientGamePatientPathScorer)
 
+    def test_get_path_scorer_returns_registered_patient_disease_scorer(self) -> None:
+        scorer = get_path_scorer("patient_disease_patient")
+
+        self.assertIsInstance(scorer, PatientDiseasePatientPathScorer)
+
+    def test_path_scorers_share_rules_without_inheriting_each_other(self) -> None:
+        self.assertTrue(issubclass(PatientGamePatientPathScorer, PathScoringRules))
+        self.assertTrue(issubclass(PatientDiseasePatientPathScorer, PathScoringRules))
+        self.assertFalse(
+            issubclass(PatientDiseasePatientPathScorer, PatientGamePatientPathScorer)
+        )
+
     def test_get_path_scorer_rejects_unsupported_pattern(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
-            get_path_scorer("patient_disease_patient")
+            get_path_scorer("disease_patient")
 
     @patch(
         "sys.argv",
@@ -161,6 +180,47 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(result.education_score, 85.0)
         self.assertIn("学历相差1级", result.details["education"])
+
+    def test_patient_disease_patient_path_scorer_uses_age_and_education_only(self) -> None:
+        scorer = PatientDiseasePatientPathScorer()
+        path = PatientTasksetDiseaseTasksetPatientPath(
+            pattern=PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
+            p=PatientNode(id="30010096"),
+            s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄="66", 执行学历="本科"),
+            dis=DiseaseNode(id="AU_DIS_0013", name="遗忘型轻度认知障碍"),
+            s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="大专"),
+            p2=PatientNode(id="20113562"),
+        )
+
+        result = scorer.score(path)
+
+        self.assertEqual(result.education_score, 85.0)
+        self.assertEqual(result.age_score, 100.0)
+        self.assertEqual(result.total_score, 91.0)
+        self.assertEqual(result.used_weights, {"education": 0.6, "age": 0.4})
+        self.assertIsNone(result.completion_score)
+        self.assertIsNone(result.activity_score)
+        self.assertIsNone(result.task_type_score)
+        self.assertIsNone(result.task_relevance_score)
+        self.assertIn("不适用完成情况评分", result.details["completion"])
+
+    def test_patient_disease_patient_path_scorer_reweights_available_dimensions(self) -> None:
+        scorer = PatientDiseasePatientPathScorer()
+        path = PatientTasksetDiseaseTasksetPatientPath(
+            pattern=PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
+            p=PatientNode(id="30010096"),
+            s1=TaskInstanceSetNode(id="30010096_20220522", 执行年龄=None, 执行学历="本科"),
+            dis=DiseaseNode(id="AU_DIS_0013", name="遗忘型轻度认知障碍"),
+            s2=TaskInstanceSetNode(id="20113562_20211214", 执行年龄="64", 执行学历="大专"),
+            p2=PatientNode(id="20113562"),
+        )
+
+        result = scorer.score(path)
+
+        self.assertEqual(result.education_score, 85.0)
+        self.assertIsNone(result.age_score)
+        self.assertEqual(result.total_score, 85.0)
+        self.assertEqual(result.used_weights, {"education": 1.0})
 
     def test_patient_game_patient_path_scorer_completion_only_depends_on_result(self) -> None:
         scorer = PatientGamePatientPathScorer()
@@ -632,7 +692,7 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(summary["scores"][0]["candidate_id"], "20113562")
         self.assertNotIn("path", summary["scores"][0])
 
-    def test_score_pattern_paths_rejects_unsupported_pattern(self) -> None:
+    def test_score_pattern_paths_scores_saved_patient_disease_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
             output_dir = Path(temp_dir) / "pattern_paths"
@@ -661,16 +721,40 @@ class PathScoringTest(unittest.TestCase):
                 "training_date_count": 0,
                 "statistics": None,
                 "limit_recommendation": None,
-                "paths": [],
+                "paths": [
+                    {
+                        "row": {
+                            "p": {"id": "30010096"},
+                            "s1": {
+                                "id": "30010096_20220522",
+                                "执行年龄": "66",
+                                "执行学历": "本科",
+                            },
+                            "dis": {"id": "AU_DIS_0013", "name": "遗忘型轻度认知障碍"},
+                            "s2": {
+                                "id": "20113562_20211214",
+                                "执行年龄": "64",
+                                "执行学历": "大专",
+                            },
+                            "p2": {"id": "20113562"},
+                        }
+                    }
+                ],
             }
             save_pattern_result(result, config_path)
 
-            with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
-                score_pattern_paths(
-                    "30010096",
-                    pattern="PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
-                    config_path=config_path,
-                )
+            scored = score_pattern_paths(
+                "30010096",
+                pattern="PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+                config_path=config_path,
+            )
+
+        self.assertEqual(scored["path_count"], 1)
+        self.assertEqual(scored["scored_path_count"], 1)
+        self.assertEqual(scored["scores"][0]["score"]["total_score"], 91.0)
+        self.assertEqual(scored["scores"][0]["score"]["education_score"], 85.0)
+        self.assertEqual(scored["scores"][0]["score"]["age_score"], 100.0)
+        self.assertIsNone(scored["scores"][0]["score"]["completion_score"])
 
     def test_score_pattern_paths_uses_source_id_for_non_patient_pattern(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

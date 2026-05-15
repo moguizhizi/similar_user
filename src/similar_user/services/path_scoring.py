@@ -8,19 +8,27 @@ from typing import Any
 from ..data_access.pattern_registry import resolve_path_pattern
 from ..domain.graph_schema import PathPattern
 from ..domain.item import GameNode
-from ..domain.path_models import PatientTasksetTaskGameTaskTasksetPatientPath
+from ..domain.path_models import (
+    PatientTasksetDiseaseTasksetPatientPath,
+    PatientTasksetTaskGameTaskTasksetPatientPath,
+)
 
 
 SUPPORTED_SCORING_PATTERNS = (
     PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+    PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
 )
 
 
-def get_path_scorer(pattern: PathPattern | str) -> "PatientGamePatientPathScorer":
+def get_path_scorer(
+    pattern: PathPattern | str,
+) -> "PatientGamePatientPathScorer | PatientDiseasePatientPathScorer":
     """Return the scorer registered for a path pattern."""
     normalized_pattern = resolve_path_pattern(pattern)
     if normalized_pattern == PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT:
         return PatientGamePatientPathScorer()
+    if normalized_pattern == PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT:
+        return PatientDiseasePatientPathScorer()
 
     supported = ", ".join(pattern.value for pattern in SUPPORTED_SCORING_PATTERNS)
     raise ValueError(
@@ -59,8 +67,8 @@ class PathScoreBreakdown:
 
 
 @dataclass
-class PatientGamePatientPathScorer:
-    """Score one patient-game-patient path using explainable rule-based heuristics."""
+class PathScoringRules:
+    """Shared rule settings and helpers for path scoring."""
 
     education_weight: float = 0.30
     age_weight: float = 0.20
@@ -100,6 +108,110 @@ class PatientGamePatientPathScorer:
         "博士后": 17,
     }
 
+    def _score_education(self, path: Any) -> tuple[float | None, str]:
+        left = self._map_education_rank(path.s1.执行学历)
+        right = self._map_education_rank(path.s2.执行学历)
+        if left is None or right is None:
+            return None, "学历缺失，跳过该项"
+
+        diff = abs(left - right)
+        if diff == 0:
+            return 100.0, "学历一致"
+        if diff == 1:
+            return 85.0, "学历相差1级"
+        if diff == 2:
+            return 65.0, "学历相差2级"
+        if diff == 3:
+            return 40.0, "学历相差3级"
+        return 20.0, "学历差异较大"
+
+    def _score_age(self, path: Any) -> tuple[float | None, str]:
+        left = self._parse_int(path.s1.执行年龄)
+        right = self._parse_int(path.s2.执行年龄)
+        if left is None or right is None:
+            return None, "年龄缺失，跳过该项"
+
+        diff = abs(left - right)
+        if diff <= 2:
+            return 100.0, f"年龄差{diff}岁"
+        if diff <= 5:
+            return 85.0, f"年龄差{diff}岁"
+        if diff <= 10:
+            return 70.0, f"年龄差{diff}岁"
+        if diff <= 15:
+            return 50.0, f"年龄差{diff}岁"
+        if diff <= 20:
+            return 30.0, f"年龄差{diff}岁"
+        return 10.0, f"年龄差{diff}岁"
+
+    def _calculate_weighted_score(
+        self,
+        scores: dict[str, float | None],
+        weights: dict[str, float],
+    ) -> tuple[float, dict[str, float]]:
+        active_weights = {
+            key: weight for key, weight in weights.items() if scores[key] is not None
+        }
+        weight_sum = sum(active_weights.values())
+        normalized_weights = (
+            {key: weight / weight_sum for key, weight in active_weights.items()}
+            if weight_sum > 0
+            else {}
+        )
+        total_score = round(
+            sum((scores[key] or 0.0) * normalized_weights[key] for key in normalized_weights),
+            2,
+        )
+        return total_score, {
+            key: round(value, 4) for key, value in normalized_weights.items()
+        }
+
+    def _map_education_rank(self, value: str | None) -> int | None:
+        normalized = self._normalize_text(value)
+        if normalized is None:
+            return None
+        if normalized == "保密":
+            return None
+        normalized = self.EDUCATION_NORMALIZATION.get(normalized, normalized)
+        return self.EDUCATION_RANKS.get(normalized)
+
+    @staticmethod
+    def _normalize_text(value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @staticmethod
+    def _parse_int(value: str | None) -> int | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            return int(float(normalized))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_float(value: str | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _clamp(value: float) -> float:
+        return max(0.0, min(100.0, round(value, 2)))
+
+
+@dataclass
+class PatientGamePatientPathScorer(PathScoringRules):
+    """Score one patient-game-patient path using explainable rule-based heuristics."""
+
     def score(
         self,
         path: PatientTasksetTaskGameTaskTasksetPatientPath,
@@ -128,19 +240,7 @@ class PatientGamePatientPathScorer:
             "task_type": self.task_type_weight,
             "task_relevance": self.task_relevance_weight,
         }
-        active_weights = {
-            key: weight for key, weight in weights.items() if scores[key] is not None
-        }
-        weight_sum = sum(active_weights.values())
-        normalized_weights = (
-            {key: weight / weight_sum for key, weight in active_weights.items()}
-            if weight_sum > 0
-            else {}
-        )
-        total_score = round(
-            sum((scores[key] or 0.0) * normalized_weights[key] for key in normalized_weights),
-            2,
-        )
+        total_score, used_weights = self._calculate_weighted_score(scores, weights)
 
         return PathScoreBreakdown(
             total_score=total_score,
@@ -150,7 +250,7 @@ class PatientGamePatientPathScorer:
             activity_score=activity_score,
             task_type_score=task_type_score,
             task_relevance_score=task_relevance_score,
-            used_weights={key: round(value, 4) for key, value in normalized_weights.items()},
+            used_weights=used_weights,
             details={
                 "education": education_detail,
                 "age": age_detail,
@@ -160,48 +260,6 @@ class PatientGamePatientPathScorer:
                 "task_relevance": task_relevance_detail,
             },
         )
-
-    def _score_education(
-        self,
-        path: PatientTasksetTaskGameTaskTasksetPatientPath,
-    ) -> tuple[float | None, str]:
-        left = self._map_education_rank(path.s1.执行学历)
-        right = self._map_education_rank(path.s2.执行学历)
-        if left is None or right is None:
-            return None, "学历缺失，跳过该项"
-
-        diff = abs(left - right)
-        if diff == 0:
-            return 100.0, "学历一致"
-        if diff == 1:
-            return 85.0, "学历相差1级"
-        if diff == 2:
-            return 65.0, "学历相差2级"
-        if diff == 3:
-            return 40.0, "学历相差3级"
-        return 20.0, "学历差异较大"
-
-    def _score_age(
-        self,
-        path: PatientTasksetTaskGameTaskTasksetPatientPath,
-    ) -> tuple[float | None, str]:
-        left = self._parse_int(path.s1.执行年龄)
-        right = self._parse_int(path.s2.执行年龄)
-        if left is None or right is None:
-            return None, "年龄缺失，跳过该项"
-
-        diff = abs(left - right)
-        if diff <= 2:
-            return 100.0, f"年龄差{diff}岁"
-        if diff <= 5:
-            return 85.0, f"年龄差{diff}岁"
-        if diff <= 10:
-            return 70.0, f"年龄差{diff}岁"
-        if diff <= 15:
-            return 50.0, f"年龄差{diff}岁"
-        if diff <= 20:
-            return 30.0, f"年龄差{diff}岁"
-        return 10.0, f"年龄差{diff}岁"
 
     def _score_completion(
         self,
@@ -273,43 +331,44 @@ class PatientGamePatientPathScorer:
                 games.append(value)
         return games
 
-    def _map_education_rank(self, value: str | None) -> int | None:
-        normalized = self._normalize_text(value)
-        if normalized is None:
-            return None
-        if normalized == "保密":
-            return None
-        normalized = self.EDUCATION_NORMALIZATION.get(normalized, normalized)
-        return self.EDUCATION_RANKS.get(normalized)
 
-    @staticmethod
-    def _normalize_text(value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.strip()
-        return normalized or None
 
-    @staticmethod
-    def _parse_int(value: str | None) -> int | None:
-        if value is None:
-            return None
-        normalized = value.strip()
-        if not normalized:
-            return None
-        try:
-            return int(float(normalized))
-        except ValueError:
-            return None
+@dataclass
+class PatientDiseasePatientPathScorer(PathScoringRules):
+    """Score one patient-disease-patient path by age and education similarity."""
 
-    @staticmethod
-    def _parse_float(value: str | None) -> float | None:
-        if value is None:
-            return None
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
+    def score(
+        self,
+        path: PatientTasksetDiseaseTasksetPatientPath,
+    ) -> PathScoreBreakdown:
+        """Score a disease path using only age and education dimensions."""
+        education_score, education_detail = self._score_education(path)
+        age_score, age_detail = self._score_age(path)
+        scores = {
+            "education": education_score,
+            "age": age_score,
+        }
+        weights = {
+            "education": self.education_weight,
+            "age": self.age_weight,
+        }
+        total_score, used_weights = self._calculate_weighted_score(scores, weights)
 
-    @staticmethod
-    def _clamp(value: float) -> float:
-        return max(0.0, min(100.0, round(value, 2)))
+        return PathScoreBreakdown(
+            total_score=total_score,
+            education_score=education_score,
+            age_score=age_score,
+            completion_score=None,
+            activity_score=None,
+            task_type_score=None,
+            task_relevance_score=None,
+            used_weights=used_weights,
+            details={
+                "education": education_detail,
+                "age": age_detail,
+                "completion": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT 模式不适用完成情况评分",
+                "activity": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT 模式不适用活跃度评分",
+                "task_type": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT 模式不适用任务类型评分",
+                "task_relevance": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT 模式不适用任务相关度评分",
+            },
+        )
