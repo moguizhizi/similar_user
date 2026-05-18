@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 from pathlib import Path
 from typing import Any
@@ -48,6 +48,24 @@ class PatternPathStorageSettings:
 
 
 @dataclass(frozen=True)
+class SetSameScoringSettings:
+    """Configuration for set-sameness candidate scoring components."""
+
+    disease: bool = True
+    symptom: bool = True
+    unknown: bool = True
+
+
+@dataclass(frozen=True)
+class CandidateScoringSettings:
+    """Configuration for candidate scoring components."""
+
+    common_game_score_similarity: bool = True
+    game_similarity_with_diversity_score: bool = True
+    set_same: SetSameScoringSettings = field(default_factory=SetSameScoringSettings)
+
+
+@dataclass(frozen=True)
 class CandidateRankingSettings:
     """Configuration for ranking similar-user candidates from scored paths."""
 
@@ -58,6 +76,7 @@ class CandidateRankingSettings:
         "patient_symptom_patient",
         "patient_unknown_patient",
     )
+    scoring: CandidateScoringSettings = field(default_factory=CandidateScoringSettings)
 
 
 @dataclass(frozen=True)
@@ -230,6 +249,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         if not isinstance(pattern, str) or not pattern.strip():
             raise ValueError("candidate_ranking patterns must contain non-empty strings.")
         normalized_patterns.append(pattern.strip())
+    scoring = _parse_candidate_scoring_settings(candidate_ranking_data.get("scoring"))
 
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
@@ -243,5 +263,67 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         candidate_ranking=CandidateRankingSettings(
             candidate_top_k=candidate_top_k,
             patterns=tuple(normalized_patterns),
+            scoring=scoring,
         ),
     )
+
+
+def _parse_candidate_scoring_settings(value: object) -> CandidateScoringSettings:
+    if value is None:
+        return CandidateScoringSettings()
+    if not isinstance(value, dict):
+        raise ValueError("candidate_ranking scoring must be a mapping.")
+
+    set_same_data = value.get("set_same", {})
+    if set_same_data is None:
+        set_same_data = {}
+    if not isinstance(set_same_data, dict):
+        raise ValueError("candidate_ranking scoring set_same must be a mapping.")
+
+    return CandidateScoringSettings(
+        common_game_score_similarity=_parse_bool_setting(
+            value,
+            "common_game_score_similarity",
+            "candidate_ranking scoring",
+            default=True,
+        ),
+        game_similarity_with_diversity_score=_parse_bool_setting(
+            value,
+            "game_similarity_with_diversity_score",
+            "candidate_ranking scoring",
+            default=True,
+        ),
+        set_same=SetSameScoringSettings(
+            disease=_parse_bool_setting(
+                set_same_data,
+                "disease",
+                "candidate_ranking scoring set_same",
+                default=True,
+            ),
+            symptom=_parse_bool_setting(
+                set_same_data,
+                "symptom",
+                "candidate_ranking scoring set_same",
+                default=True,
+            ),
+            unknown=_parse_bool_setting(
+                set_same_data,
+                "unknown",
+                "candidate_ranking scoring set_same",
+                default=True,
+            ),
+        ),
+    )
+
+
+def _parse_bool_setting(
+    data: dict[str, Any],
+    key: str,
+    section_name: str,
+    *,
+    default: bool,
+) -> bool:
+    value = data.get(key, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"{section_name} {key} must be a boolean.")
+    return value

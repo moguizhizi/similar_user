@@ -1738,6 +1738,15 @@ class KgRepositoryTest(unittest.TestCase):
         )
         self.assertEqual(settings.pattern_path_storage.output_dir, "data/pattern_paths")
         self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
+        self.assertTrue(
+            settings.candidate_ranking.scoring.common_game_score_similarity
+        )
+        self.assertTrue(
+            settings.candidate_ranking.scoring.game_similarity_with_diversity_score
+        )
+        self.assertFalse(settings.candidate_ranking.scoring.set_same.disease)
+        self.assertFalse(settings.candidate_ranking.scoring.set_same.symptom)
+        self.assertFalse(settings.candidate_ranking.scoring.set_same.unknown)
         self.assertEqual(
             settings.candidate_ranking.patterns,
             (

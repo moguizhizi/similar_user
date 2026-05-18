@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from config.settings import CandidateScoringSettings, SetSameScoringSettings
 from scripts.build_similar_user_candidates import (
     build_similar_user_candidate_summary,
     build_similar_user_candidates,
@@ -195,6 +196,77 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             mock_user_service.get_patient_unknown_set_comparison_by_end_date.call_count,
             2,
         )
+
+    def test_calculate_candidate_score_uses_enabled_scoring_components_only(self) -> None:
+        mock_user_service = Mock()
+        mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date = Mock(
+            return_value=[]
+        )
+        mock_user_service.get_patient_game_set_comparison_by_end_date = Mock(
+            return_value=[
+                {
+                    "games1": [
+                        {"id": "G1", "name": "游戏1"},
+                        {"id": "G2", "name": "游戏2"},
+                    ],
+                    "games2": [
+                        {"id": "G1", "name": "游戏1"},
+                        {"id": "G3", "name": "游戏3"},
+                    ],
+                }
+            ]
+        )
+        mock_user_service.get_patient_disease_set_comparison_by_end_date = Mock(
+            return_value=[
+                {
+                    "diseases1": [
+                        {"id": "D1", "name": "疾病1"},
+                        {"id": "D2", "name": "疾病2"},
+                    ],
+                    "diseases2": [{"id": "D1", "name": "疾病1"}],
+                }
+            ]
+        )
+        mock_user_service.get_patient_symptom_set_comparison_by_end_date = Mock(
+            return_value=[]
+        )
+        mock_user_service.get_patient_unknown_set_comparison_by_end_date = Mock(
+            return_value=[]
+        )
+
+        candidate_score, score_details = SimilarUserCandidateService(
+            user_service=mock_user_service
+        ).calculate_candidate_score(
+            primary_patient_id="30010096",
+            candidate_patient_id="20113562",
+            end_date="2022-01-13",
+            scoring_settings=CandidateScoringSettings(
+                common_game_score_similarity=False,
+                game_similarity_with_diversity_score=True,
+                set_same=SetSameScoringSettings(
+                    disease=True,
+                    symptom=False,
+                    unknown=False,
+                ),
+            ),
+        )
+
+        self.assertEqual(candidate_score, 0.75)
+        self.assertIsNone(score_details["common_game_score_similarity"])
+        self.assertEqual(
+            score_details["game_similarity_with_diversity_score"]["score"],
+            0.25,
+        )
+        self.assertEqual(score_details["set_same_scores"]["score"], 0.5)
+        self.assertEqual(
+            score_details["set_same_scores"]["symptom"],
+            {"enabled": False, "score": None, "reason": "disabled"},
+        )
+        mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date.assert_not_called()
+        mock_user_service.get_patient_game_set_comparison_by_end_date.assert_called_once()
+        mock_user_service.get_patient_disease_set_comparison_by_end_date.assert_called_once()
+        mock_user_service.get_patient_symptom_set_comparison_by_end_date.assert_not_called()
+        mock_user_service.get_patient_unknown_set_comparison_by_end_date.assert_not_called()
 
     def test_aggregate_candidates_from_scored_paths_raises_for_unsupported_pattern(self) -> None:
         scored_result = {
