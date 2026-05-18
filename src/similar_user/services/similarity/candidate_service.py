@@ -99,7 +99,6 @@ class SimilarUserCandidateService:
         candidate_buckets: dict[str, dict[str, Any]] = defaultdict(
             lambda: {
                 "patient_id": None,
-                "path_indices": [],
                 "match_count": 0,
                 "best_score": None,
                 "avg_score": 0.0,
@@ -116,8 +115,6 @@ class SimilarUserCandidateService:
             bucket = candidate_buckets[candidate_id]
             bucket["patient_id"] = candidate_id
             bucket["match_count"] += 1
-            if isinstance(scored_path.path_index, int):
-                bucket["path_indices"].append(scored_path.path_index)
             if scored_path.total_score is not None:
                 bucket["_score_sum"] += scored_path.total_score
                 if (
@@ -150,7 +147,6 @@ class SimilarUserCandidateService:
         for bucket in candidate_buckets.values():
             match_count = bucket["match_count"]
             score_sum = bucket.pop("_score_sum")
-            bucket["path_indices"] = sorted(set(bucket["path_indices"]))
             bucket["avg_score"] = round(score_sum / match_count, 2) if match_count else 0.0
             if bucket["best_score"] is not None:
                 bucket["best_score"] = round(bucket["best_score"], 2)
@@ -165,6 +161,7 @@ class SimilarUserCandidateService:
                 )
                 if pattern_bucket["best_score"] is not None:
                     pattern_bucket["best_score"] = round(pattern_bucket["best_score"], 2)
+                    
             candidate_score, score_details = self.calculate_candidate_score(
                 primary_patient_id=source_patient_id,
                 candidate_patient_id=bucket["patient_id"],
