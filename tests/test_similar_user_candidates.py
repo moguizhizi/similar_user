@@ -170,7 +170,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["candidates"][1]["patient_id"], "20113562")
         self.assertAlmostEqual(result["candidates"][1]["candidate_score"], 1.984)
         self.assertEqual(result["candidates"][1]["match_count"], 2)
-        self.assertEqual(result["candidates"][1]["path_indices"], [1, 2])
+        self.assertNotIn("path_indices", result["candidates"][1])
         self.assertEqual(result["candidates"][1]["best_score"], 90.0)
         self.assertEqual(result["candidates"][1]["avg_score"], 89.0)
         self.assertEqual(
@@ -957,7 +957,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                         "match_count": 3,
                         "best_score": 95.0,
                         "avg_score": 90.0,
-                        "path_indices": [0, 2, 4],
                         "score_details": {"large": "payload"},
                     }
                 ],
@@ -1109,7 +1108,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                         "match_count": 3,
                         "best_score": 95.0,
                         "avg_score": 90.0,
-                        "path_indices": [0, 2, 4],
                         "score_details": {"large": "payload"},
                     }
                 ],
