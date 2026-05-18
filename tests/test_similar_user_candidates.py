@@ -9,9 +9,11 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from scripts.build_similar_user_candidates import (
+    build_similar_user_candidate_summary,
     build_similar_user_candidates,
     load_saved_scored_pattern_result,
     main,
+    save_similar_user_candidates_result,
 )
 from scripts.score_pattern_paths import save_scored_pattern_result
 from scripts.run_similar_user_pipeline import (
@@ -714,12 +716,76 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertIsNone(result)
         mock_logger.warning.assert_called_once()
 
+    def test_save_similar_user_candidates_result_writes_detail_and_summary_files(
+        self,
+    ) -> None:
+        result = {
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
+            "patterns": [
+                "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+            ],
+            "candidate_top_k": 2,
+            "path_count": 10,
+            "scored_path_count": 5,
+            "retrieval_context": {"score_end_date": "2022-05-22"},
+            "candidate_count": 1,
+            "candidates": [
+                {
+                    "patient_id": "20113562",
+                    "candidate_score": 2.232,
+                    "match_count": 3,
+                    "best_score": 95.0,
+                    "avg_score": 90.0,
+                    "pattern_breakdown": {
+                        "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT": {
+                            "match_count": 2,
+                        },
+                        "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT": {
+                            "match_count": 1,
+                        },
+                    },
+                    "score_details": {"large": "payload"},
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_paths = save_similar_user_candidates_result(
+                result,
+                Path(temp_dir),
+            )
+            detail = json.loads(output_paths["detail"].read_text(encoding="utf-8"))
+            summary = json.loads(output_paths["summary"].read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            output_paths["detail"].name,
+            "30010096.detail.json",
+        )
+        self.assertEqual(detail, result)
+        self.assertEqual(
+            summary,
+            build_similar_user_candidate_summary(result),
+        )
+        self.assertNotIn("score_details", summary["candidates"][0])
+        self.assertEqual(summary["candidates"][0]["pattern_count"], 2)
+        self.assertEqual(
+            summary["candidates"][0]["patterns"],
+            [
+                "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+                "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            ],
+        )
+
     @patch("scripts.build_similar_user_candidates.LOGGER")
     @patch("scripts.build_similar_user_candidates.parse_args")
+    @patch("scripts.build_similar_user_candidates.save_similar_user_candidates_result")
     @patch("scripts.build_similar_user_candidates.build_similar_user_candidates")
     def test_main_builds_candidate_result(
         self,
         mock_build_candidates: Mock,
+        mock_save_candidates: Mock,
         mock_parse_args: Mock,
         mock_logger: Mock,
     ) -> None:
@@ -740,17 +806,30 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             patient_id="30010096",
             config="config/settings.yaml",
             scored_paths_dir="data/scored_pattern_paths",
+            candidates_dir="data/similar_user_candidates",
         )
         mock_build_candidates.return_value = expected
+        mock_save_candidates.return_value = {
+            "detail": Path("data/similar_user_candidates/30/30010096.detail.json"),
+            "summary": Path("data/similar_user_candidates/30/30010096.summary.json"),
+        }
 
         exit_code = main()
 
         self.assertEqual(exit_code, 0)
-        mock_logger.info.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
             scored_paths_dir="data/scored_pattern_paths",
+        )
+        mock_save_candidates.assert_called_once_with(
+            expected,
+            output_dir="data/similar_user_candidates",
+        )
+        mock_logger.info.assert_called_once_with(
+            "Saved similar-user candidates: detail_path=%s, summary_path=%s",
+            Path("data/similar_user_candidates/30/30010096.detail.json"),
+            Path("data/similar_user_candidates/30/30010096.summary.json"),
         )
 
     @patch("scripts.run_similar_user_pipeline.time.perf_counter")

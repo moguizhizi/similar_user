@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +48,7 @@ from scripts.score_pattern_paths import (
 
 
 LOGGER = get_logger(__name__)
+DEFAULT_CANDIDATES_DIR = Path("data/similar_user_candidates")
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,6 +66,11 @@ def parse_args() -> argparse.Namespace:
         "--scored-paths-dir",
         default=str(DEFAULT_SCORED_OUTPUT_DIR),
         help="Directory containing saved scored detail JSON files.",
+    )
+    parser.add_argument(
+        "--candidates-dir",
+        default=str(DEFAULT_CANDIDATES_DIR),
+        help="Directory used to store similar-user candidate detail and summary JSON files.",
     )
     return parser.parse_args()
 
@@ -163,10 +171,96 @@ def load_saved_scored_pattern_result(
     return data
 
 
+def save_similar_user_candidates_result(
+    result: dict[str, Any],
+    output_dir: str | Path = DEFAULT_CANDIDATES_DIR,
+) -> dict[str, Path]:
+    """Save full candidate details and a compact summary as two JSON files."""
+    detail_path, summary_path = get_similar_user_candidate_output_paths(
+        result,
+        output_dir,
+    )
+    _write_json_atomic(detail_path, result)
+    _write_json_atomic(summary_path, build_similar_user_candidate_summary(result))
+    LOGGER.debug(
+        "Saved similar-user candidates result: source_id=%s, detail_path=%s, summary_path=%s",
+        result.get("source_id"),
+        detail_path,
+        summary_path,
+    )
+    return {"detail": detail_path, "summary": summary_path}
+
+
+def get_similar_user_candidate_output_paths(
+    result: dict[str, Any],
+    output_dir: str | Path = DEFAULT_CANDIDATES_DIR,
+) -> tuple[Path, Path]:
+    """Return detail and summary output paths for one candidate result."""
+    source_id = _normalize_required_string(result.get("source_id"), "source_id")
+    bucket = source_id[:2] or "unknown"
+    output_base = Path(output_dir) / bucket
+    return (
+        output_base / f"{source_id}.detail.json",
+        output_base / f"{source_id}.summary.json",
+    )
+
+
+def build_similar_user_candidate_summary(result: dict[str, Any]) -> dict[str, Any]:
+    """Build a compact candidate summary for quick inspection."""
+    raw_candidates = result.get("candidates")
+    candidates = raw_candidates if isinstance(raw_candidates, list) else []
+    summary_candidates = []
+    for rank, item in enumerate(candidates, start=1):
+        if not isinstance(item, dict):
+            continue
+        pattern_breakdown = item.get("pattern_breakdown")
+        pattern_data = pattern_breakdown if isinstance(pattern_breakdown, dict) else {}
+        summary_candidates.append(
+            {
+                "rank": rank,
+                "patient_id": item.get("patient_id"),
+                "candidate_score": item.get("candidate_score"),
+                "match_count": item.get("match_count"),
+                "best_score": item.get("best_score"),
+                "avg_score": item.get("avg_score"),
+                "pattern_count": len(pattern_data),
+                "patterns": sorted(pattern_data),
+            }
+        )
+    return {
+        "source_id": result.get("source_id"),
+        "source_parameter": result.get("source_parameter"),
+        "patterns": result.get("patterns"),
+        "candidate_top_k": result.get("candidate_top_k"),
+        "path_count": result.get("path_count"),
+        "scored_path_count": result.get("scored_path_count"),
+        "retrieval_context": result.get("retrieval_context"),
+        "candidate_count": result.get("candidate_count"),
+        "candidates": summary_candidates,
+    }
+
+
 def _normalize_required_string(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string.")
     return value.strip()
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f"{path.stem}.",
+        suffix=".tmp",
+        delete=False,
+    ) as temp_file:
+        temp_file.write(serialized)
+        temp_path = Path(temp_file.name)
+
+    os.replace(temp_path, path)
 
 
 def main() -> int:
@@ -177,6 +271,15 @@ def main() -> int:
             args.patient_id,
             config_path=args.config,
             scored_paths_dir=args.scored_paths_dir,
+        )
+        output_paths = save_similar_user_candidates_result(
+            result,
+            output_dir=args.candidates_dir,
+        )
+        LOGGER.info(
+            "Saved similar-user candidates: detail_path=%s, summary_path=%s",
+            output_paths["detail"],
+            output_paths["summary"],
         )
     except Exception as exc:
         LOGGER.exception("Build similar user candidates from scored paths failed: %s", exc)

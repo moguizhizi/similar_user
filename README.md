@@ -127,6 +127,7 @@ python scripts/read_patient_pattern_result.py <patient_id> --config config/setti
 python scripts/build_similar_user_candidates.py <patient_id>
 python scripts/build_similar_user_candidates.py <patient_id> --config config/settings.yaml
 python scripts/build_similar_user_candidates.py <patient_id> --scored-paths-dir data/scored_pattern_paths
+python scripts/build_similar_user_candidates.py <patient_id> --candidates-dir data/similar_user_candidates
 
 # 单用户训练任务预测
 python scripts/predict_training_tasks.py <patient_id> --base-date 2022-05-22 --window-days 14
@@ -152,7 +153,7 @@ python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --windo
 
 `score_pattern_paths.py` 默认会保存评分明细和摘要。`--patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次评分这些 patient 起点模式；`--top-k` 在批量模式下对每个 pattern 分别生效。`--path-index` 仅用于单条 path 调试，不会保存评分文件。
 
-`build_similar_user_candidates.py` 读取配置文件中的 `query.candidate_ranking`；如需调整候选返回数量，直接修改 YAML：
+`build_similar_user_candidates.py` 读取配置文件中的 `query.candidate_ranking`，默认会保存完整候选明细和轻量摘要到 `data/similar_user_candidates/`。如需调整候选返回数量，直接修改 YAML：
 
 ```yaml
 query:
@@ -169,6 +170,8 @@ query:
 
 - `config/`：统一 YAML 配置和配置加载入口
 - `data/pattern_paths/`：固定模式路径的离线 JSONL 数据
+- `data/scored_pattern_paths/`：固定模式路径评分后的 detail/summary JSON 数据
+- `data/similar_user_candidates/`：候选相似用户聚合后的 detail/summary JSON 数据
 - `logs/`：运行日志输出
 - `src/similar_user/data_access/`：Neo4j 访问与仓储封装
 - `src/similar_user/domain/`：图谱节点、路径模式和领域模型
