@@ -746,7 +746,23 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                             "match_count": 1,
                         },
                     },
-                    "score_details": {"large": "payload"},
+                    "score_details": {
+                        "common_game_score_similarity": {
+                            "similarity": 0.982,
+                            "common_games": ["专注猎手", "冰块求和"],
+                        },
+                        "game_similarity_with_diversity_score": {
+                            "score": 0.25,
+                            "source_game_count": 3,
+                            "candidate_game_count": 4,
+                        },
+                        "set_same_scores": {
+                            "disease": {"score": 0.5, "same_items": ["D1"]},
+                            "symptom": {"score": 0.25, "same_items": ["S1"]},
+                            "unknown": {"score": 0.0, "same_items": []},
+                            "score": 0.75,
+                        },
+                    },
                 }
             ],
         }
@@ -763,20 +779,42 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             output_paths["detail"].name,
             "30010096.detail.json",
         )
-        self.assertEqual(detail, result)
+        expected_score_summary = build_similar_user_candidate_summary(result)
+        self.assertEqual(
+            detail["candidates"][0]["score_details"],
+            result["candidates"][0]["score_details"],
+        )
+        self.assertNotIn("match_count", detail["candidates"][0])
+        self.assertNotIn("best_score", detail["candidates"][0])
+        self.assertNotIn("avg_score", detail["candidates"][0])
+        self.assertNotIn("pattern_breakdown", detail["candidates"][0])
         self.assertEqual(
             summary,
-            build_similar_user_candidate_summary(result),
+            expected_score_summary,
+        )
+        self.assertEqual(
+            summary["candidates"][0]["score_summary"],
+            {
+                "common_game_score_similarity": 0.982,
+                "game_similarity_with_diversity_score": 0.25,
+                "set_same_score": {
+                    "total": 0.75,
+                    "disease": 0.5,
+                    "symptom": 0.25,
+                    "unknown": 0.0,
+                },
+            },
         )
         self.assertNotIn("score_details", summary["candidates"][0])
-        self.assertEqual(summary["candidates"][0]["pattern_count"], 2)
-        self.assertEqual(
-            summary["candidates"][0]["patterns"],
-            [
-                "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
-                "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            ],
-        )
+        self.assertNotIn("common_games", json.dumps(summary, ensure_ascii=False))
+        self.assertNotIn("same_items", json.dumps(summary, ensure_ascii=False))
+        self.assertNotIn("match_count", summary["candidates"][0])
+        self.assertNotIn("best_score", summary["candidates"][0])
+        self.assertNotIn("avg_score", summary["candidates"][0])
+        self.assertNotIn("pattern_breakdown", summary["candidates"][0])
+        self.assertNotIn("patterns", summary)
+        self.assertNotIn("path_count", summary)
+        self.assertNotIn("scored_path_count", summary)
 
     @patch("scripts.build_similar_user_candidates.LOGGER")
     @patch("scripts.build_similar_user_candidates.parse_args")
