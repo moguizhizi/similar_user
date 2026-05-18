@@ -16,7 +16,7 @@ similar_user/
 ├── logs/
 │   └── similar_user.log        # 默认日志文件
 ├── scripts/
-│   ├── build_similar_user_candidates.py  # 从 top-k 评分路径构建 top-k 候选相似用户
+│   ├── build_similar_user_candidates.py  # 从已评分路径构建 top-k 候选相似用户
 │   ├── build_pattern_paths.py            # 构建并保存固定模式路径
 │   ├── debug_query.py                    # 直接连接 Neo4j 并执行验证查询
 │   ├── read_patient_pattern_result.py    # 读取本地离线保存的路径结果
@@ -84,7 +84,7 @@ similar_user/
 - `python scripts/evaluate_predict_training_tasks.py [patient_ids_file] --base-date <YYYY-MM-DD> --window-days <days>`
   评估 `base_date` 当天训练任务预测表现；可传用户列表文件，也可不传并自动从 Neo4j 读取全量 Patient ID。
 - `python scripts/build_similar_user_candidates.py <patient_id>`
-  按 `config/settings.yaml` 中的 `query.candidate_ranking.path_top_k` 先保留高分 path 作为证据来源，再按 `query.candidate_ranking.candidate_top_k` 返回排序后的候选相似用户。
+  读取已保存的 scored paths，并按 `config/settings.yaml` 中的 `query.candidate_ranking.candidate_top_k` 返回排序后的候选相似用户。
 - `GET /health/neo4j`
   用于检查 Neo4j 是否可连接。
 - `POST /query`
@@ -109,22 +109,23 @@ python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 
 python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14
 python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --config config/settings.yaml
 python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --query-family training_order
+python scripts/build_pattern_paths.py --source-id <patient_id> --patterns-from-config --base-date 2022-05-22 --window-days 14
 
 # 对已保存的固定模式路径打分
 python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient
 python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --config config/settings.yaml
 python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --path-index 0
 python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20 --save
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20 --save --scored-output-dir data/scored_pattern_paths
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20 --scored-paths-dir data/scored_pattern_paths
 
 # 读取已保存的固定模式路径结果
 python scripts/read_patient_pattern_result.py <patient_id>
 python scripts/read_patient_pattern_result.py <patient_id> --config config/settings.yaml
 
-# 从配置的 path_top_k / candidate_top_k 构建候选相似用户
+# 从已保存 scored paths 构建候选相似用户
 python scripts/build_similar_user_candidates.py <patient_id>
 python scripts/build_similar_user_candidates.py <patient_id> --config config/settings.yaml
+python scripts/build_similar_user_candidates.py <patient_id> --scored-paths-dir data/scored_pattern_paths
 
 # 单用户训练任务预测
 python scripts/predict_training_tasks.py <patient_id> --base-date 2022-05-22 --window-days 14
@@ -146,12 +147,20 @@ python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --windo
 
 `run_similar_user_pipeline.py` 默认会先重新生成并保存固定模式 path，再读取保存结果打分并生成候选用户。如果已经有可用的离线路径结果，可以使用 `--skip-path-build` 跳过 path 检索。脚本默认使用 `--output-level ids`，候选用户仅以 `candidate_ids` 列出全部 `patient_id`；使用 `--output-level scores` 时输出 `patient_id` 和 `candidate_score`；使用 `--output-level full` 时输出完整 `candidate_result` 和候选明细。
 
-`build_similar_user_candidates.py` 读取配置文件中的 `query.candidate_ranking`；如需调整候选排序范围，直接修改 YAML：
+`build_pattern_paths.py --patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次构建这些 patient 起点模式的离线 path；如果 YAML 中配置了 `disease_patient`、`symptom_patient`、`unknown_patient` 这类 direct 模式，脚本会报错，避免把 patient_id 与 disease_id/symptom_id/unknown_id 混用。
+
+`score_pattern_paths.py` 默认会保存评分明细和摘要。`--top-k` 决定本次保存多少条高分 scored paths；`--path-index` 仅用于单条 path 调试，不会保存评分文件。
+
+`build_similar_user_candidates.py` 读取配置文件中的 `query.candidate_ranking`；如需调整候选返回数量，直接修改 YAML：
 
 ```yaml
 query:
   candidate_ranking:
-    path_top_k: 50
+    patterns:
+      - "patient_game_patient"
+      - "patient_disease_patient"
+      - "patient_symptom_patient"
+      - "patient_unknown_patient"
     candidate_top_k: 10
 ```
 
@@ -196,7 +205,11 @@ query:
 ```yaml
 query:
   candidate_ranking:
-    path_top_k: 50       # 先保留多少条高分 path 作为证据来源
+    patterns:            # 候选聚合读取哪些已保存 scored path 模式
+      - "patient_game_patient"
+      - "patient_disease_patient"
+      - "patient_symptom_patient"
+      - "patient_unknown_patient"
     candidate_top_k: 10  # 最终返回多少个候选相似用户
 ```
 

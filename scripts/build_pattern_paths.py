@@ -13,6 +13,7 @@
 - `--source-id` 是当前模式的起点 ID，例如 patient 模式下是 patient_id，
   disease_patient 模式下是 disease_id。
 - `--pattern` 选择路径模式，只接受公开别名。
+- `--patterns-from-config` 从 YAML 的 `candidate_ranking.patterns` 读取多个 patient 起点模式并依次构建。
 - `--query-family` 只适用于带 statistics 的 patient 系列模式。默认 `training_order`。
   `training_order` 会要求 s1/s2 满足训练日期顺序；`date_window` 只按 s1 的训练日期窗口取路径。
 - `--base-date` 是右开窗口的结束日期，`--window-days` 决定向前回看多少天。
@@ -31,6 +32,12 @@
         --pattern disease_patient \
         --base-date 2022-05-22 \
         --window-days 14
+
+    python scripts/build_pattern_paths.py \
+        --source-id 30010096 \
+        --patterns-from-config \
+        --base-date 2022-05-22 \
+        --window-days 14
 """
 
 from __future__ import annotations
@@ -46,9 +53,14 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
+from config.settings import load_query_settings
 from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
-from similar_user.data_access.pattern_registry import available_path_pattern_aliases
+from similar_user.data_access.pattern_registry import (
+    available_path_pattern_aliases,
+    get_path_pattern_spec,
+    resolve_path_pattern,
+)
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import save_pattern_result
@@ -87,10 +99,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--pattern",
-        required=True,
+        default=None,
         choices=available_path_pattern_aliases(),
         help=(
             "Path pattern alias. Supported aliases are shown in the choices list."
+        ),
+    )
+    parser.add_argument(
+        "--patterns-from-config",
+        action="store_true",
+        help=(
+            "Build all patient-source patterns configured in "
+            "candidate_ranking.patterns."
         ),
     )
     parser.add_argument(
@@ -104,7 +124,12 @@ def parse_args() -> argparse.Namespace:
             "date_window only filters by the s1 date window."
         ),
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.pattern is None and not args.patterns_from_config:
+        parser.error("one of --pattern or --patterns-from-config is required")
+    if args.pattern is not None and args.patterns_from_config:
+        parser.error("--pattern and --patterns-from-config cannot be used together")
+    return args
 
 
 def run_pattern_path_flow(
@@ -148,18 +173,76 @@ def run_pattern_path_flow(
         return result
 
 
+def run_configured_pattern_path_flows(
+    source_id: str,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
+    *,
+    base_date: str,
+    window_days: int,
+    query_family: str | None = None,
+) -> list[dict[str, object]]:
+    """Build all configured patient-source pattern paths for one source patient."""
+    ranking_settings = load_query_settings(config_path).candidate_ranking
+    selected_patterns = tuple(ranking_settings.patterns)
+    _validate_patient_source_patterns(selected_patterns)
+    LOGGER.info(
+        "Starting configured pattern path build: source_id=%s, patterns=%s, query_family=%s, base_date=%s, window_days=%s, config_path=%s",
+        source_id,
+        selected_patterns,
+        query_family,
+        base_date,
+        window_days,
+        config_path,
+    )
+    return [
+        run_pattern_path_flow(
+            source_id,
+            config_path=config_path,
+            base_date=base_date,
+            window_days=window_days,
+            pattern=pattern,
+            query_family=query_family,
+        )
+        for pattern in selected_patterns
+    ]
+
+
+def _validate_patient_source_patterns(patterns: tuple[str, ...]) -> None:
+    """Ensure configured batch patterns can share one patient_id source."""
+    invalid_patterns = []
+    for pattern in patterns:
+        spec = get_path_pattern_spec(resolve_path_pattern(pattern))
+        if spec.source_parameter != "patient_id":
+            invalid_patterns.append(pattern)
+    if invalid_patterns:
+        invalid = ", ".join(invalid_patterns)
+        raise ValueError(
+            "patterns-from-config only supports patient-source patterns; "
+            f"invalid patterns: {invalid}"
+        )
+
+
 def main() -> int:
     """CLI entrypoint for building and saving one source's pattern paths."""
     args = parse_args()
     try:
-        run_pattern_path_flow(
-            args.source_id,
-            config_path=args.config,
-            base_date=args.base_date,
-            window_days=args.window_days,
-            pattern=getattr(args, "pattern", DEFAULT_PATTERN),
-            query_family=getattr(args, "query_family", None),
-        )
+        if getattr(args, "patterns_from_config", False) is True:
+            run_configured_pattern_path_flows(
+                args.source_id,
+                config_path=args.config,
+                base_date=args.base_date,
+                window_days=args.window_days,
+                query_family=getattr(args, "query_family", None),
+            )
+        else:
+            run_pattern_path_flow(
+                args.source_id,
+                config_path=args.config,
+                base_date=args.base_date,
+                window_days=args.window_days,
+                pattern=getattr(args, "pattern", DEFAULT_PATTERN),
+                query_family=getattr(args, "query_family", None),
+            )
     except Exception as exc:
         LOGGER.exception(
             "Pattern path build failed: source_id=%s, config_path=%s",
