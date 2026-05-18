@@ -13,6 +13,10 @@
 
     python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --top-k 50
 
+批量评分配置中的 patient 起点模式：
+
+    python scripts/score_pattern_paths.py --source-id 30010096 --patterns-from-config --top-k 50
+
 调试单条 path，不保存评分文件：
 
     python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --path-index 0
@@ -38,8 +42,10 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
+from config.settings import load_query_settings
 from similar_user.data_access.pattern_registry import (
     available_path_pattern_aliases,
+    get_path_pattern_spec,
     resolve_path_pattern,
 )
 from similar_user.domain.graph_schema import PathPattern
@@ -71,9 +77,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--pattern",
-        required=True,
+        default=None,
         choices=available_path_pattern_aliases(),
         help="Path pattern alias used to locate the saved result.",
+    )
+    parser.add_argument(
+        "--patterns-from-config",
+        action="store_true",
+        help=(
+            "Score all patient-source patterns configured in "
+            "candidate_ranking.patterns."
+        ),
     )
     parser.add_argument(
         "--config",
@@ -115,6 +129,10 @@ def parse_args() -> argparse.Namespace:
         help="Directory used to store scored path detail and summary JSON files.",
     )
     args = parser.parse_args()
+    if args.pattern is None and not args.patterns_from_config:
+        parser.error("one of --pattern or --patterns-from-config is required")
+    if args.pattern is not None and args.patterns_from_config:
+        parser.error("--pattern and --patterns-from-config cannot be used together")
     _validate_source_demographic_args(parser, args)
     return args
 
@@ -208,6 +226,37 @@ def score_pattern_paths(
         result["scored_path_count"],
     )
     return result
+
+
+def score_configured_pattern_paths(
+    source_id: str,
+    *,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
+    path_index: int | None = None,
+    top_k: int | None = None,
+) -> list[dict[str, object]]:
+    """Score all configured patient-source pattern paths for one source patient."""
+    ranking_settings = load_query_settings(config_path).candidate_ranking
+    selected_patterns = tuple(ranking_settings.patterns)
+    _validate_patient_source_patterns(selected_patterns)
+    LOGGER.info(
+        "Starting configured pattern path scoring: source_id=%s, patterns=%s, path_index=%s, top_k=%s, config_path=%s",
+        source_id,
+        selected_patterns,
+        path_index,
+        top_k,
+        config_path,
+    )
+    return [
+        score_pattern_paths(
+            source_id,
+            pattern=pattern,
+            config_path=config_path,
+            path_index=path_index,
+            top_k=top_k,
+        )
+        for pattern in selected_patterns
+    ]
 
 
 def save_scored_pattern_result(
@@ -345,6 +394,8 @@ def _validate_source_demographic_args(
     parser: argparse.ArgumentParser,
     args: argparse.Namespace,
 ) -> None:
+    if args.patterns_from_config:
+        return
     pattern = resolve_path_pattern(args.pattern)
     if not _requires_source_demographics(pattern):
         return
@@ -381,6 +432,21 @@ def _supported_cli_education_values() -> tuple[str, ...]:
     )
 
 
+def _validate_patient_source_patterns(patterns: tuple[str, ...]) -> None:
+    """Ensure configured batch patterns can share one patient_id source."""
+    invalid_patterns = []
+    for pattern in patterns:
+        spec = get_path_pattern_spec(resolve_path_pattern(pattern))
+        if spec.source_parameter != "patient_id":
+            invalid_patterns.append(pattern)
+    if invalid_patterns:
+        invalid = ", ".join(invalid_patterns)
+        raise ValueError(
+            "patterns-from-config only supports patient-source patterns; "
+            f"invalid patterns: {invalid}"
+        )
+
+
 def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
@@ -402,23 +468,33 @@ def main() -> int:
     """Score saved pattern paths and log JSON output."""
     args = parse_args()
     try:
-        result = score_pattern_paths(
-            args.source_id,
-            pattern=args.pattern,
-            config_path=args.config,
-            path_index=args.path_index,
-            top_k=args.top_k,
-        )
+        if getattr(args, "patterns_from_config", False) is True:
+            result = score_configured_pattern_paths(
+                args.source_id,
+                config_path=args.config,
+                path_index=args.path_index,
+                top_k=args.top_k,
+            )
+        else:
+            result = score_pattern_paths(
+                args.source_id,
+                pattern=args.pattern,
+                config_path=args.config,
+                path_index=args.path_index,
+                top_k=args.top_k,
+            )
         if args.path_index is None:
-            output_paths = save_scored_pattern_result(
-                result,
-                output_dir=args.scored_paths_dir,
-            )
-            LOGGER.info(
-                "Saved scored pattern result: detail_path=%s, summary_path=%s",
-                output_paths["detail"],
-                output_paths["summary"],
-            )
+            scored_results = result if isinstance(result, list) else [result]
+            for scored_result in scored_results:
+                output_paths = save_scored_pattern_result(
+                    scored_result,
+                    output_dir=args.scored_paths_dir,
+                )
+                LOGGER.info(
+                    "Saved scored pattern result: detail_path=%s, summary_path=%s",
+                    output_paths["detail"],
+                    output_paths["summary"],
+                )
     except Exception as exc:
         LOGGER.exception("Score pattern paths failed: %s", exc)
         return 1

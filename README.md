@@ -117,6 +117,7 @@ python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient
 python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --path-index 0
 python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20
 python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20 --scored-paths-dir data/scored_pattern_paths
+python scripts/score_pattern_paths.py --source-id <patient_id> --patterns-from-config --top-k 20
 
 # 读取已保存的固定模式路径结果
 python scripts/read_patient_pattern_result.py <patient_id>
@@ -149,7 +150,7 @@ python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --windo
 
 `build_pattern_paths.py --patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次构建这些 patient 起点模式的离线 path；如果 YAML 中配置了 `disease_patient`、`symptom_patient`、`unknown_patient` 这类 direct 模式，脚本会报错，避免把 patient_id 与 disease_id/symptom_id/unknown_id 混用。
 
-`score_pattern_paths.py` 默认会保存评分明细和摘要。`--top-k` 决定本次保存多少条高分 scored paths；`--path-index` 仅用于单条 path 调试，不会保存评分文件。
+`score_pattern_paths.py` 默认会保存评分明细和摘要。`--patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次评分这些 patient 起点模式；`--top-k` 在批量模式下对每个 pattern 分别生效。`--path-index` 仅用于单条 path 调试，不会保存评分文件。
 
 `build_similar_user_candidates.py` 读取配置文件中的 `query.candidate_ranking`；如需调整候选返回数量，直接修改 YAML：
 
