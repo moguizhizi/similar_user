@@ -1737,8 +1737,16 @@ class KgRepositoryTest(unittest.TestCase):
             ),
         )
         self.assertEqual(settings.pattern_path_storage.output_dir, "data/pattern_paths")
-        self.assertEqual(settings.candidate_ranking.path_top_k, 50)
         self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
+        self.assertEqual(
+            settings.candidate_ranking.patterns,
+            (
+                "patient_game_patient",
+                "patient_disease_patient",
+                "patient_symptom_patient",
+                "patient_unknown_patient",
+            ),
+        )
 
     def test_get_patient_task_instance_set_ordered_training_dates(self) -> None:
         mock_client = Mock()

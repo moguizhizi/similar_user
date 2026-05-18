@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from scripts.build_similar_user_candidates import build_similar_user_candidates, main
+from scripts.score_pattern_paths import save_scored_pattern_result
 from scripts.run_similar_user_pipeline import (
     main as pipeline_main,
     run_similar_user_pipeline,
@@ -39,7 +40,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "p2": {"id": "20113563"},
         }
         scored_result = {
-            "patient_id": "30010096",
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "path_count": 3,
             "scored_path_count": 3,
@@ -133,7 +135,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             user_service=mock_user_service
         ).aggregate_candidates_from_scored_paths(
             scored_result,
-            path_top_k=3,
             candidate_top_k=3,
         )
 
@@ -201,7 +202,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported pattern"):
             SimilarUserCandidateService().aggregate_candidates_from_scored_paths(
                 scored_result,
-                path_top_k=1,
                 candidate_top_k=1,
             )
 
@@ -235,7 +235,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             }
 
         scored_result = {
-            "patient_id": "30010096",
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "path_count": 3,
             "scored_path_count": 3,
@@ -279,11 +280,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             user_service=mock_user_service
         ).aggregate_candidates_from_scored_paths(
             scored_result,
-            path_top_k=3,
             candidate_top_k=2,
         )
 
-        self.assertEqual(result["path_top_k"], 3)
         self.assertEqual(result["candidate_top_k"], 2)
         self.assertEqual(result["candidate_count"], 2)
         self.assertEqual(
@@ -291,7 +290,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ["20113563", "20113564"],
         )
 
-    def test_aggregate_candidates_from_scored_paths_validates_top_k_values(self) -> None:
+    def test_aggregate_candidates_from_scored_paths_validates_candidate_top_k(self) -> None:
         scored_result = {
             "patient_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
@@ -300,16 +299,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "scores": [],
         }
 
-        with self.assertRaisesRegex(ValueError, "path_top_k"):
-            SimilarUserCandidateService().aggregate_candidates_from_scored_paths(
-                scored_result,
-                path_top_k=0,
-                candidate_top_k=1,
-            )
         with self.assertRaisesRegex(ValueError, "candidate_top_k"):
             SimilarUserCandidateService().aggregate_candidates_from_scored_paths(
                 scored_result,
-                path_top_k=1,
                 candidate_top_k=0,
             )
 
@@ -344,7 +336,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         result = SimilarUserCandidateService().aggregate_candidates_from_scored_paths(
             scored_result,
-            path_top_k=2,
             candidate_top_k=2,
         )
 
@@ -352,10 +343,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["candidate_count"], 1)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
 
-    def test_build_similar_user_candidates_uses_scored_top_k_paths(self) -> None:
+    def test_build_similar_user_candidates_uses_saved_scored_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
-            output_dir = Path(temp_dir) / "pattern_paths"
+            scored_paths_dir = Path(temp_dir) / "scored_pattern_paths"
             config_path.write_text(
                 "\n".join(
                     [
@@ -366,29 +357,28 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                         "  min_training_dates: 5",
                         "  before_ratio: 4",
                         "  after_ratio: 1",
-                        "pattern_path_storage:",
-                        f'  output_dir: "{output_dir}"',
                         "candidate_ranking:",
-                        "  path_top_k: 3",
+                        "  patterns:",
+                        "    - patient_game_patient",
                         "  candidate_top_k: 2",
                     ]
                 ),
                 encoding="utf-8",
             )
-            result = {
-                "patient_id": "30010096",
+            scored_result = {
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                "ordered_training_dates": [],
-                "first_training_date": None,
-                "last_training_date": None,
-                "training_date_count": 0,
+                "path_count": 3,
+                "scored_path_count": 3,
                 "retrieval_context": {
                     "split_training_date": "2022-01-13",
-                    "before_split": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
-                    "post_split_games": [],
-                    "limit_recommendation": {"per_g": 5, "limit": 10},
-                    "paths": [
-                        {
+                },
+                "scores": [
+                    {
+                        "path_index": 0,
+                        "score": {"total_score": 95.0},
+                        "path": {
                             "row": {
                                 "p": {"id": "30010096"},
                                 "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
@@ -404,7 +394,11 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                                 "p2": {"id": "20113562"},
                             }
                         },
-                        {
+                    },
+                    {
+                        "path_index": 1,
+                        "score": {"total_score": 80.0},
+                        "path": {
                             "row": {
                                 "p": {"id": "30010096"},
                                 "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
@@ -420,7 +414,11 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                                 "p2": {"id": "20113563"},
                             }
                         },
-                        {
+                    },
+                    {
+                        "path_index": 2,
+                        "score": {"total_score": 90.0},
+                        "path": {
                             "row": {
                                 "p": {"id": "30010096"},
                                 "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
@@ -436,10 +434,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                                 "p2": {"id": "20113562"},
                             }
                         },
-                    ],
-                },
+                    },
+                ],
             }
-            save_pattern_result(result, config_path)
+            save_scored_pattern_result(scored_result, scored_paths_dir)
 
             with patch(
                 "scripts.build_similar_user_candidates.DEFAULT_CONFIG_PATH",
@@ -477,7 +475,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                     {"g": {"id": "348", "name": "真假句辨别"}}
                 ]
                 mock_user_service_cls.return_value = mock_user_service
-                candidates = build_similar_user_candidates("30010096")
+                candidates = build_similar_user_candidates(
+                    "30010096",
+                    scored_paths_dir=scored_paths_dir,
+                )
 
         self.assertEqual(candidates["candidate_count"], 2)
         self.assertEqual(candidates["retrieval_context"]["score_end_date"], "2022-01-13")
@@ -485,9 +486,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(candidates["candidates"][0]["match_count"], 2)
         self.assertEqual(candidates["candidates"][1]["patient_id"], "20113563")
 
-    def test_build_similar_user_candidates_reads_top_k_from_config(self) -> None:
+    def test_build_similar_user_candidates_reads_candidate_top_k_from_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
+            scored_paths_dir = Path(temp_dir) / "scored_pattern_paths"
             config_path.write_text(
                 "\n".join(
                     [
@@ -495,7 +497,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                         "  bands:",
                         "    - per_g: 1",
                         "candidate_ranking:",
-                        "  path_top_k: 2",
+                        "  patterns:",
+                        "    - patient_game_patient",
                         "  candidate_top_k: 1",
                     ]
                 ),
@@ -516,7 +519,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "p2": {"id": "20113562"},
             }
             scored_result = {
-                "patient_id": "30010096",
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 "path_count": 2,
                 "scored_path_count": 1,
@@ -528,6 +532,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                     }
                 ],
             }
+            save_scored_pattern_result(scored_result, scored_paths_dir)
             with patch(
                 "scripts.build_similar_user_candidates.DEFAULT_CONFIG_PATH",
                 config_path,
@@ -535,10 +540,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "scripts.build_similar_user_candidates.Neo4jClient.from_config",
             ) as mock_from_config, patch(
                 "scripts.build_similar_user_candidates.UserService",
-            ) as mock_user_service_cls, patch(
-                "scripts.build_similar_user_candidates.score_pattern_paths",
-                return_value=scored_result,
-            ) as mock_score:
+            ) as mock_user_service_cls:
                 mock_client_context = Mock()
                 mock_client_context.__enter__ = Mock(return_value=Mock())
                 mock_client_context.__exit__ = Mock(return_value=None)
@@ -554,17 +556,143 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                     {"g": {"id": "348", "name": "真假句辨别"}}
                 ]
                 mock_user_service_cls.return_value = mock_user_service
-                candidates = build_similar_user_candidates("30010096")
+                candidates = build_similar_user_candidates(
+                    "30010096",
+                    scored_paths_dir=scored_paths_dir,
+                )
 
-        self.assertEqual(candidates["path_top_k"], 2)
         self.assertEqual(candidates["candidate_top_k"], 1)
         self.assertEqual(candidates["candidate_count"], 1)
         self.assertEqual(candidates["candidates"][0]["patient_id"], "20113562")
-        mock_score.assert_called_once_with(
-            "30010096",
-            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            config_path=config_path,
-            top_k=2,
+
+    def test_build_similar_user_candidates_reads_multiple_saved_scored_patterns(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            scored_paths_dir = Path(temp_dir) / "scored_pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "candidate_ranking:",
+                        "  patterns:",
+                        "    - patient_game_patient",
+                        "    - patient_disease_patient",
+                        "  candidate_top_k: 2",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            game_row = {
+                "p": {"id": "30010096"},
+                "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+                "i1": {"id": "30010096_20220522_348_a", "任务类型": "专属", "结果": "完成"},
+                "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+                "i2": {
+                    "id": "20113562_20211214_348_a",
+                    "结果": "完成",
+                    "活跃": "是",
+                    "任务类型": "专属",
+                },
+                "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "本科"},
+                "p2": {"id": "20113562"},
+            }
+            disease_row = {
+                "p": {"id": "30010096"},
+                "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+                "dis": {"id": "AU_DIS_0013", "name": "遗忘型轻度认知障碍"},
+                "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "大专"},
+                "p2": {"id": "20113562"},
+            }
+            save_scored_pattern_result(
+                {
+                    "source_id": "30010096",
+                    "source_parameter": "patient_id",
+                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                    "path_count": 1,
+                    "scored_path_count": 1,
+                    "retrieval_context": {"score_end_date": "2022-05-22"},
+                    "scores": [
+                        {
+                            "path_index": 0,
+                            "score": {"total_score": 95.0},
+                            "path": {"row": game_row},
+                        }
+                    ],
+                },
+                scored_paths_dir,
+            )
+            save_scored_pattern_result(
+                {
+                    "source_id": "30010096",
+                    "source_parameter": "patient_id",
+                    "pattern": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+                    "path_count": 1,
+                    "scored_path_count": 1,
+                    "retrieval_context": {"score_end_date": "2022-05-22"},
+                    "scores": [
+                        {
+                            "path_index": 0,
+                            "score": {"total_score": 91.0},
+                            "path": {"row": disease_row},
+                        }
+                    ],
+                },
+                scored_paths_dir,
+            )
+            with patch(
+                "scripts.build_similar_user_candidates.Neo4jClient.from_config",
+            ) as mock_from_config, patch(
+                "scripts.build_similar_user_candidates.UserService",
+            ) as mock_user_service_cls:
+                mock_client_context = Mock()
+                mock_client_context.__enter__ = Mock(return_value=Mock())
+                mock_client_context.__exit__ = Mock(return_value=None)
+                mock_from_config.return_value = mock_client_context
+                mock_user_service = Mock()
+                mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date.return_value = [
+                    {"game": "真假句辨别", "scores_p1": ["90"], "scores_p2": ["90"]}
+                ]
+                mock_user_service.get_patient_game_set_comparison_by_end_date.return_value = [
+                    {"games1": [{"id": "348"}], "games2": [{"id": "348"}]}
+                ]
+                mock_user_service.get_patient_disease_set_comparison_by_end_date.return_value = [
+                    {"diseases1": [], "diseases2": []}
+                ]
+                mock_user_service.get_patient_symptom_set_comparison_by_end_date.return_value = [
+                    {"symptoms1": [], "symptoms2": []}
+                ]
+                mock_user_service.get_patient_unknown_set_comparison_by_end_date.return_value = [
+                    {"unknowns1": [], "unknowns2": []}
+                ]
+                mock_user_service_cls.return_value = mock_user_service
+
+                candidates = build_similar_user_candidates(
+                    "30010096",
+                    config_path=config_path,
+                    scored_paths_dir=scored_paths_dir,
+                )
+
+        self.assertEqual(
+            candidates["patterns"],
+            [
+                "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+            ],
+        )
+        self.assertEqual(candidates["candidate_count"], 1)
+        candidate = candidates["candidates"][0]
+        self.assertEqual(candidate["patient_id"], "20113562")
+        self.assertEqual(candidate["match_count"], 2)
+        self.assertEqual(
+            sorted(candidate["pattern_breakdown"]),
+            [
+                "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+                "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            ],
         )
 
     @patch("scripts.build_similar_user_candidates.LOGGER")
@@ -579,21 +707,20 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         expected = {
             "patient_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            "path_top_k": 5,
             "candidate_top_k": 2,
             "path_count": 10,
             "scored_path_count": 5,
             "retrieval_context": {
                 "split_training_date": "2022-01-13",
-                "candidate_scope": "候选相似用户来自训练日期小于等于 2022-01-13 的 top-5 path 去重结果，最终返回 top-2 候选用户",
+                "candidate_scope": "候选相似用户来自训练日期 < 2022-01-13 的已保存评分 path 去重结果，最终返回 top-2 候选用户",
             },
             "candidate_count": 2,
             "candidates": [{"patient_id": "20113562"}],
         }
         mock_parse_args.return_value = Mock(
             patient_id="30010096",
-            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
+            scored_paths_dir="data/scored_pattern_paths",
         )
         mock_build_candidates.return_value = expected
 
@@ -605,16 +732,20 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         )
         mock_build_candidates.assert_called_once_with(
             "30010096",
-            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config_path="config/settings.yaml",
+            scored_paths_dir="data/scored_pattern_paths",
         )
 
     @patch("scripts.run_similar_user_pipeline.time.perf_counter")
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
+    @patch("scripts.run_similar_user_pipeline.save_scored_pattern_result")
+    @patch("scripts.run_similar_user_pipeline.score_pattern_paths")
     @patch("scripts.run_similar_user_pipeline.run_pattern_path_flow")
     def test_run_similar_user_pipeline_builds_paths_then_candidates(
         self,
         mock_run_path_flow: Mock,
+        mock_score_paths: Mock,
+        mock_save_scored: Mock,
         mock_build_candidates: Mock,
         mock_perf_counter: Mock,
     ) -> None:
@@ -639,6 +770,12 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "candidates": [{"patient_id": "20113562"}],
         }
         mock_run_path_flow.return_value = path_result
+        scored_result = {
+            "source_id": "30010096",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "scores": [],
+        }
+        mock_score_paths.return_value = scored_result
         mock_build_candidates.return_value = candidate_result
 
         result = run_similar_user_pipeline(
@@ -675,15 +812,24 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         )
         mock_build_candidates.assert_called_once_with(
             "30010096",
+            config_path="config/custom.yaml",
+        )
+        mock_score_paths.assert_called_once_with(
+            "30010096",
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config_path="config/custom.yaml",
         )
+        mock_save_scored.assert_called_once_with(scored_result)
 
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
+    @patch("scripts.run_similar_user_pipeline.save_scored_pattern_result")
+    @patch("scripts.run_similar_user_pipeline.score_pattern_paths")
     @patch("scripts.run_similar_user_pipeline.run_pattern_path_flow")
     def test_run_similar_user_pipeline_rejects_empty_path_result(
         self,
         mock_run_path_flow: Mock,
+        mock_score_paths: Mock,
+        mock_save_scored: Mock,
         mock_build_candidates: Mock,
     ) -> None:
         mock_run_path_flow.return_value = {
@@ -713,12 +859,18 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             )
 
         mock_build_candidates.assert_not_called()
+        mock_score_paths.assert_not_called()
+        mock_save_scored.assert_not_called()
 
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
+    @patch("scripts.run_similar_user_pipeline.save_scored_pattern_result")
+    @patch("scripts.run_similar_user_pipeline.score_pattern_paths")
     @patch("scripts.run_similar_user_pipeline.run_pattern_path_flow")
     def test_run_similar_user_pipeline_can_skip_path_build(
         self,
         mock_run_path_flow: Mock,
+        mock_score_paths: Mock,
+        mock_save_scored: Mock,
         mock_build_candidates: Mock,
     ) -> None:
         candidate_result = {
@@ -726,6 +878,12 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "candidate_count": 1,
             "candidates": [{"patient_id": "20113562"}],
         }
+        scored_result = {
+            "source_id": "30010096",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "scores": [],
+        }
+        mock_score_paths.return_value = scored_result
         mock_build_candidates.return_value = candidate_result
 
         result = run_similar_user_pipeline(
@@ -740,9 +898,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["candidate_result"], candidate_result)
         self.assertTrue(result["skip_path_build"])
         mock_run_path_flow.assert_not_called()
-        mock_build_candidates.assert_called_once_with(
+        mock_score_paths.assert_called_once_with(
             "30010096",
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            config_path="config/custom.yaml",
+        )
+        mock_save_scored.assert_called_once_with(scored_result)
+        mock_build_candidates.assert_called_once_with(
+            "30010096",
             config_path="config/custom.yaml",
         )
 
@@ -765,7 +928,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "candidate_result": {
                 "patient_id": "30010096",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                "path_top_k": 50,
                 "candidate_top_k": 10,
                 "path_count": 230,
                 "scored_path_count": 50,
@@ -909,7 +1071,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "candidate_result": {
                 "patient_id": "40",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                "path_top_k": 50,
                 "candidate_top_k": 10,
                 "path_count": 230,
                 "scored_path_count": 50,
@@ -946,7 +1107,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             {
                 "patient_id": "40",
                 "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                "path_top_k": 50,
                 "candidate_top_k": 10,
                 "path_count": 230,
                 "scored_path_count": 50,

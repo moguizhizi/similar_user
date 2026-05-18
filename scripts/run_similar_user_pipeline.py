@@ -3,7 +3,8 @@
 这个脚本把相似用户候选生成流程串成一个入口：
 
 1. 默认先调用 `scripts/build_pattern_paths.py`，按时间窗口构建并保存固定模式 paths。
-2. 再调用候选构建逻辑，读取已保存 paths、完成 path 打分，并聚合候选相似用户。
+2. 调用 path 评分逻辑，读取已保存 paths 并保存 scored paths。
+3. 再调用候选构建逻辑，读取已保存 scored paths 并聚合候选相似用户。
 3. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
 
 如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过第一步，直接基于已有结果打分并构建候选用户。
@@ -36,7 +37,11 @@ from similar_user.utils.logger import get_logger
 
 from scripts.build_similar_user_candidates import build_similar_user_candidates
 from scripts.build_pattern_paths import run_pattern_path_flow
-from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
+from scripts.score_pattern_paths import (
+    DEFAULT_CONFIG_PATH,
+    save_scored_pattern_result,
+    score_pattern_paths,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -121,9 +126,15 @@ def run_similar_user_pipeline(
             window_days=window_days,
         )
 
-    candidate_result = build_similar_user_candidates(
+    scored_result = score_pattern_paths(
         patient_id,
         pattern=pattern,
+        config_path=resolved_config_path,
+    )
+    save_scored_pattern_result(scored_result)
+
+    candidate_result = build_similar_user_candidates(
+        patient_id,
         config_path=resolved_config_path,
     )
     result = {
@@ -198,7 +209,6 @@ def summarize_pipeline_result(
         candidate_summary = {
             "patient_id": candidate_result.get("patient_id"),
             "pattern": candidate_result.get("pattern"),
-            "path_top_k": candidate_result.get("path_top_k"),
             "candidate_top_k": candidate_result.get("candidate_top_k"),
             "path_count": candidate_result.get("path_count"),
             "scored_path_count": candidate_result.get("scored_path_count"),

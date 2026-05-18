@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...domain.graph_schema import PathPattern
-from ...domain.path_models import PatientTasksetTaskGameTaskTasksetPatientPath
+from ...domain.path_models import (
+    PatientTasksetDiseaseTasksetPatientPath,
+    PatientTasksetSymptomTasksetPatientPath,
+    PatientTasksetTaskGameTaskTasksetPatientPath,
+    PatientTasksetUnknownTasksetPatientPath,
+)
 from ...utils.logger import get_logger
 from ..user_service import UserService
 from .utils import (
@@ -26,7 +31,8 @@ class ScoredDomainPath:
 
     path_index: int | None
     total_score: float | None
-    path: PatientTasksetTaskGameTaskTasksetPatientPath
+    pattern: PathPattern
+    path: Any
 
 
 @dataclass
@@ -39,25 +45,53 @@ class SimilarUserCandidateService:
         self,
         scored_result: dict[str, Any],
         *,
-        path_top_k: int,
         candidate_top_k: int,
     ) -> dict[str, Any]:
         """Deduplicate candidate users from typed scored paths and rank by candidate_score."""
-        if path_top_k <= 0:
-            raise ValueError(f"path_top_k must be greater than 0, got {path_top_k}.")
+        return self.aggregate_candidates_from_multiple_scored_results(
+            [scored_result],
+            candidate_top_k=candidate_top_k,
+        )
+
+    def aggregate_candidates_from_multiple_scored_results(
+        self,
+        scored_results: list[dict[str, Any]],
+        *,
+        candidate_top_k: int,
+    ) -> dict[str, Any]:
+        """Deduplicate candidate users across multiple scored pattern results."""
         if candidate_top_k <= 0:
             raise ValueError(
                 f"candidate_top_k must be greater than 0, got {candidate_top_k}."
             )
+        if not scored_results:
+            raise ValueError("scored_results must contain at least one result.")
 
-        scored_domain_paths = _build_scored_domain_paths(scored_result)
-        score_end_date = _extract_score_end_date(scored_result)
-        path_window = _extract_path_window(scored_result)
+        scored_domain_paths: list[ScoredDomainPath] = []
+        for scored_result in scored_results:
+            scored_domain_paths.extend(_build_scored_domain_paths(scored_result))
+
+        first_result = scored_results[0]
+        score_end_date = _extract_score_end_date(first_result)
+        path_window = _extract_path_window(first_result)
+        source_id = first_result.get("source_id")
+        source_parameter = first_result.get("source_parameter")
+        source_patient_id = (
+            source_id
+            if source_parameter == "patient_id" and isinstance(source_id, str)
+            else None
+        )
+        patterns = [
+            result.get("pattern")
+            for result in scored_results
+            if isinstance(result.get("pattern"), str)
+        ]
         LOGGER.debug(
-            "Aggregating similar-user candidates: patient_id=%s, scored_path_count=%s, path_top_k=%s, candidate_top_k=%s, score_end_date=%s",
-            scored_result.get("patient_id"),
+            "Aggregating similar-user candidates: source_id=%s, source_parameter=%s, patterns=%s, scored_path_count=%s, candidate_top_k=%s, score_end_date=%s",
+            source_id,
+            source_parameter,
+            patterns,
             len(scored_domain_paths),
-            path_top_k,
             candidate_top_k,
             score_end_date,
         )
@@ -69,6 +103,7 @@ class SimilarUserCandidateService:
                 "match_count": 0,
                 "best_score": None,
                 "avg_score": 0.0,
+                "pattern_breakdown": {},
                 "candidate_score": None,
                 "score_details": {},
                 "_score_sum": 0.0,
@@ -77,6 +112,7 @@ class SimilarUserCandidateService:
 
         for scored_path in scored_domain_paths:
             candidate_id = scored_path.path.p2.id
+            pattern_key = scored_path.pattern.value
             bucket = candidate_buckets[candidate_id]
             bucket["patient_id"] = candidate_id
             bucket["match_count"] += 1
@@ -89,6 +125,26 @@ class SimilarUserCandidateService:
                     or scored_path.total_score > bucket["best_score"]
                 ):
                     bucket["best_score"] = scored_path.total_score
+            pattern_breakdown = bucket["pattern_breakdown"].setdefault(
+                pattern_key,
+                {
+                    "match_count": 0,
+                    "path_indices": [],
+                    "best_score": None,
+                    "avg_score": 0.0,
+                    "_score_sum": 0.0,
+                },
+            )
+            pattern_breakdown["match_count"] += 1
+            if isinstance(scored_path.path_index, int):
+                pattern_breakdown["path_indices"].append(scored_path.path_index)
+            if scored_path.total_score is not None:
+                pattern_breakdown["_score_sum"] += scored_path.total_score
+                if (
+                    pattern_breakdown["best_score"] is None
+                    or scored_path.total_score > pattern_breakdown["best_score"]
+                ):
+                    pattern_breakdown["best_score"] = scored_path.total_score
 
         candidates: list[dict[str, Any]] = []
         for bucket in candidate_buckets.values():
@@ -98,8 +154,19 @@ class SimilarUserCandidateService:
             bucket["avg_score"] = round(score_sum / match_count, 2) if match_count else 0.0
             if bucket["best_score"] is not None:
                 bucket["best_score"] = round(bucket["best_score"], 2)
+            for pattern_bucket in bucket["pattern_breakdown"].values():
+                pattern_match_count = pattern_bucket["match_count"]
+                pattern_score_sum = pattern_bucket.pop("_score_sum")
+                pattern_bucket["path_indices"] = sorted(set(pattern_bucket["path_indices"]))
+                pattern_bucket["avg_score"] = (
+                    round(pattern_score_sum / pattern_match_count, 2)
+                    if pattern_match_count
+                    else 0.0
+                )
+                if pattern_bucket["best_score"] is not None:
+                    pattern_bucket["best_score"] = round(pattern_bucket["best_score"], 2)
             candidate_score, score_details = self.calculate_candidate_score(
-                primary_patient_id=scored_result.get("patient_id"),
+                primary_patient_id=source_patient_id,
                 candidate_patient_id=bucket["patient_id"],
                 end_date=score_end_date,
             )
@@ -113,26 +180,29 @@ class SimilarUserCandidateService:
         )
         candidates = candidates[:candidate_top_k]
         LOGGER.info(
-            "Aggregated similar-user candidates: patient_id=%s, candidate_count=%s",
-            scored_result.get("patient_id"),
+            "Aggregated similar-user candidates: source_id=%s, source_parameter=%s, candidate_count=%s",
+            source_id,
+            source_parameter,
             len(candidates),
         )
 
         return {
-            "patient_id": scored_result.get("patient_id"),
-            "pattern": scored_result.get("pattern"),
-            "path_top_k": path_top_k,
+            "source_id": source_id,
+            "source_parameter": source_parameter,
+            "pattern": patterns[0] if len(patterns) == 1 else None,
+            "patterns": patterns,
             "candidate_top_k": candidate_top_k,
-            "path_count": scored_result.get("path_count", 0),
-            "scored_path_count": scored_result.get("scored_path_count", 0),
+            "path_count": sum(_extract_int(result.get("path_count")) for result in scored_results),
+            "scored_path_count": sum(
+                _extract_int(result.get("scored_path_count")) for result in scored_results
+            ),
             "retrieval_context": {
-                "base_date": _extract_base_date(scored_result),
+                "base_date": _extract_base_date(first_result),
                 "path_window": path_window,
                 "score_end_date": score_end_date,
                 "candidate_scope": _build_candidate_scope(
                     path_window,
                     score_end_date,
-                    path_top_k,
                     candidate_top_k,
                 ),
             },
@@ -313,6 +383,7 @@ def _build_scored_domain_paths(scored_result: dict[str, Any]) -> list[ScoredDoma
             ScoredDomainPath(
                 path_index=_extract_path_index(scored_path),
                 total_score=_extract_total_score(scored_path),
+                pattern=pattern,
                 path=domain_path,
             )
         )
@@ -365,7 +436,6 @@ def _extract_score_end_date(scored_result: dict[str, Any]) -> str | None:
 def _build_candidate_scope(
     path_window: dict[str, Any] | None,
     score_end_date: str | None,
-    path_top_k: int,
     candidate_top_k: int,
 ) -> str:
     """Build a concise candidate source description."""
@@ -375,18 +445,17 @@ def _build_candidate_scope(
         if start_date is not None and end_date is not None:
             return (
                 "候选相似用户来自训练日期 "
-                f">= {start_date} 且 < {end_date} 的 top-{path_top_k} path 去重结果，"
+                f">= {start_date} 且 < {end_date} 的已保存评分 path 去重结果，"
                 f"最终返回 top-{candidate_top_k} 候选用户"
             )
     if score_end_date is not None:
         return (
             "候选相似用户来自训练日期 "
-            f"< {score_end_date} 的 top-{path_top_k} path 去重结果，"
+            f"< {score_end_date} 的已保存评分 path 去重结果，"
             f"最终返回 top-{candidate_top_k} 候选用户"
         )
     return (
-        f"候选相似用户来自已保存检索集合的 top-{path_top_k} "
-        f"path 去重结果，最终返回 top-{candidate_top_k} 候选用户"
+        f"候选相似用户来自已保存评分 path 去重结果，最终返回 top-{candidate_top_k} 候选用户"
     )
 
 
@@ -401,7 +470,12 @@ def _coerce_supported_candidate_pattern(value: object) -> PathPattern:
         raise ValueError(
             f"Unsupported pattern for candidate aggregation: {value.strip()}"
         ) from exc
-    if pattern != PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT:
+    if pattern not in {
+        PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+        PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
+        PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT,
+        PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
+    }:
         raise ValueError(f"Unsupported pattern for candidate aggregation: {pattern.value}")
     return pattern
 
@@ -409,19 +483,29 @@ def _coerce_supported_candidate_pattern(value: object) -> PathPattern:
 def _build_domain_path_from_scored_path(
     scored_path: dict[str, Any],
     pattern: PathPattern,
-) -> PatientTasksetTaskGameTaskTasksetPatientPath | None:
+) -> Any:
     """Build one typed domain path from a scored raw path payload."""
     raw_path = scored_path.get("path")
     if not isinstance(raw_path, dict):
         return None
 
     path_payload = {**raw_path, "pattern": pattern.value}
-    if pattern == PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT:
-        try:
+    try:
+        if pattern == PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT:
             return PatientTasksetTaskGameTaskTasksetPatientPath.from_dict(path_payload)
-        except ValueError:
-            return None
+        if pattern == PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT:
+            return PatientTasksetDiseaseTasksetPatientPath.from_dict(path_payload)
+        if pattern == PathPattern.PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT:
+            return PatientTasksetSymptomTasksetPatientPath.from_dict(path_payload)
+        if pattern == PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT:
+            return PatientTasksetUnknownTasksetPatientPath.from_dict(path_payload)
+    except ValueError:
+        return None
     raise ValueError(f"Unsupported pattern for candidate aggregation: {pattern.value}")
+
+
+def _extract_int(value: object) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def _candidate_score_sort_value(value: object) -> float:
