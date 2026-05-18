@@ -8,7 +8,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.build_similar_user_candidates import build_similar_user_candidates, main
+from scripts.build_similar_user_candidates import (
+    build_similar_user_candidates,
+    load_saved_scored_pattern_result,
+    main,
+)
 from scripts.score_pattern_paths import save_scored_pattern_result
 from scripts.run_similar_user_pipeline import (
     main as pipeline_main,
@@ -694,6 +698,21 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             ],
         )
+
+    @patch("scripts.build_similar_user_candidates.LOGGER")
+    def test_load_saved_scored_pattern_result_warns_when_missing(
+        self,
+        mock_logger: Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = load_saved_scored_pattern_result(
+                "30010096",
+                pattern="patient_game_patient",
+                scored_paths_dir=Path(temp_dir) / "scored_pattern_paths",
+            )
+
+        self.assertIsNone(result)
+        mock_logger.warning.assert_called_once()
 
     @patch("scripts.build_similar_user_candidates.LOGGER")
     @patch("scripts.build_similar_user_candidates.parse_args")
