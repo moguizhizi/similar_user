@@ -51,8 +51,13 @@ class PatternPathStorageSettings:
 class CandidateRankingSettings:
     """Configuration for ranking similar-user candidates from scored paths."""
 
-    path_top_k: int = 50
     candidate_top_k: int = 10
+    patterns: tuple[str, ...] = (
+        "patient_game_patient",
+        "patient_disease_patient",
+        "patient_symptom_patient",
+        "patient_unknown_patient",
+    )
 
 
 @dataclass(frozen=True)
@@ -202,16 +207,29 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     if not isinstance(output_dir, str) or not output_dir.strip():
         raise ValueError("pattern_path_storage output_dir must be a non-empty string.")
 
-    path_top_k = candidate_ranking_data.get("path_top_k", 50)
     candidate_top_k = candidate_ranking_data.get("candidate_top_k", 10)
-    for field_name, value in (
-        ("path_top_k", path_top_k),
-        ("candidate_top_k", candidate_top_k),
+    patterns = candidate_ranking_data.get(
+        "patterns",
+        [
+            "patient_game_patient",
+            "patient_disease_patient",
+            "patient_symptom_patient",
+            "patient_unknown_patient",
+        ],
+    )
+    if (
+        not isinstance(candidate_top_k, int)
+        or isinstance(candidate_top_k, bool)
+        or candidate_top_k <= 0
     ):
-        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-            raise ValueError(
-                f"candidate_ranking {field_name} must be a positive integer."
-            )
+        raise ValueError("candidate_ranking candidate_top_k must be a positive integer.")
+    if not isinstance(patterns, list) or not patterns:
+        raise ValueError("candidate_ranking patterns must be a non-empty list.")
+    normalized_patterns = []
+    for pattern in patterns:
+        if not isinstance(pattern, str) or not pattern.strip():
+            raise ValueError("candidate_ranking patterns must contain non-empty strings.")
+        normalized_patterns.append(pattern.strip())
 
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
@@ -223,7 +241,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         ),
         pattern_path_storage=PatternPathStorageSettings(output_dir=output_dir.strip()),
         candidate_ranking=CandidateRankingSettings(
-            path_top_k=path_top_k,
             candidate_top_k=candidate_top_k,
+            patterns=tuple(normalized_patterns),
         ),
     )

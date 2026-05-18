@@ -25,7 +25,11 @@ query:
   pattern_path_storage:
     output_dir: "data/pattern_paths"
   candidate_ranking:
-    path_top_k: 50
+    patterns:
+      - "patient_game_patient"
+      - "patient_disease_patient"
+      - "patient_symptom_patient"
+      - "patient_unknown_patient"
     candidate_top_k: 10
 
 similarity:
