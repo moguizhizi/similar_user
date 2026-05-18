@@ -77,7 +77,7 @@ def build_similar_user_candidates(
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     ranking_settings = load_query_settings(resolved_config_path).candidate_ranking
     selected_patterns = tuple(ranking_settings.patterns)
-    LOGGER.debug(
+    LOGGER.info(
         "Building similar-user candidates from saved scored paths: patient_id=%s, patterns=%s, candidate_top_k=%s, config_path=%s, scored_paths_dir=%s",
         patient_id,
         selected_patterns,
@@ -95,6 +95,8 @@ def build_similar_user_candidates(
         )
         candidate_service = SimilarUserCandidateService(user_service=user_service)
         scored_results = []
+        loaded_patterns = []
+        skipped_patterns = []
         for item in selected_patterns:
             scored_result = load_saved_scored_pattern_result(
                 patient_id,
@@ -103,6 +105,17 @@ def build_similar_user_candidates(
             )
             if scored_result is not None:
                 scored_results.append(scored_result)
+                loaded_patterns.append(scored_result.get("pattern", item))
+            else:
+                skipped_patterns.append(item)
+        LOGGER.info(
+            "Loaded scored pattern results: patient_id=%s, loaded_count=%s, skipped_count=%s, loaded_patterns=%s, skipped_patterns=%s",
+            patient_id,
+            len(loaded_patterns),
+            len(skipped_patterns),
+            loaded_patterns,
+            skipped_patterns,
+        )
         if not scored_results:
             raise FileNotFoundError(
                 f"No saved scored detail found for source_id {patient_id}: "
@@ -112,7 +125,7 @@ def build_similar_user_candidates(
             scored_results,
             candidate_top_k=ranking_settings.candidate_top_k,
         )
-    LOGGER.debug(
+    LOGGER.info(
         "Built similar-user candidates from scored paths: patient_id=%s, candidate_count=%s, scored_path_count=%s",
         patient_id,
         result.get("candidate_count"),
@@ -169,7 +182,6 @@ def main() -> int:
         LOGGER.exception("Build similar user candidates from scored paths failed: %s", exc)
         return 1
 
-    LOGGER.info(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     return 0
 
 

@@ -717,7 +717,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
     @patch("scripts.build_similar_user_candidates.LOGGER")
     @patch("scripts.build_similar_user_candidates.parse_args")
     @patch("scripts.build_similar_user_candidates.build_similar_user_candidates")
-    def test_main_logs_candidate_result(
+    def test_main_builds_candidate_result(
         self,
         mock_build_candidates: Mock,
         mock_parse_args: Mock,
@@ -746,9 +746,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         exit_code = main()
 
         self.assertEqual(exit_code, 0)
-        mock_logger.info.assert_called_once_with(
-            json.dumps(expected, ensure_ascii=False, indent=2, default=str)
-        )
+        mock_logger.info.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
