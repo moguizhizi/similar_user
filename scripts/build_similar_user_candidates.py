@@ -175,12 +175,12 @@ def save_similar_user_candidates_result(
     result: dict[str, Any],
     output_dir: str | Path = DEFAULT_CANDIDATES_DIR,
 ) -> dict[str, Path]:
-    """Save full candidate details and a compact summary as two JSON files."""
+    """Save candidate score details and summary as two JSON files."""
     detail_path, summary_path = get_similar_user_candidate_output_paths(
         result,
         output_dir,
     )
-    _write_json_atomic(detail_path, result)
+    _write_json_atomic(detail_path, build_similar_user_candidate_detail(result))
     _write_json_atomic(summary_path, build_similar_user_candidate_summary(result))
     LOGGER.debug(
         "Saved similar-user candidates result: source_id=%s, detail_path=%s, summary_path=%s",
@@ -206,38 +206,97 @@ def get_similar_user_candidate_output_paths(
 
 
 def build_similar_user_candidate_summary(result: dict[str, Any]) -> dict[str, Any]:
-    """Build a compact candidate summary for quick inspection."""
+    """Build candidate summary from calculated candidate scores."""
+    return _build_candidate_score_output(result, include_score_details=False)
+
+
+def build_similar_user_candidate_detail(result: dict[str, Any]) -> dict[str, Any]:
+    """Build candidate detail from calculated candidate scores."""
+    return _build_candidate_score_output(result, include_score_details=True)
+
+
+def _build_candidate_score_output(
+    result: dict[str, Any],
+    *,
+    include_score_details: bool,
+) -> dict[str, Any]:
+    """Build saved candidate output from candidate_score and score_details."""
     raw_candidates = result.get("candidates")
     candidates = raw_candidates if isinstance(raw_candidates, list) else []
-    summary_candidates = []
+    score_candidates = []
     for rank, item in enumerate(candidates, start=1):
         if not isinstance(item, dict):
             continue
-        pattern_breakdown = item.get("pattern_breakdown")
-        pattern_data = pattern_breakdown if isinstance(pattern_breakdown, dict) else {}
-        summary_candidates.append(
-            {
-                "rank": rank,
-                "patient_id": item.get("patient_id"),
-                "candidate_score": item.get("candidate_score"),
-                "match_count": item.get("match_count"),
-                "best_score": item.get("best_score"),
-                "avg_score": item.get("avg_score"),
-                "pattern_count": len(pattern_data),
-                "patterns": sorted(pattern_data),
-            }
-        )
+        score_details = item.get("score_details")
+        score_candidate = {
+            "rank": rank,
+            "patient_id": item.get("patient_id"),
+            "candidate_score": item.get("candidate_score"),
+        }
+        if include_score_details:
+            score_candidate["score_details"] = score_details
+        else:
+            score_candidate["score_summary"] = _build_candidate_score_summary(
+                score_details
+            )
+        score_candidates.append(score_candidate)
     return {
         "source_id": result.get("source_id"),
         "source_parameter": result.get("source_parameter"),
-        "patterns": result.get("patterns"),
         "candidate_top_k": result.get("candidate_top_k"),
-        "path_count": result.get("path_count"),
-        "scored_path_count": result.get("scored_path_count"),
         "retrieval_context": result.get("retrieval_context"),
         "candidate_count": result.get("candidate_count"),
-        "candidates": summary_candidates,
+        "candidates": score_candidates,
     }
+
+
+def _build_candidate_score_summary(score_details: object) -> dict[str, Any]:
+    details = score_details if isinstance(score_details, dict) else {}
+    common_game_score_similarity = _extract_nested_value(
+        details,
+        "common_game_score_similarity",
+        "similarity",
+    )
+    game_similarity_with_diversity_score = _extract_nested_value(
+        details,
+        "game_similarity_with_diversity_score",
+        "score",
+    )
+    set_same_score = _extract_nested_value(details, "set_same_scores", "score")
+    return {
+        "common_game_score_similarity": common_game_score_similarity,
+        "game_similarity_with_diversity_score": game_similarity_with_diversity_score,
+        "set_same_score": {
+            "total": set_same_score,
+            "disease": _extract_nested_value(
+                details,
+                "set_same_scores",
+                "disease",
+                "score",
+            ),
+            "symptom": _extract_nested_value(
+                details,
+                "set_same_scores",
+                "symptom",
+                "score",
+            ),
+            "unknown": _extract_nested_value(
+                details,
+                "set_same_scores",
+                "unknown",
+                "score",
+            ),
+        },
+    }
+
+
+def _extract_nested_value(data: dict[str, Any], *keys: str) -> Any:
+    current: Any = data
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
 
 
 def _normalize_required_string(value: object, field_name: str) -> str:
