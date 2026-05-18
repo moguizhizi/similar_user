@@ -94,14 +94,20 @@ def build_similar_user_candidates(
             )
         )
         candidate_service = SimilarUserCandidateService(user_service=user_service)
-        scored_results = [
-            load_saved_scored_pattern_result(
+        scored_results = []
+        for item in selected_patterns:
+            scored_result = load_saved_scored_pattern_result(
                 patient_id,
                 pattern=item,
                 scored_paths_dir=scored_paths_dir,
             )
-            for item in selected_patterns
-        ]
+            if scored_result is not None:
+                scored_results.append(scored_result)
+        if not scored_results:
+            raise FileNotFoundError(
+                f"No saved scored detail found for source_id {patient_id}: "
+                f"patterns={selected_patterns}, scored_paths_dir={scored_paths_dir}"
+            )
         result = candidate_service.aggregate_candidates_from_multiple_scored_results(
             scored_results,
             candidate_top_k=ranking_settings.candidate_top_k,
@@ -120,7 +126,7 @@ def load_saved_scored_pattern_result(
     *,
     pattern: str,
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Load one saved scored detail file produced by score_pattern_paths.py."""
     normalized_source_id = _normalize_required_string(source_id, "source_id")
     normalized_pattern = resolve_path_pattern(pattern).value
@@ -131,9 +137,12 @@ def load_saved_scored_pattern_result(
         / f"{normalized_source_id}.detail.json"
     )
     if not detail_path.exists():
-        raise FileNotFoundError(
-            f"Saved scored detail not found for pattern {normalized_pattern}: {detail_path}"
+        LOGGER.warning(
+            "Saved scored detail not found for pattern %s: %s",
+            normalized_pattern,
+            detail_path,
         )
+        return None
     with detail_path.open("r", encoding="utf-8") as file:
         data = json.load(file)
     if not isinstance(data, dict):
