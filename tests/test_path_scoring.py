@@ -13,6 +13,7 @@ from scripts.score_pattern_paths import (
     main,
     parse_args,
     save_scored_pattern_result,
+    score_configured_pattern_paths,
     score_pattern_paths,
 )
 from src.similar_user.data_access.pattern_registry import available_path_pattern_aliases
@@ -105,6 +106,37 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(args.source_id, "30010096")
         self.assertEqual(args.pattern, "patient_game_patient")
+
+    @patch(
+        "sys.argv",
+        [
+            "score_pattern_paths.py",
+            "--source-id",
+            "30010096",
+            "--patterns-from-config",
+        ],
+    )
+    def test_parse_args_accepts_patterns_from_config(self) -> None:
+        args = parse_args()
+
+        self.assertEqual(args.source_id, "30010096")
+        self.assertTrue(args.patterns_from_config)
+        self.assertIsNone(args.pattern)
+
+    @patch(
+        "sys.argv",
+        [
+            "score_pattern_paths.py",
+            "--source-id",
+            "30010096",
+            "--pattern",
+            "patient_game_patient",
+            "--patterns-from-config",
+        ],
+    )
+    def test_parse_args_rejects_pattern_with_patterns_from_config(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
 
     def test_parse_args_accepts_all_public_pattern_aliases(self) -> None:
         for pattern in available_path_pattern_aliases():
@@ -1066,6 +1098,86 @@ class PathScoringTest(unittest.TestCase):
                     config_path=config_path,
                 )
 
+    @patch("scripts.score_pattern_paths.score_pattern_paths")
+    def test_score_configured_pattern_paths_uses_yaml_patterns(
+        self,
+        mock_score_paths: Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "candidate_ranking:",
+                        "  patterns:",
+                        "    - patient_game_patient",
+                        "    - patient_disease_patient",
+                        "  candidate_top_k: 10",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            mock_score_paths.side_effect = [
+                {"pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"},
+                {"pattern": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT"},
+            ]
+
+            results = score_configured_pattern_paths(
+                "30010096",
+                config_path=config_path,
+                top_k=50,
+            )
+
+        self.assertEqual(
+            results,
+            [
+                {"pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"},
+                {"pattern": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT"},
+            ],
+        )
+        self.assertEqual(mock_score_paths.call_count, 2)
+        mock_score_paths.assert_any_call(
+            "30010096",
+            pattern="patient_game_patient",
+            config_path=config_path,
+            path_index=None,
+            top_k=50,
+        )
+        mock_score_paths.assert_any_call(
+            "30010096",
+            pattern="patient_disease_patient",
+            config_path=config_path,
+            path_index=None,
+            top_k=50,
+        )
+
+    def test_score_configured_pattern_paths_rejects_direct_patterns(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "candidate_ranking:",
+                        "  patterns:",
+                        "    - disease_patient",
+                        "  candidate_top_k: 10",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "patient-source patterns"):
+                score_configured_pattern_paths(
+                    "AU_DIS_0013",
+                    config_path=config_path,
+                )
+
     @patch("scripts.score_pattern_paths.LOGGER")
     @patch("scripts.score_pattern_paths.parse_args")
     def test_main_prints_scored_result(
@@ -1235,6 +1347,74 @@ class PathScoringTest(unittest.TestCase):
         mock_save_scored.assert_not_called()
         mock_logger.info.assert_called_once_with(
             json.dumps(expected, ensure_ascii=False, indent=2, default=str)
+        )
+
+    @patch("scripts.score_pattern_paths.LOGGER")
+    @patch("scripts.score_pattern_paths.save_scored_pattern_result")
+    @patch("scripts.score_pattern_paths.score_configured_pattern_paths")
+    @patch("scripts.score_pattern_paths.parse_args")
+    def test_main_scores_configured_patterns_and_saves_each_result(
+        self,
+        mock_parse_args: Mock,
+        mock_score_configured: Mock,
+        mock_save_scored: Mock,
+        mock_logger: Mock,
+    ) -> None:
+        results = [
+            {
+                "source_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "scores": [],
+            },
+            {
+                "source_id": "30010096",
+                "pattern": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT",
+                "scores": [],
+            },
+        ]
+        mock_parse_args.return_value = Mock(
+            source_id="30010096",
+            pattern=None,
+            patterns_from_config=True,
+            config="config/settings.yaml",
+            path_index=None,
+            top_k=50,
+            age=None,
+            education=None,
+            scored_paths_dir="data/scored_pattern_paths",
+        )
+        mock_score_configured.return_value = results
+        mock_save_scored.side_effect = [
+            {
+                "detail": Path("game.detail.json"),
+                "summary": Path("game.summary.json"),
+            },
+            {
+                "detail": Path("disease.detail.json"),
+                "summary": Path("disease.summary.json"),
+            },
+        ]
+
+        exit_code = main()
+
+        self.assertEqual(exit_code, 0)
+        mock_score_configured.assert_called_once_with(
+            "30010096",
+            config_path="config/settings.yaml",
+            path_index=None,
+            top_k=50,
+        )
+        self.assertEqual(mock_save_scored.call_count, 2)
+        mock_save_scored.assert_any_call(
+            results[0],
+            output_dir="data/scored_pattern_paths",
+        )
+        mock_save_scored.assert_any_call(
+            results[1],
+            output_dir="data/scored_pattern_paths",
+        )
+        mock_logger.info.assert_any_call(
+            json.dumps(results, ensure_ascii=False, indent=2, default=str)
         )
 
     @patch("scripts.score_pattern_paths.LOGGER")
