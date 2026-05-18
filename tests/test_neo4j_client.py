@@ -11,7 +11,10 @@ from unittest.mock import Mock, patch
 from config.settings import load_neo4j_settings
 from scripts.build_pattern_paths import parse_args
 from scripts.build_pattern_paths import main as pattern_path_main
-from scripts.build_pattern_paths import run_pattern_path_flow
+from scripts.build_pattern_paths import (
+    run_configured_pattern_path_flows,
+    run_pattern_path_flow,
+)
 from scripts.debug_query import main, run_debug_query
 from src.similar_user.data_access.neo4j_client import Neo4jClient
 
@@ -196,6 +199,45 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             parse_args()
 
+    @patch(
+        "sys.argv",
+        [
+            "build_pattern_paths.py",
+            "--source-id",
+            "30010096",
+            "--patterns-from-config",
+            "--base-date",
+            "2022-05-22",
+            "--window-days",
+            "14",
+        ],
+    )
+    def test_parse_args_accepts_patterns_from_config(self) -> None:
+        args = parse_args()
+
+        self.assertEqual(args.source_id, "30010096")
+        self.assertTrue(args.patterns_from_config)
+        self.assertIsNone(args.pattern)
+
+    @patch(
+        "sys.argv",
+        [
+            "build_pattern_paths.py",
+            "--source-id",
+            "30010096",
+            "--pattern",
+            "patient_game_patient",
+            "--patterns-from-config",
+            "--base-date",
+            "2022-05-22",
+            "--window-days",
+            "14",
+        ],
+    )
+    def test_parse_args_rejects_pattern_with_patterns_from_config(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args()
+
     @patch("scripts.build_pattern_paths.LOGGER")
     @patch("scripts.build_pattern_paths.save_pattern_result")
     @patch("scripts.build_pattern_paths.Neo4jClient.from_config")
@@ -265,6 +307,92 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
         )
         mock_logger.info.assert_called()
 
+    @patch("scripts.build_pattern_paths.run_pattern_path_flow")
+    def test_run_configured_pattern_path_flows_uses_yaml_patterns(
+        self,
+        mock_run_flow: Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "candidate_ranking:",
+                        "  patterns:",
+                        "    - patient_game_patient",
+                        "    - patient_disease_patient",
+                        "  candidate_top_k: 10",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            mock_run_flow.side_effect = [
+                {"pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"},
+                {"pattern": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT"},
+            ]
+
+            results = run_configured_pattern_path_flows(
+                "30010096",
+                config_path=config_path,
+                base_date="2022-05-22",
+                window_days=14,
+                query_family="date_window",
+            )
+
+        self.assertEqual(
+            results,
+            [
+                {"pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"},
+                {"pattern": "PATIENT_TASKSET_DISEASE_TASKSET_PATIENT"},
+            ],
+        )
+        self.assertEqual(mock_run_flow.call_count, 2)
+        mock_run_flow.assert_any_call(
+            "30010096",
+            config_path=config_path,
+            base_date="2022-05-22",
+            window_days=14,
+            pattern="patient_game_patient",
+            query_family="date_window",
+        )
+        mock_run_flow.assert_any_call(
+            "30010096",
+            config_path=config_path,
+            base_date="2022-05-22",
+            window_days=14,
+            pattern="patient_disease_patient",
+            query_family="date_window",
+        )
+
+    def test_run_configured_pattern_path_flows_rejects_direct_patterns(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "candidate_ranking:",
+                        "  patterns:",
+                        "    - disease_patient",
+                        "  candidate_top_k: 10",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "patient-source patterns"):
+                run_configured_pattern_path_flows(
+                    "AU_DIS_0013",
+                    config_path=config_path,
+                    base_date="2022-05-22",
+                    window_days=14,
+                )
+
     @patch("scripts.build_pattern_paths.LOGGER")
     @patch("scripts.build_pattern_paths.run_pattern_path_flow")
     @patch("scripts.build_pattern_paths.parse_args")
@@ -298,6 +426,37 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             base_date="2022-05-22",
             window_days=14,
             pattern="patient_game_patient",
+            query_family="date_window",
+        )
+        mock_logger.exception.assert_not_called()
+
+    @patch("scripts.build_pattern_paths.LOGGER")
+    @patch("scripts.build_pattern_paths.run_configured_pattern_path_flows")
+    @patch("scripts.build_pattern_paths.parse_args")
+    def test_main_runs_configured_pattern_flows(
+        self,
+        mock_parse_args: Mock,
+        mock_run_configured: Mock,
+        mock_logger: Mock,
+    ) -> None:
+        mock_parse_args.return_value = Mock(
+            source_id="30010096",
+            config="config/settings.yaml",
+            base_date="2022-05-22",
+            window_days=14,
+            pattern=None,
+            patterns_from_config=True,
+            query_family="date_window",
+        )
+
+        exit_code = pattern_path_main()
+
+        self.assertEqual(exit_code, 0)
+        mock_run_configured.assert_called_once_with(
+            "30010096",
+            config_path="config/settings.yaml",
+            base_date="2022-05-22",
+            window_days=14,
             query_family="date_window",
         )
         mock_logger.exception.assert_not_called()
