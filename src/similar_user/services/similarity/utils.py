@@ -183,6 +183,31 @@ def calculate_pearson_correlation(
     return numerator / denominator
 
 
+def calculate_relative_l2_distance(
+    matrix_a: Sequence[object],
+    matrix_b: Sequence[object],
+    *,
+    epsilon: float = 1e-8,
+) -> float:
+    """Calculate sqrt(sum(((a_ij - b_ij) / (abs(a_ij) + epsilon))^2))."""
+    if not isinstance(epsilon, (int, float)) or isinstance(epsilon, bool):
+        raise ValueError("epsilon must be a positive number.")
+    if epsilon <= 0 or not math.isfinite(float(epsilon)):
+        raise ValueError("epsilon must be a positive number.")
+
+    rows_a = _coerce_numeric_matrix(matrix_a, "matrix_a")
+    rows_b = _coerce_numeric_matrix(matrix_b, "matrix_b")
+    _validate_same_matrix_shape(rows_a, rows_b)
+
+    squared_sum = 0.0
+    for row_a, row_b in zip(rows_a, rows_b):
+        for value_a, value_b in zip(row_a, row_b):
+            relative_difference = (value_a - value_b) / (abs(value_a) + epsilon)
+            squared_sum += relative_difference**2
+
+    return math.sqrt(squared_sum)
+
+
 def _coerce_game_set(games: Sequence[object]) -> set[str]:
     """Convert game identifiers to a normalized set."""
     return _coerce_item_set(games)
@@ -224,6 +249,65 @@ def _coerce_numeric_scores(scores: Sequence[object]) -> list[float]:
             numeric_scores.append(numeric_score)
 
     return numeric_scores
+
+
+def _coerce_numeric_matrix(matrix: Sequence[object], field_name: str) -> list[list[float]]:
+    if isinstance(matrix, (str, bytes)) or not isinstance(matrix, Sequence):
+        raise ValueError(f"{field_name} must be a non-empty sequence.")
+    if not matrix:
+        raise ValueError(f"{field_name} must be a non-empty sequence.")
+
+    if _is_scalar_numeric_value(matrix[0]):
+        return [[_coerce_required_float(value, field_name) for value in matrix]]
+
+    rows: list[list[float]] = []
+    for row_index, row in enumerate(matrix):
+        row_name = f"{field_name}[{row_index}]"
+        if isinstance(row, (str, bytes)) or not isinstance(row, Sequence):
+            raise ValueError(f"{row_name} must be a non-empty sequence.")
+        if not row:
+            raise ValueError(f"{row_name} must be a non-empty sequence.")
+        rows.append([_coerce_required_float(value, row_name) for value in row])
+
+    return rows
+
+
+def _validate_same_matrix_shape(
+    matrix_a: list[list[float]],
+    matrix_b: list[list[float]],
+) -> None:
+    if len(matrix_a) != len(matrix_b):
+        raise ValueError("matrix_a and matrix_b must have the same shape.")
+    for row_a, row_b in zip(matrix_a, matrix_b):
+        if len(row_a) != len(row_b):
+            raise ValueError("matrix_a and matrix_b must have the same shape.")
+
+
+def _coerce_required_float(value: object, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must contain only finite numeric values.")
+    if isinstance(value, (int, float)):
+        numeric_value = float(value)
+    elif isinstance(value, str):
+        stripped_value = value.strip()
+        if not stripped_value:
+            raise ValueError(f"{field_name} must contain only finite numeric values.")
+        try:
+            numeric_value = float(stripped_value)
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name} must contain only finite numeric values."
+            ) from exc
+    else:
+        raise ValueError(f"{field_name} must contain only finite numeric values.")
+
+    if not math.isfinite(numeric_value):
+        raise ValueError(f"{field_name} must contain only finite numeric values.")
+    return numeric_value
+
+
+def _is_scalar_numeric_value(value: object) -> bool:
+    return isinstance(value, (int, float, str)) and not isinstance(value, bool)
 
 
 def _calculate_linear_trend(scores: Sequence[float]) -> float:
