@@ -31,6 +31,13 @@ query:
       - "patient_symptom_patient"
       - "patient_unknown_patient"
     candidate_top_k: 10
+    scoring:
+      common_game_score_similarity: true
+      game_similarity_with_diversity_score: true
+      set_same:
+        disease: false
+        symptom: false
+        unknown: false
 
 similarity:
   top_k: 20

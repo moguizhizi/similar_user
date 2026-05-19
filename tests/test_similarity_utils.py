@@ -11,6 +11,7 @@ from src.similar_user.services.similarity.utils import (
     calculate_game_series_features,
     calculate_game_similarity_with_diversity_score,
     calculate_pearson_correlation,
+    calculate_relative_l2_distance,
     calculate_set_same_score,
 )
 
@@ -219,6 +220,58 @@ class SimilarityUtilsTest(unittest.TestCase):
             "vector_a and vector_b must have the same length.",
         ):
             calculate_cosine_similarity([1.0, 2.0], [1.0])
+
+    def test_calculate_relative_l2_distance_uses_relative_matrix_difference(
+        self,
+    ) -> None:
+        result = calculate_relative_l2_distance(
+            [[2.0, -4.0], [10.0, 5.0]],
+            [[1.0, -2.0], [12.0, 0.0]],
+            epsilon=1.0,
+        )
+
+        expected = (
+            ((2.0 - 1.0) / (abs(2.0) + 1.0)) ** 2
+            + ((-4.0 - -2.0) / (abs(-4.0) + 1.0)) ** 2
+            + ((10.0 - 12.0) / (abs(10.0) + 1.0)) ** 2
+            + ((5.0 - 0.0) / (abs(5.0) + 1.0)) ** 2
+        ) ** 0.5
+        self.assertAlmostEqual(result, expected)
+
+    def test_calculate_relative_l2_distance_accepts_vectors(self) -> None:
+        result = calculate_relative_l2_distance([1, "2", 4], [2, 1, 8], epsilon=1)
+
+        expected = (
+            ((1 - 2) / (abs(1) + 1)) ** 2
+            + ((2 - 1) / (abs(2) + 1)) ** 2
+            + ((4 - 8) / (abs(4) + 1)) ** 2
+        ) ** 0.5
+        self.assertAlmostEqual(result, expected)
+
+    def test_calculate_relative_l2_distance_uses_epsilon_for_zero_baseline(
+        self,
+    ) -> None:
+        result = calculate_relative_l2_distance([0.0], [0.5], epsilon=0.5)
+
+        self.assertAlmostEqual(result, 1.0)
+
+    def test_calculate_relative_l2_distance_rejects_shape_mismatch(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "matrix_a and matrix_b must have the same shape.",
+        ):
+            calculate_relative_l2_distance([[1.0, 2.0]], [[1.0]])
+
+    def test_calculate_relative_l2_distance_rejects_non_numeric_values(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "matrix_a\\[0\\] must contain only finite numeric values.",
+        ):
+            calculate_relative_l2_distance([[1.0, "bad"]], [[1.0, 2.0]])
+
+    def test_calculate_relative_l2_distance_rejects_invalid_epsilon(self) -> None:
+        with self.assertRaisesRegex(ValueError, "epsilon must be a positive number."):
+            calculate_relative_l2_distance([1.0], [2.0], epsilon=0.0)
 
     def test_calculate_common_game_score_similarity_uses_query_records(self) -> None:
         result = calculate_common_game_score_similarity(

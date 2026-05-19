@@ -6,6 +6,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
+from config.settings import CandidateScoringSettings, SetSameScoringSettings
+
 from ...domain.graph_schema import PathPattern
 from ...domain.path_models import (
     PatientTasksetDiseaseTasksetPatientPath,
@@ -46,11 +48,13 @@ class SimilarUserCandidateService:
         scored_result: dict[str, Any],
         *,
         candidate_top_k: int,
+        scoring_settings: CandidateScoringSettings | None = None,
     ) -> dict[str, Any]:
         """Deduplicate candidate users from typed scored paths and rank by candidate_score."""
         return self.aggregate_candidates_from_multiple_scored_results(
             [scored_result],
             candidate_top_k=candidate_top_k,
+            scoring_settings=scoring_settings,
         )
 
     def aggregate_candidates_from_multiple_scored_results(
@@ -58,6 +62,7 @@ class SimilarUserCandidateService:
         scored_results: list[dict[str, Any]],
         *,
         candidate_top_k: int,
+        scoring_settings: CandidateScoringSettings | None = None,
     ) -> dict[str, Any]:
         """Deduplicate candidate users across multiple scored pattern results."""
         if candidate_top_k <= 0:
@@ -66,6 +71,7 @@ class SimilarUserCandidateService:
             )
         if not scored_results:
             raise ValueError("scored_results must contain at least one result.")
+        resolved_scoring_settings = scoring_settings or CandidateScoringSettings()
 
         scored_domain_paths: list[ScoredDomainPath] = []
         for scored_result in scored_results:
@@ -166,6 +172,7 @@ class SimilarUserCandidateService:
                 primary_patient_id=source_patient_id,
                 candidate_patient_id=bucket["patient_id"],
                 end_date=score_end_date,
+                scoring_settings=resolved_scoring_settings,
             )
             bucket["candidate_score"] = candidate_score
             bucket["score_details"] = score_details
@@ -202,6 +209,9 @@ class SimilarUserCandidateService:
                     score_end_date,
                     candidate_top_k,
                 ),
+                "candidate_scoring": _build_candidate_scoring_context(
+                    resolved_scoring_settings
+                ),
             },
             "candidate_count": len(candidates),
             "candidates": candidates,
@@ -213,8 +223,10 @@ class SimilarUserCandidateService:
         primary_patient_id: object,
         candidate_patient_id: object,
         end_date: str | None,
+        scoring_settings: CandidateScoringSettings | None = None,
     ) -> tuple[float | None, dict[str, Any]]:
         """Calculate candidate score from similarity, set sameness, and game diversity."""
+        resolved_scoring_settings = scoring_settings or CandidateScoringSettings()
         if (
             self.user_service is None
             or not isinstance(primary_patient_id, str)
@@ -231,57 +243,42 @@ class SimilarUserCandidateService:
                 self.user_service is not None,
             )
             return None, {
-                "common_game_score_similarity": None,
+                "scoring_components": _build_candidate_scoring_context(
+                    resolved_scoring_settings
+                ),
                 "reason": "missing user_service or score_end_date",
             }
 
-        records = self.user_service.get_patient_game_norm_score_series_comparison_by_end_date(
-            primary_patient_id.strip(),
-            candidate_patient_id.strip(),
-            end_date,
-        )
-        common_game_score_similarity = calculate_common_game_score_similarity(records)
-        similarity = common_game_score_similarity.get("similarity")
-        similarity_score = (
-            round(float(similarity), 3)
-            if isinstance(similarity, (int, float))
-            else None
-        )
-        common_game_score_similarity = {
-            **common_game_score_similarity,
-            "similarity": similarity_score,
-        }
-        game_rows = self.user_service.get_patient_game_set_comparison_by_end_date(
-            primary_patient_id.strip(),
-            candidate_patient_id.strip(),
-            end_date,
-        )
-        source_games, candidate_games = _extract_node_comparison_keys(
-            game_rows,
-            "games1",
-            "games2",
-        )
-        game_similarity_with_diversity_score = _round_numeric_values(
-            calculate_game_similarity_with_diversity_score(
-                source_games,
-                candidate_games,
+        common_game_score_similarity, similarity_score = (
+            self._calculate_common_game_score_similarity(
+                enabled=resolved_scoring_settings.common_game_score_similarity,
+                primary_patient_id=primary_patient_id.strip(),
+                candidate_patient_id=candidate_patient_id.strip(),
+                end_date=end_date,
             )
         )
-        set_same_scores = self._calculate_set_same_scores(
+        game_similarity_with_diversity_score, game_similarity_score = (
+            self._calculate_game_similarity_with_diversity_score(
+                enabled=(
+                    resolved_scoring_settings.game_similarity_with_diversity_score
+                ),
+                primary_patient_id=primary_patient_id.strip(),
+                candidate_patient_id=candidate_patient_id.strip(),
+                end_date=end_date,
+            )
+        )
+        set_same_scores, set_same_score = self._calculate_set_same_score_component(
             primary_patient_id=primary_patient_id.strip(),
             candidate_patient_id=candidate_patient_id.strip(),
             end_date=end_date,
+            scoring_settings=resolved_scoring_settings.set_same,
         )
-        game_similarity_score = game_similarity_with_diversity_score.get("score")
-        set_same_score = set_same_scores.get("score")
-        candidate_score = (
-            round(similarity_score + game_similarity_score + set_same_score, 3)
-            if (
-                similarity_score is not None
-                and isinstance(game_similarity_score, (int, float))
-                and isinstance(set_same_score, (int, float))
-            )
-            else None
+        candidate_score = _sum_enabled_scores(
+            similarity_score,
+            game_similarity_score,
+            set_same_score
+            if _has_enabled_set_same_component(resolved_scoring_settings.set_same)
+            else None,
         )
         LOGGER.debug(
             "Calculated candidate score: primary_patient_id=%s, candidate_patient_id=%s, end_date=%s, similarity=%s, game_similarity=%s, set_same=%s, candidate_score=%s",
@@ -294,10 +291,84 @@ class SimilarUserCandidateService:
             candidate_score,
         )
         return candidate_score, {
+            "scoring_components": _build_candidate_scoring_context(
+                resolved_scoring_settings
+            ),
             "common_game_score_similarity": common_game_score_similarity,
             "game_similarity_with_diversity_score": game_similarity_with_diversity_score,
             "set_same_scores": set_same_scores,
         }
+
+    def _calculate_common_game_score_similarity(
+        self,
+        *,
+        enabled: bool,
+        primary_patient_id: str,
+        candidate_patient_id: str,
+        end_date: str,
+    ) -> tuple[dict[str, Any] | None, float | None]:
+        if not enabled:
+            return None, None
+
+        records = self.user_service.get_patient_game_norm_score_series_comparison_by_end_date(
+            primary_patient_id,
+            candidate_patient_id,
+            end_date,
+        )
+        score_details = calculate_common_game_score_similarity(records)
+        similarity = score_details.get("similarity")
+        similarity_score = (
+            round(float(similarity), 3)
+            if isinstance(similarity, (int, float))
+            else None
+        )
+        return {**score_details, "similarity": similarity_score}, similarity_score
+
+    def _calculate_game_similarity_with_diversity_score(
+        self,
+        *,
+        enabled: bool,
+        primary_patient_id: str,
+        candidate_patient_id: str,
+        end_date: str,
+    ) -> tuple[dict[str, Any] | None, float | None]:
+        if not enabled:
+            return None, None
+
+        game_rows = self.user_service.get_patient_game_set_comparison_by_end_date(
+            primary_patient_id,
+            candidate_patient_id,
+            end_date,
+        )
+        source_games, candidate_games = _extract_node_comparison_keys(
+            game_rows,
+            "games1",
+            "games2",
+        )
+        score_details = _round_numeric_values(
+            calculate_game_similarity_with_diversity_score(
+                source_games,
+                candidate_games,
+            )
+        )
+        score = _coerce_optional_float(score_details.get("score"))
+        return score_details, score
+
+    def _calculate_set_same_score_component(
+        self,
+        *,
+        primary_patient_id: str,
+        candidate_patient_id: str,
+        end_date: str,
+        scoring_settings: SetSameScoringSettings,
+    ) -> tuple[dict[str, object], float | None]:
+        score_details = self._calculate_set_same_scores(
+            primary_patient_id=primary_patient_id,
+            candidate_patient_id=candidate_patient_id,
+            end_date=end_date,
+            scoring_settings=scoring_settings,
+        )
+        return score_details, _coerce_optional_float(score_details.get("score"))
 
     def _calculate_set_same_scores(
         self,
@@ -305,50 +376,37 @@ class SimilarUserCandidateService:
         primary_patient_id: str,
         candidate_patient_id: str,
         end_date: str,
+        scoring_settings: SetSameScoringSettings | None = None,
     ) -> dict[str, object]:
         """Calculate disease, symptom, and unknown set-same scores."""
-        disease_rows = self.user_service.get_patient_disease_set_comparison_by_end_date(
-            primary_patient_id,
-            candidate_patient_id,
-            end_date,
-        )
-        source_diseases, candidate_diseases = _extract_node_comparison_keys(
-            disease_rows,
-            "diseases1",
-            "diseases2",
-        )
-
-        symptom_rows = self.user_service.get_patient_symptom_set_comparison_by_end_date(
-            primary_patient_id,
-            candidate_patient_id,
-            end_date,
-        )
-        source_symptoms, candidate_symptoms = _extract_node_comparison_keys(
-            symptom_rows,
-            "symptoms1",
-            "symptoms2",
-        )
-
-        unknown_rows = self.user_service.get_patient_unknown_set_comparison_by_end_date(
-            primary_patient_id,
-            candidate_patient_id,
-            end_date,
-        )
-        source_unknowns, candidate_unknowns = _extract_node_comparison_keys(
-            unknown_rows,
-            "unknowns1",
-            "unknowns2",
-        )
-
+        resolved_settings = scoring_settings or SetSameScoringSettings()
         set_same_scores = {
-            "disease": _round_numeric_values(
-                calculate_set_same_score(source_diseases, candidate_diseases)
+            "disease": self._calculate_one_set_same_score(
+                enabled=resolved_settings.disease,
+                query_fn=self.user_service.get_patient_disease_set_comparison_by_end_date,
+                primary_patient_id=primary_patient_id,
+                candidate_patient_id=candidate_patient_id,
+                end_date=end_date,
+                source_key="diseases1",
+                candidate_key="diseases2",
             ),
-            "symptom": _round_numeric_values(
-                calculate_set_same_score(source_symptoms, candidate_symptoms)
+            "symptom": self._calculate_one_set_same_score(
+                enabled=resolved_settings.symptom,
+                query_fn=self.user_service.get_patient_symptom_set_comparison_by_end_date,
+                primary_patient_id=primary_patient_id,
+                candidate_patient_id=candidate_patient_id,
+                end_date=end_date,
+                source_key="symptoms1",
+                candidate_key="symptoms2",
             ),
-            "unknown": _round_numeric_values(
-                calculate_set_same_score(source_unknowns, candidate_unknowns)
+            "unknown": self._calculate_one_set_same_score(
+                enabled=resolved_settings.unknown,
+                query_fn=self.user_service.get_patient_unknown_set_comparison_by_end_date,
+                primary_patient_id=primary_patient_id,
+                candidate_patient_id=candidate_patient_id,
+                end_date=end_date,
+                source_key="unknowns1",
+                candidate_key="unknowns2",
             ),
         }
         set_same_scores["score"] = round(
@@ -363,6 +421,33 @@ class SimilarUserCandidateService:
             3,
         )
         return set_same_scores
+
+    def _calculate_one_set_same_score(
+        self,
+        *,
+        enabled: bool,
+        query_fn: Any,
+        primary_patient_id: str,
+        candidate_patient_id: str,
+        end_date: str,
+        source_key: str,
+        candidate_key: str,
+    ) -> dict[str, object]:
+        if not enabled:
+            return {"enabled": False, "score": None, "reason": "disabled"}
+
+        rows = query_fn(primary_patient_id, candidate_patient_id, end_date)
+        source_values, candidate_values = _extract_node_comparison_keys(
+            rows,
+            source_key,
+            candidate_key,
+        )
+        return {
+            "enabled": True,
+            **_round_numeric_values(
+                calculate_set_same_score(source_values, candidate_values)
+            ),
+        }
 
 
 def _build_scored_domain_paths(scored_result: dict[str, Any]) -> list[ScoredDomainPath]:
@@ -386,6 +471,35 @@ def _build_scored_domain_paths(scored_result: dict[str, Any]) -> list[ScoredDoma
         )
 
     return scored_domain_paths
+
+
+def _build_candidate_scoring_context(
+    scoring_settings: CandidateScoringSettings,
+) -> dict[str, Any]:
+    return {
+        "common_game_score_similarity": scoring_settings.common_game_score_similarity,
+        "game_similarity_with_diversity_score": (
+            scoring_settings.game_similarity_with_diversity_score
+        ),
+        "set_same": {
+            "disease": scoring_settings.set_same.disease,
+            "symptom": scoring_settings.set_same.symptom,
+            "unknown": scoring_settings.set_same.unknown,
+        },
+    }
+
+
+def _has_enabled_set_same_component(settings: SetSameScoringSettings) -> bool:
+    return settings.disease or settings.symptom or settings.unknown
+
+
+def _sum_enabled_scores(*scores: float | None) -> float | None:
+    enabled_scores = [score for score in scores if score is not None]
+    return round(sum(enabled_scores), 3) if enabled_scores else None
+
+
+def _coerce_optional_float(value: object) -> float | None:
+    return float(value) if isinstance(value, (int, float)) else None
 
 
 def _extract_base_date(scored_result: dict[str, Any]) -> str | None:

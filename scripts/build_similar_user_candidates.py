@@ -132,6 +132,7 @@ def build_similar_user_candidates(
         result = candidate_service.aggregate_candidates_from_multiple_scored_results(
             scored_results,
             candidate_top_k=ranking_settings.candidate_top_k,
+            scoring_settings=ranking_settings.scoring,
         )
     LOGGER.info(
         "Built similar-user candidates from scored paths: patient_id=%s, candidate_count=%s, scored_path_count=%s",
