@@ -62,6 +62,7 @@ class CandidateScoringSettings:
 
     common_game_score_similarity: bool = True
     game_similarity_with_diversity_score: bool = True
+    disease_course_secondary_ability: bool = False
     set_same: SetSameScoringSettings = field(default_factory=SetSameScoringSettings)
 
 
@@ -305,6 +306,12 @@ def _parse_candidate_scoring_settings(value: object) -> CandidateScoringSettings
             "game_similarity_with_diversity_score",
             "candidate_ranking scoring",
             default=True,
+        ),
+        disease_course_secondary_ability=_parse_bool_setting(
+            value,
+            "disease_course_secondary_ability",
+            "candidate_ranking scoring",
+            default=False,
         ),
         set_same=SetSameScoringSettings(
             disease=_parse_bool_setting(

@@ -35,6 +35,7 @@ query:
     scoring:
       common_game_score_similarity: true
       game_similarity_with_diversity_score: true
+      disease_course_secondary_ability: true
       set_same:
         disease: false
         symptom: false
