@@ -20,6 +20,7 @@ from ..user_service import UserService
 from .utils import (
     calculate_common_game_score_similarity,
     calculate_game_similarity_with_diversity_score,
+    calculate_secondary_ability_relative_distance,
     calculate_set_same_score,
 )
 
@@ -49,12 +50,14 @@ class SimilarUserCandidateService:
         *,
         candidate_top_k: int,
         scoring_settings: CandidateScoringSettings | None = None,
+        disease_course_window_days: int | None = None,
     ) -> dict[str, Any]:
         """Deduplicate candidate users from typed scored paths and rank by candidate_score."""
         return self.aggregate_candidates_from_multiple_scored_results(
             [scored_result],
             candidate_top_k=candidate_top_k,
             scoring_settings=scoring_settings,
+            disease_course_window_days=disease_course_window_days,
         )
 
     def aggregate_candidates_from_multiple_scored_results(
@@ -63,6 +66,7 @@ class SimilarUserCandidateService:
         *,
         candidate_top_k: int,
         scoring_settings: CandidateScoringSettings | None = None,
+        disease_course_window_days: int | None = None,
     ) -> dict[str, Any]:
         """Deduplicate candidate users across multiple scored pattern results."""
         if candidate_top_k <= 0:
@@ -173,6 +177,7 @@ class SimilarUserCandidateService:
                 candidate_patient_id=bucket["patient_id"],
                 end_date=score_end_date,
                 scoring_settings=resolved_scoring_settings,
+                disease_course_window_days=disease_course_window_days,
             )
             bucket["candidate_score"] = candidate_score
             bucket["score_details"] = score_details
@@ -223,7 +228,9 @@ class SimilarUserCandidateService:
         primary_patient_id: object,
         candidate_patient_id: object,
         end_date: str | None,
+        candidate_base_date: str | None = None,
         scoring_settings: CandidateScoringSettings | None = None,
+        disease_course_window_days: int | None = None,
     ) -> tuple[float | None, dict[str, Any]]:
         """Calculate candidate score from similarity, set sameness, and game diversity."""
         resolved_scoring_settings = scoring_settings or CandidateScoringSettings()
@@ -273,9 +280,29 @@ class SimilarUserCandidateService:
             end_date=end_date,
             scoring_settings=resolved_scoring_settings.set_same,
         )
+        resolved_candidate_base_date = candidate_base_date
+        if resolved_candidate_base_date is None:
+            resolved_candidate_base_date = self.get_candidate_disease_course_base_date(
+                primary_patient_id=primary_patient_id.strip(),
+                candidate_patient_id=candidate_patient_id.strip(),
+                primary_base_date=end_date,
+            )
+        disease_course_secondary_ability, disease_course_score = (
+            self._calculate_disease_course_secondary_ability_score(
+                enabled=(
+                    resolved_scoring_settings.disease_course_secondary_ability
+                ),
+                primary_patient_id=primary_patient_id.strip(),
+                candidate_patient_id=candidate_patient_id.strip(),
+                primary_base_date=end_date,
+                candidate_base_date=resolved_candidate_base_date,
+                disease_course_window_days=disease_course_window_days,
+            )
+        )
         candidate_score = _sum_enabled_scores(
             similarity_score,
             game_similarity_score,
+            disease_course_score,
             set_same_score
             if _has_enabled_set_same_component(resolved_scoring_settings.set_same)
             else None,
@@ -296,6 +323,7 @@ class SimilarUserCandidateService:
             ),
             "common_game_score_similarity": common_game_score_similarity,
             "game_similarity_with_diversity_score": game_similarity_with_diversity_score,
+            "disease_course_secondary_ability": disease_course_secondary_ability,
             "set_same_scores": set_same_scores,
         }
 
@@ -369,6 +397,66 @@ class SimilarUserCandidateService:
             scoring_settings=scoring_settings,
         )
         return score_details, _coerce_optional_float(score_details.get("score"))
+
+    def _calculate_disease_course_secondary_ability_score(
+        self,
+        *,
+        enabled: bool,
+        primary_patient_id: str,
+        candidate_patient_id: str,
+        primary_base_date: str,
+        candidate_base_date: str | None,
+        disease_course_window_days: int | None,
+    ) -> tuple[dict[str, object] | None, float | None]:
+        if not enabled:
+            return None, None
+        if disease_course_window_days is None:
+            return {
+                "enabled": True,
+                "score": None,
+                "reason": "missing disease_course_window_days",
+            }, None
+
+        primary_rows = (
+            self.user_service.get_patient_secondary_ability_scores_by_disease_course_window(
+                primary_patient_id,
+                primary_base_date,
+                disease_course_window_days,
+            )
+        )
+        resolved_candidate_base_date = candidate_base_date or primary_base_date
+        candidate_rows = (
+            self.user_service.get_patient_secondary_ability_scores_by_disease_course_window(
+                candidate_patient_id,
+                resolved_candidate_base_date,
+                disease_course_window_days,
+            )
+        )
+        distance_details = calculate_secondary_ability_relative_distance(
+            primary_rows,
+            candidate_rows,
+        )
+        distance = _coerce_optional_float(distance_details.get("distance"))
+        score = _calculate_disease_course_secondary_ability_score_from_distance(
+            distance
+        )
+        return {
+            "enabled": True,
+            "score": score,
+            "primary_base_date": primary_base_date,
+            "candidate_base_date": resolved_candidate_base_date,
+            **distance_details,
+        }, score
+
+    def get_candidate_disease_course_base_date(
+        self,
+        *,
+        primary_patient_id: str,
+        candidate_patient_id: str,
+        primary_base_date: str,
+    ) -> str | None:
+        """Return candidate-specific disease-course base date when available."""
+        return None
 
     def _calculate_set_same_scores(
         self,
@@ -481,6 +569,9 @@ def _build_candidate_scoring_context(
         "game_similarity_with_diversity_score": (
             scoring_settings.game_similarity_with_diversity_score
         ),
+        "disease_course_secondary_ability": (
+            scoring_settings.disease_course_secondary_ability
+        ),
         "set_same": {
             "disease": scoring_settings.set_same.disease,
             "symptom": scoring_settings.set_same.symptom,
@@ -500,6 +591,14 @@ def _sum_enabled_scores(*scores: float | None) -> float | None:
 
 def _coerce_optional_float(value: object) -> float | None:
     return float(value) if isinstance(value, (int, float)) else None
+
+
+def _calculate_disease_course_secondary_ability_score_from_distance(
+    distance: float | None,
+) -> float | None:
+    if distance is None:
+        return None
+    return round(1 / (1 + distance), 3)
 
 
 def _extract_base_date(scored_result: dict[str, Any]) -> str | None:

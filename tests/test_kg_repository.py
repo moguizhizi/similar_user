@@ -1807,6 +1807,9 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertTrue(
             settings.candidate_ranking.scoring.game_similarity_with_diversity_score
         )
+        self.assertTrue(
+            settings.candidate_ranking.scoring.disease_course_secondary_ability
+        )
         self.assertFalse(settings.candidate_ranking.scoring.set_same.disease)
         self.assertFalse(settings.candidate_ranking.scoring.set_same.symptom)
         self.assertFalse(settings.candidate_ranking.scoring.set_same.unknown)

@@ -153,6 +153,7 @@ def build_similar_user_candidates(
             scored_results,
             candidate_top_k=ranking_settings.candidate_top_k,
             scoring_settings=ranking_settings.scoring,
+            disease_course_window_days=resolved_disease_course_window_days,
         )
         result.setdefault("retrieval_context", {})[
             "disease_course_window_days"
@@ -287,9 +288,23 @@ def _build_candidate_score_summary(score_details: object) -> dict[str, Any]:
         "score",
     )
     set_same_score = _extract_nested_value(details, "set_same_scores", "score")
+    disease_course_secondary_ability_score = _extract_nested_value(
+        details,
+        "disease_course_secondary_ability",
+        "score",
+    )
+    disease_course_secondary_ability_distance = _extract_nested_value(
+        details,
+        "disease_course_secondary_ability",
+        "distance",
+    )
     return {
         "common_game_score_similarity": common_game_score_similarity,
         "game_similarity_with_diversity_score": game_similarity_with_diversity_score,
+        "disease_course_secondary_ability": {
+            "score": disease_course_secondary_ability_score,
+            "distance": disease_course_secondary_ability_distance,
+        },
         "set_same_score": {
             "total": set_same_score,
             "disease": _extract_nested_value(
