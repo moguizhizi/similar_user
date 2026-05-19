@@ -643,6 +643,87 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(candidates["candidate_count"], 1)
         self.assertEqual(candidates["candidates"][0]["patient_id"], "20113562")
 
+    def test_build_similar_user_candidates_uses_disease_course_window_override(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            scored_paths_dir = Path(temp_dir) / "scored_pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "candidate_ranking:",
+                        "  patterns:",
+                        "    - patient_game_patient",
+                        "  candidate_top_k: 1",
+                        "  disease_course_window_days: 180",
+                        "  scoring:",
+                        "    common_game_score_similarity: false",
+                        "    game_similarity_with_diversity_score: false",
+                        "    set_same:",
+                        "      disease: false",
+                        "      symptom: false",
+                        "      unknown: false",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            valid_row = {
+                "p": {"id": "30010096"},
+                "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+                "i1": {"id": "30010096_20220522_348_a", "任务类型": "专属", "结果": "完成"},
+                "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+                "i2": {
+                    "id": "20113562_20211214_348_a",
+                    "结果": "完成",
+                    "活跃": "是",
+                    "任务类型": "专属",
+                },
+                "s2": {"id": "20113562_20211214", "执行年龄": "64", "执行学历": "本科"},
+                "p2": {"id": "20113562"},
+            }
+            save_scored_pattern_result(
+                {
+                    "source_id": "30010096",
+                    "source_parameter": "patient_id",
+                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                    "path_count": 1,
+                    "scored_path_count": 1,
+                    "scores": [
+                        {
+                            "path_index": 0,
+                            "score": {"total_score": 95.0},
+                            "path": {"row": valid_row},
+                        }
+                    ],
+                },
+                scored_paths_dir,
+            )
+            with patch(
+                "scripts.build_similar_user_candidates.Neo4jClient.from_config",
+            ) as mock_from_config, patch(
+                "scripts.build_similar_user_candidates.UserService",
+            ) as mock_user_service_cls:
+                mock_client_context = Mock()
+                mock_client_context.__enter__ = Mock(return_value=Mock())
+                mock_client_context.__exit__ = Mock(return_value=None)
+                mock_from_config.return_value = mock_client_context
+                mock_user_service_cls.return_value = Mock()
+                candidates = build_similar_user_candidates(
+                    "30010096",
+                    config_path=config_path,
+                    scored_paths_dir=scored_paths_dir,
+                    disease_course_window_days=90,
+                )
+
+        self.assertEqual(
+            candidates["retrieval_context"]["disease_course_window_days"],
+            90,
+        )
+
     def test_build_similar_user_candidates_reads_multiple_saved_scored_patterns(
         self,
     ) -> None:
@@ -917,6 +998,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             config="config/settings.yaml",
             scored_paths_dir="data/scored_pattern_paths",
             candidates_dir="data/similar_user_candidates",
+            disease_course_window_days=120,
         )
         mock_build_candidates.return_value = expected
         mock_save_candidates.return_value = {
@@ -931,6 +1013,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             scored_paths_dir="data/scored_pattern_paths",
+            disease_course_window_days=120,
         )
         mock_save_candidates.assert_called_once_with(
             expected,

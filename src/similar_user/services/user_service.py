@@ -175,6 +175,19 @@ class UserService:
             end_date,
         )
 
+    def get_patient_secondary_ability_scores_by_disease_course_window(
+        self,
+        patient_id: str,
+        base_date: str,
+        disease_course_window_days: int,
+    ) -> list[dict[str, object]]:
+        """Return secondary ability scores in a disease-course window."""
+        return self.kg_repository.get_patient_secondary_ability_scores_by_disease_course_window(
+            patient_id,
+            base_date,
+            disease_course_window_days,
+        )
+
     def get_patient_distinct_task_instances_by_start_date(
         self,
         patient_id: str,

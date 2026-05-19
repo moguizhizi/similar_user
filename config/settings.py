@@ -70,6 +70,7 @@ class CandidateRankingSettings:
     """Configuration for ranking similar-user candidates from scored paths."""
 
     candidate_top_k: int = 10
+    disease_course_window_days: int | None = None
     patterns: tuple[str, ...] = (
         "patient_game_patient",
         "patient_disease_patient",
@@ -227,6 +228,9 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError("pattern_path_storage output_dir must be a non-empty string.")
 
     candidate_top_k = candidate_ranking_data.get("candidate_top_k", 10)
+    disease_course_window_days = candidate_ranking_data.get(
+        "disease_course_window_days"
+    )
     patterns = candidate_ranking_data.get(
         "patterns",
         [
@@ -242,6 +246,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         or candidate_top_k <= 0
     ):
         raise ValueError("candidate_ranking candidate_top_k must be a positive integer.")
+    if disease_course_window_days is not None and (
+        not isinstance(disease_course_window_days, int)
+        or isinstance(disease_course_window_days, bool)
+        or disease_course_window_days <= 0
+    ):
+        raise ValueError(
+            "candidate_ranking disease_course_window_days must be a positive integer."
+        )
     if not isinstance(patterns, list) or not patterns:
         raise ValueError("candidate_ranking patterns must be a non-empty list.")
     normalized_patterns = []
@@ -262,6 +274,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         pattern_path_storage=PatternPathStorageSettings(output_dir=output_dir.strip()),
         candidate_ranking=CandidateRankingSettings(
             candidate_top_k=candidate_top_k,
+            disease_course_window_days=disease_course_window_days,
             patterns=tuple(normalized_patterns),
             scoring=scoring,
         ),

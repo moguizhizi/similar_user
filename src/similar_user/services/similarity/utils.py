@@ -7,6 +7,41 @@ from collections.abc import Sequence
 from typing import Any
 
 
+SECONDARY_ABILITY_SCORE_FIELDS = (
+    "二级_书写能力",
+    "二级_任务切换",
+    "二级_冲突抑制",
+    "二级_前瞻记忆",
+    "二级_反应速度",
+    "二级_口语生成",
+    "二级_听理解",
+    "二级_客体识别",
+    "二级_工作记忆",
+    "二级_归纳与推理",
+    "二级_心算",
+    "二级_情景记忆",
+    "二级_情绪识别",
+    "二级_情绪调节",
+    "二级_手眼协调",
+    "二级_持续注意",
+    "二级_注意分配",
+    "二级_注意广度",
+    "二级_积极情绪",
+    "二级_空间知觉",
+    "二级_空间记忆",
+    "二级_联结记忆",
+    "二级_节律感知",
+    "二级_表象与想象",
+    "二级_记忆广度",
+    "二级_语义系统",
+    "二级_路径规划",
+    "二级_运动知觉",
+    "二级_选择注意",
+    "二级_问题解决",
+    "二级_阅读能力",
+)
+
+
 def calculate_game_series_features(scores: Sequence[object]) -> dict[str, float | int]:
     """从单个游戏的有序分数序列中提取统计特征和综合分。
 
@@ -208,6 +243,75 @@ def calculate_relative_l2_distance(
     return math.sqrt(squared_sum)
 
 
+def calculate_secondary_ability_relative_distance(
+    primary_rows: Sequence[dict[str, Any]],
+    comparison_rows: Sequence[dict[str, Any]],
+    *,
+    epsilon: float = 1e-8,
+    ability_fields: Sequence[str] = SECONDARY_ABILITY_SCORE_FIELDS,
+) -> dict[str, object]:
+    """Calculate masked relative distance for ordered secondary-ability rows."""
+    sorted_primary_rows = _sort_secondary_ability_rows(primary_rows)
+    sorted_comparison_rows = _sort_secondary_ability_rows(comparison_rows)
+    if len(sorted_primary_rows) != len(sorted_comparison_rows):
+        return {
+            "distance": None,
+            "reason": "row count mismatch",
+            "row_count_primary": len(sorted_primary_rows),
+            "row_count_comparison": len(sorted_comparison_rows),
+        }
+
+    values_primary: list[float] = []
+    values_comparison: list[float] = []
+    used_positions: list[dict[str, object]] = []
+    skipped_count = 0
+    for row_index, (primary_row, comparison_row) in enumerate(
+        zip(sorted_primary_rows, sorted_comparison_rows)
+    ):
+        primary_scores = _extract_secondary_ability_scores(primary_row)
+        comparison_scores = _extract_secondary_ability_scores(comparison_row)
+        for field in ability_fields:
+            value_primary = _coerce_optional_numeric_value(primary_scores.get(field))
+            value_comparison = _coerce_optional_numeric_value(
+                comparison_scores.get(field)
+            )
+            if value_primary is None or value_comparison is None:
+                skipped_count += 1
+                continue
+
+            values_primary.append(value_primary)
+            values_comparison.append(value_comparison)
+            used_positions.append(
+                {
+                    "row_index": row_index,
+                    "field": field,
+                    "primary_training_date": primary_row.get("training_date"),
+                    "comparison_training_date": comparison_row.get("training_date"),
+                }
+            )
+
+    if not values_primary:
+        return {
+            "distance": None,
+            "reason": "no common non-null secondary ability scores",
+            "row_count": len(sorted_primary_rows),
+            "used_count": 0,
+            "skipped_count": skipped_count,
+        }
+
+    return {
+        "distance": calculate_relative_l2_distance(
+            values_primary,
+            values_comparison,
+            epsilon=epsilon,
+        ),
+        "row_count": len(sorted_primary_rows),
+        "used_count": len(values_primary),
+        "skipped_count": skipped_count,
+        "used_positions": used_positions,
+    }
+
+
 def _coerce_game_set(games: Sequence[object]) -> set[str]:
     """Convert game identifiers to a normalized set."""
     return _coerce_item_set(games)
@@ -270,6 +374,36 @@ def _coerce_numeric_matrix(matrix: Sequence[object], field_name: str) -> list[li
         rows.append([_coerce_required_float(value, row_name) for value in row])
 
     return rows
+
+
+def _sort_secondary_ability_rows(
+    rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return sorted(rows, key=lambda row: str(row.get("training_date") or ""))
+
+
+def _extract_secondary_ability_scores(row: dict[str, Any]) -> dict[str, Any]:
+    scores = row.get("secondary_ability_scores")
+    return scores if isinstance(scores, dict) else {}
+
+
+def _coerce_optional_numeric_value(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        numeric_value = float(value)
+    elif isinstance(value, str):
+        stripped_value = value.strip()
+        if not stripped_value:
+            return None
+        try:
+            numeric_value = float(stripped_value)
+        except ValueError:
+            return None
+    else:
+        return None
+
+    return numeric_value if math.isfinite(numeric_value) else None
 
 
 def _validate_same_matrix_shape(
