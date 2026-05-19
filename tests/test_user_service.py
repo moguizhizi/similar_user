@@ -363,6 +363,43 @@ class UserServiceTest(unittest.TestCase):
             "2026-02-12",
         )
 
+    def test_get_patient_secondary_ability_scores_by_disease_course_window_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_secondary_ability_scores_by_disease_course_window.return_value = [
+            {
+                "effective_ability_date": "2023-10-10",
+                "instance_set_id": "40_20231010",
+                "training_date": "2023-10-10",
+                "secondary_ability_scores": {"二级_书写能力": 20.0},
+            }
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_secondary_ability_scores_by_disease_course_window(
+            "40",
+            "2023-10-15",
+            365,
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "effective_ability_date": "2023-10-10",
+                    "instance_set_id": "40_20231010",
+                    "training_date": "2023-10-10",
+                    "secondary_ability_scores": {"二级_书写能力": 20.0},
+                }
+            ],
+        )
+        mock_repository.get_patient_secondary_ability_scores_by_disease_course_window.assert_called_once_with(
+            "40",
+            "2023-10-15",
+            365,
+        )
+
     def test_get_patient_distinct_task_instances_by_start_date_delegates_to_repository(
         self,
     ) -> None:

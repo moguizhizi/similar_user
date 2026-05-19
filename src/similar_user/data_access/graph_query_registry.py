@@ -33,6 +33,7 @@ from .cypher_queries import (
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
+    PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
     PATIENT_IDS_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
@@ -569,6 +570,25 @@ PATIENT_SCORE_COMPARISON_SPECS = (
         path_shape="(p:Patient)--(s:TaskInstanceSet)--(i:TaskInstance)--(g:Game)",
         row_fields=("game", "scores_p1", "scores_p2"),
         query=PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
+    ),
+    _spec(
+        name="patient_secondary_ability_scores_by_disease_course_window",
+        category=GraphQueryCategory.PATIENT_SCORE_COMPARISON,
+        description="查询患者病程窗口内有二级脑能力值的 TaskInstanceSet",
+        source_label="Patient",
+        source_parameters=(
+            "patient_id",
+            "base_date",
+            "disease_course_window_days",
+        ),
+        path_shape="(p:Patient)--(s:TaskInstanceSet)",
+        row_fields=(
+            "effective_ability_date",
+            "instance_set_id",
+            "training_date",
+            "secondary_ability_scores",
+        ),
+        query=PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
     ),
 )
 

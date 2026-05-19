@@ -48,6 +48,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
+    PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -824,6 +825,67 @@ class KgRepositoryTest(unittest.TestCase):
                 "40",
                 "30000035",
                 "   ",
+            )
+
+    def test_get_patient_secondary_ability_scores_by_disease_course_window(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "effective_ability_date": "2023-10-10",
+                "instance_set_id": "40_20231010",
+                "training_date": "2023-10-10",
+                "secondary_ability_scores": {"二级_书写能力": 20.0},
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_secondary_ability_scores_by_disease_course_window(
+            " 40 ",
+            " 2023-10-15 ",
+            365,
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "effective_ability_date": "2023-10-10",
+                    "instance_set_id": "40_20231010",
+                    "training_date": "2023-10-10",
+                    "secondary_ability_scores": {"二级_书写能力": 20.0},
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
+            parameters={
+                "patient_id": "40",
+                "base_date": "2023-10-15",
+                "disease_course_window_days": 365,
+            },
+        )
+
+    def test_get_patient_secondary_ability_scores_by_disease_course_window_rejects_invalid_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_secondary_ability_scores_by_disease_course_window(
+                "   ",
+                "2023-10-15",
+                365,
+            )
+        with self.assertRaisesRegex(
+            ValueError,
+            "disease_course_window_days must be a positive integer.",
+        ):
+            repository.get_patient_secondary_ability_scores_by_disease_course_window(
+                "40",
+                "2023-10-15",
+                0,
             )
 
     def test_get_patient_distinct_task_instances_by_start_date(self) -> None:
@@ -1738,6 +1800,7 @@ class KgRepositoryTest(unittest.TestCase):
         )
         self.assertEqual(settings.pattern_path_storage.output_dir, "data/pattern_paths")
         self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
+        self.assertEqual(settings.candidate_ranking.disease_course_window_days, 365)
         self.assertTrue(
             settings.candidate_ranking.scoring.common_game_score_similarity
         )

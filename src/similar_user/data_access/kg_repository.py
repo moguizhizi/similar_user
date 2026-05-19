@@ -467,6 +467,36 @@ class KgRepository:
             },
         )
 
+    def get_patient_secondary_ability_scores_by_disease_course_window(
+        self,
+        patient_id: str,
+        base_date: str,
+        disease_course_window_days: int,
+    ) -> list[dict[str, object]]:
+        """Return secondary ability scores in a disease-course window."""
+        normalized_patient_id = patient_id.strip()
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+        if (
+            not isinstance(disease_course_window_days, int)
+            or isinstance(disease_course_window_days, bool)
+            or disease_course_window_days <= 0
+        ):
+            raise ValueError("disease_course_window_days must be a positive integer.")
+
+        spec = get_graph_query_spec(
+            "patient_secondary_ability_scores_by_disease_course_window"
+        )
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "base_date": normalized_base_date,
+                "disease_course_window_days": disease_course_window_days,
+            },
+        )
+
     def get_patient_distinct_symptoms_by_end_date(
         self,
         patient_id: str,

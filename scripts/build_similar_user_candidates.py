@@ -72,6 +72,15 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_CANDIDATES_DIR),
         help="Directory used to store similar-user candidate detail and summary JSON files.",
     )
+    parser.add_argument(
+        "--disease-course-window-days",
+        type=int,
+        default=None,
+        help=(
+            "Disease-course window in days. Overrides "
+            "query.candidate_ranking.disease_course_window_days when provided."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -80,16 +89,27 @@ def build_similar_user_candidates(
     *,
     config_path: str | Path | None = None,
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    disease_course_window_days: int | None = None,
 ) -> dict[str, Any]:
     """Aggregate ranked candidate users from top-k scored paths."""
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     ranking_settings = load_query_settings(resolved_config_path).candidate_ranking
+    resolved_disease_course_window_days = (
+        ranking_settings.disease_course_window_days
+        if disease_course_window_days is None
+        else disease_course_window_days
+    )
+    _validate_optional_positive_int(
+        resolved_disease_course_window_days,
+        "disease_course_window_days",
+    )
     selected_patterns = tuple(ranking_settings.patterns)
     LOGGER.info(
-        "Building similar-user candidates from saved scored paths: patient_id=%s, patterns=%s, candidate_top_k=%s, config_path=%s, scored_paths_dir=%s",
+        "Building similar-user candidates from saved scored paths: patient_id=%s, patterns=%s, candidate_top_k=%s, disease_course_window_days=%s, config_path=%s, scored_paths_dir=%s",
         patient_id,
         selected_patterns,
         ranking_settings.candidate_top_k,
+        resolved_disease_course_window_days,
         resolved_config_path,
         scored_paths_dir,
     )
@@ -134,6 +154,9 @@ def build_similar_user_candidates(
             candidate_top_k=ranking_settings.candidate_top_k,
             scoring_settings=ranking_settings.scoring,
         )
+        result.setdefault("retrieval_context", {})[
+            "disease_course_window_days"
+        ] = resolved_disease_course_window_days
     LOGGER.info(
         "Built similar-user candidates from scored paths: patient_id=%s, candidate_count=%s, scored_path_count=%s",
         patient_id,
@@ -306,6 +329,13 @@ def _normalize_required_string(value: object, field_name: str) -> str:
     return value.strip()
 
 
+def _validate_optional_positive_int(value: object, field_name: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer.")
+
+
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
@@ -331,6 +361,7 @@ def main() -> int:
             args.patient_id,
             config_path=args.config,
             scored_paths_dir=args.scored_paths_dir,
+            disease_course_window_days=args.disease_course_window_days,
         )
         output_paths = save_similar_user_candidates_result(
             result,

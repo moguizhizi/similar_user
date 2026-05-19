@@ -12,6 +12,7 @@ from src.similar_user.services.similarity.utils import (
     calculate_game_similarity_with_diversity_score,
     calculate_pearson_correlation,
     calculate_relative_l2_distance,
+    calculate_secondary_ability_relative_distance,
     calculate_set_same_score,
 )
 
@@ -272,6 +273,108 @@ class SimilarityUtilsTest(unittest.TestCase):
     def test_calculate_relative_l2_distance_rejects_invalid_epsilon(self) -> None:
         with self.assertRaisesRegex(ValueError, "epsilon must be a positive number."):
             calculate_relative_l2_distance([1.0], [2.0], epsilon=0.0)
+
+    def test_calculate_secondary_ability_relative_distance_uses_ordered_rows_and_masks_missing_values(
+        self,
+    ) -> None:
+        primary_rows = [
+            {
+                "training_date": "2023-01-02",
+                "secondary_ability_scores": {
+                    "二级_书写能力": 20,
+                    "二级_阅读能力": None,
+                },
+            },
+            {
+                "training_date": "2023-01-01",
+                "secondary_ability_scores": {
+                    "二级_书写能力": 10,
+                    "二级_阅读能力": 30,
+                },
+            },
+        ]
+        comparison_rows = [
+            {
+                "training_date": "2022-12-10",
+                "secondary_ability_scores": {
+                    "二级_书写能力": 5,
+                    "二级_阅读能力": 30,
+                },
+            },
+            {
+                "training_date": "2022-12-11",
+                "secondary_ability_scores": {
+                    "二级_书写能力": 10,
+                    "二级_阅读能力": 40,
+                },
+            },
+        ]
+
+        result = calculate_secondary_ability_relative_distance(
+            primary_rows,
+            comparison_rows,
+            epsilon=1,
+            ability_fields=("二级_书写能力", "二级_阅读能力"),
+        )
+
+        expected = calculate_relative_l2_distance(
+            [10, 30, 20],
+            [5, 30, 10],
+            epsilon=1,
+        )
+        self.assertAlmostEqual(float(result["distance"]), expected)
+        self.assertEqual(result["row_count"], 2)
+        self.assertEqual(result["used_count"], 3)
+        self.assertEqual(result["skipped_count"], 1)
+        self.assertEqual(
+            result["used_positions"][0],
+            {
+                "row_index": 0,
+                "field": "二级_书写能力",
+                "primary_training_date": "2023-01-01",
+                "comparison_training_date": "2022-12-10",
+            },
+        )
+
+    def test_calculate_secondary_ability_relative_distance_rejects_row_count_mismatch(
+        self,
+    ) -> None:
+        result = calculate_secondary_ability_relative_distance(
+            [{"training_date": "2023-01-01", "secondary_ability_scores": {}}],
+            [],
+        )
+
+        self.assertEqual(result["distance"], None)
+        self.assertEqual(result["reason"], "row count mismatch")
+        self.assertEqual(result["row_count_primary"], 1)
+        self.assertEqual(result["row_count_comparison"], 0)
+
+    def test_calculate_secondary_ability_relative_distance_returns_none_without_common_scores(
+        self,
+    ) -> None:
+        result = calculate_secondary_ability_relative_distance(
+            [
+                {
+                    "training_date": "2023-01-01",
+                    "secondary_ability_scores": {"二级_书写能力": 10},
+                }
+            ],
+            [
+                {
+                    "training_date": "2023-01-01",
+                    "secondary_ability_scores": {"二级_阅读能力": 30},
+                }
+            ],
+            ability_fields=("二级_书写能力", "二级_阅读能力"),
+        )
+
+        self.assertEqual(result["distance"], None)
+        self.assertEqual(
+            result["reason"],
+            "no common non-null secondary ability scores",
+        )
+        self.assertEqual(result["used_count"], 0)
+        self.assertEqual(result["skipped_count"], 2)
 
     def test_calculate_common_game_score_similarity_uses_query_records(self) -> None:
         result = calculate_common_game_score_similarity(

@@ -60,6 +60,7 @@
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
 | 查询两个患者共同游戏上的常模分序列 | `PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY` | `patient_score_queries.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `game`, `scores_p1`, `scores_p2` |
+| 查询患者病程窗口内有二级脑能力值的 TaskInstanceSet | `PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY` | `patient_comparison_queries.py` | `patient_id`, `base_date`, `disease_course_window_days` | `effective_ability_date`, `instance_set_id`, `training_date`, `secondary_ability_scores` |
 
 ### 实体扩展查询
 
@@ -231,6 +232,7 @@ Disease -- TaskInstanceSet -- Patient
 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY` | 从某日期开始比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `start_date` | `unknowns1`, `unknowns2` |
 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `unknowns1`, `unknowns2` |
 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY` | 在左闭右开日期区间内比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `unknowns1`, `unknowns2` |
+| `PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY` | 查询患者病程窗口内有二级脑能力值的 TaskInstanceSet | `patient_id`, `base_date`, `disease_course_window_days` | `effective_ability_date`, `instance_set_id`, `training_date`, `secondary_ability_scores` |
 
 ### `patient_score_queries.py`
 
