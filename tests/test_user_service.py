@@ -1387,11 +1387,18 @@ class UserServiceTest(unittest.TestCase):
         self,
     ) -> None:
         mock_repository = Mock()
-        mock_repository.get_patient_total_score_by_date.return_value = [
+        mock_repository.get_patient_total_scores_by_disease_course_window.return_value = [
             {
-                "instance_set_id": "30010096_20220522",
-                "training_date": "2022-05-22",
-                "total_score": "90.0",
+                "effective_total_score_date": "2022-05-22",
+                "instance_set_id": "30010096_20220501",
+                "training_date": "2022-05-01",
+                "total_score": "88.0",
+            },
+            {
+                "effective_total_score_date": "2022-05-22",
+                "instance_set_id": "30010096_20220520",
+                "training_date": "2022-05-20",
+                "total_score": "92.0",
             }
         ]
         mock_repository.get_patient_total_score_timepoints.side_effect = [
@@ -1429,9 +1436,12 @@ class UserServiceTest(unittest.TestCase):
                 {
                     "source": {
                         "patient_id": "30010096",
-                        "instance_set_id": "30010096_20220522",
+                        "instance_set_id": None,
                         "training_date": "2022-05-22",
                         "total_score": 90.0,
+                        "total_score_aggregation": "mean",
+                        "total_score_record_count": 2,
+                        "effective_total_score_date": "2022-05-22",
                     },
                     "matched": {
                         "patient_id": "20113562",
@@ -1445,9 +1455,12 @@ class UserServiceTest(unittest.TestCase):
                 {
                     "source": {
                         "patient_id": "30010096",
-                        "instance_set_id": "30010096_20220522",
+                        "instance_set_id": None,
                         "training_date": "2022-05-22",
                         "total_score": 90.0,
+                        "total_score_aggregation": "mean",
+                        "total_score_record_count": 2,
+                        "effective_total_score_date": "2022-05-22",
                     },
                     "matched": {
                         "patient_id": "20113563",
@@ -1460,9 +1473,10 @@ class UserServiceTest(unittest.TestCase):
                 },
             ],
         )
-        mock_repository.get_patient_total_score_by_date.assert_called_once_with(
+        mock_repository.get_patient_total_scores_by_disease_course_window.assert_called_once_with(
             "30010096",
             "2022-05-22",
+            365,
         )
         self.assertEqual(
             mock_repository.get_patient_total_score_timepoints.call_args_list,
@@ -1473,7 +1487,7 @@ class UserServiceTest(unittest.TestCase):
         self,
     ) -> None:
         mock_repository = Mock()
-        mock_repository.get_patient_total_score_by_date.return_value = [
+        mock_repository.get_patient_total_scores_by_disease_course_window.return_value = [
             {
                 "instance_set_id": "source_s",
                 "training_date": "2022-05-22",
@@ -1512,13 +1526,14 @@ class UserServiceTest(unittest.TestCase):
                         "      - per_g: 4",
                         "  candidate_ranking:",
                         "    total_score_match_top_k: 2",
+                        "    disease_course_window_days: 365",
                     ]
                 ),
                 encoding="utf-8",
             )
             mock_repository = Mock()
             mock_repository.config_path = config_path
-            mock_repository.get_patient_total_score_by_date.return_value = [
+            mock_repository.get_patient_total_scores_by_disease_course_window.return_value = [
                 {
                     "instance_set_id": "source_s",
                     "training_date": "2022-05-22",
@@ -1559,7 +1574,7 @@ class UserServiceTest(unittest.TestCase):
         self,
     ) -> None:
         mock_repository = Mock()
-        mock_repository.get_patient_total_score_by_date.return_value = [
+        mock_repository.get_patient_total_scores_by_disease_course_window.return_value = [
             {
                 "instance_set_id": "source_s",
                 "training_date": "2022-05-22",
@@ -1593,7 +1608,7 @@ class UserServiceTest(unittest.TestCase):
         self,
     ) -> None:
         mock_repository = Mock()
-        mock_repository.get_patient_total_score_by_date.return_value = [
+        mock_repository.get_patient_total_scores_by_disease_course_window.return_value = [
             {
                 "instance_set_id": "source_s",
                 "training_date": "2022-05-22",
@@ -1622,7 +1637,7 @@ class UserServiceTest(unittest.TestCase):
         self,
     ) -> None:
         mock_repository = Mock()
-        mock_repository.get_patient_total_score_by_date.return_value = []
+        mock_repository.get_patient_total_scores_by_disease_course_window.return_value = []
         service = UserService(kg_repository=mock_repository)
 
         result = service.find_patient_total_score_timepoint_matches(
@@ -1632,9 +1647,10 @@ class UserServiceTest(unittest.TestCase):
         )
 
         self.assertEqual(result, [])
-        mock_repository.get_patient_total_score_by_date.assert_called_once_with(
+        mock_repository.get_patient_total_scores_by_disease_course_window.assert_called_once_with(
             "source",
             "2022-05-22",
+            365,
         )
         mock_repository.get_patient_total_score_timepoints.assert_not_called()
 
