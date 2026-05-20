@@ -81,6 +81,7 @@ class TaskInstanceSetNode:
     执行年龄: str | None = None
     # 基于当前库中 TaskInstanceSet.执行学历 的实际取值收紧字段类型。
     执行学历: EducationValue | None = None
+    总分: float | None = None
     二级_书写能力: float | None = None
     二级_任务切换: float | None = None
     二级_冲突抑制: float | None = None
@@ -130,6 +131,7 @@ class TaskInstanceSetNode:
                 data.get("执行学历"),
                 f"{field_name}.执行学历",
             ),
+            总分=_optional_float(data.get("总分")),
             二级_书写能力=_optional_float(data.get("二级_书写能力")),
             二级_任务切换=_optional_float(data.get("二级_任务切换")),
             二级_冲突抑制=_optional_float(data.get("二级_冲突抑制")),

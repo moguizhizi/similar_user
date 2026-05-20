@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
+from config.settings import DEFAULT_CONFIG_PATH, load_query_settings
+
 from ..domain.graph_schema import PathPattern
 from ..data_access.kg_repository import KgRepository, PatternQueryFamily
 from ..data_access.pattern_registry import (
@@ -183,6 +185,19 @@ class UserService:
     ) -> list[dict[str, object]]:
         """Return secondary ability scores in a disease-course window."""
         return self.kg_repository.get_patient_secondary_ability_scores_by_disease_course_window(
+            patient_id,
+            base_date,
+            disease_course_window_days,
+        )
+
+    def get_patient_total_scores_by_disease_course_window(
+        self,
+        patient_id: str,
+        base_date: str,
+        disease_course_window_days: int,
+    ) -> list[dict[str, object]]:
+        """Return total scores in a disease-course window."""
+        return self.kg_repository.get_patient_total_scores_by_disease_course_window(
             patient_id,
             base_date,
             disease_course_window_days,
@@ -679,6 +694,149 @@ class UserService:
 
         return [str(value) for value in ordered_dates]
 
+    def get_patient_total_score_timepoints(
+        self,
+        patient_id: str,
+    ) -> list[dict[str, object]]:
+        """Return TaskInstanceSet timepoints that have total scores for one patient."""
+        return self.kg_repository.get_patient_total_score_timepoints(patient_id)
+
+    def get_patient_total_score_by_date(
+        self,
+        patient_id: str,
+        training_date: str,
+    ) -> dict[str, object] | None:
+        """Return one patient's total score on a specific training date."""
+        records = self.kg_repository.get_patient_total_score_by_date(
+            patient_id,
+            training_date,
+        )
+        if not records:
+            return None
+        return _normalize_total_score_timepoint(records[0])
+
+    def find_patient_total_score_timepoint_matches(
+        self,
+        source_patient_id: str,
+        source_training_date: str,
+        comparison_patient_ids: list[str],
+        *,
+        tolerance: float | None = None,
+    ) -> list[dict[str, object]]:
+        """Batch-match comparison patient timepoints by a source date total score."""
+        normalized_source_patient_id = self._normalize_required_string(
+            source_patient_id,
+            "source_patient_id",
+        )
+        normalized_source_training_date = _parse_date_value(
+            source_training_date,
+            "source_training_date",
+        )
+        normalized_comparison_patient_ids = [
+            self._normalize_required_string(patient_id, "comparison_patient_id")
+            for patient_id in comparison_patient_ids
+        ]
+        normalized_tolerance = _normalize_optional_non_negative_float(
+            tolerance,
+            "tolerance",
+        )
+
+        source_timepoint = self.get_patient_total_score_by_date(
+            normalized_source_patient_id,
+            normalized_source_training_date.isoformat(),
+        )
+        if source_timepoint is None:
+            return []
+
+        source_score = float(source_timepoint["total_score"])
+        match_top_k = self._get_total_score_match_top_k()
+        disease_course_window_days = self._get_disease_course_window_days()
+        matches: list[dict[str, object]] = []
+        for comparison_patient_id in normalized_comparison_patient_ids:
+            matched_timepoints = self._find_comparison_total_score_timepoint_matches(
+                source_patient_id=normalized_source_patient_id,
+                source_timepoint=source_timepoint,
+                source_score=source_score,
+                source_date=normalized_source_training_date,
+                comparison_patient_id=comparison_patient_id,
+                match_top_k=match_top_k,
+                disease_course_window_days=disease_course_window_days,
+                tolerance=normalized_tolerance,
+            )
+            matches.extend(matched_timepoints)
+        return matches
+
+    def _find_comparison_total_score_timepoint_matches(
+        self,
+        *,
+        source_patient_id: str,
+        source_timepoint: dict[str, object],
+        source_score: float,
+        source_date: date,
+        comparison_patient_id: str,
+        match_top_k: int,
+        disease_course_window_days: int | None,
+        tolerance: float | None,
+    ) -> list[dict[str, object]]:
+        """Find one comparison patient's nearest total-score timepoints."""
+        comparison_timepoints = [
+            timepoint
+            for timepoint in (
+                _normalize_total_score_timepoint(record)
+                for record in self.get_patient_total_score_timepoints(
+                    comparison_patient_id
+                )
+            )
+            if timepoint is not None
+        ]
+        if not comparison_timepoints:
+            return []
+
+        matched_timepoints = sorted(
+            comparison_timepoints,
+            key=lambda timepoint: _total_score_match_sort_key(
+                source_score,
+                source_date,
+                timepoint,
+            ),
+        )[:match_top_k]
+
+        matches: list[dict[str, object]] = []
+        for matched_timepoint in matched_timepoints:
+            score_delta = abs(float(matched_timepoint["total_score"]) - source_score)
+            if tolerance is not None and score_delta > tolerance:
+                continue
+            matches.append(
+                {
+                    "source": {
+                        "patient_id": source_patient_id,
+                        **source_timepoint,
+                    },
+                    "matched": {
+                        "patient_id": comparison_patient_id,
+                        **matched_timepoint,
+                        "recommended_date": _build_recommended_date(
+                            matched_timepoint.get("training_date"),
+                            disease_course_window_days,
+                        ),
+                    },
+                    "score_delta": round(score_delta, 6),
+                }
+            )
+        return matches
+
+    def _get_total_score_match_top_k(self) -> int:
+        """Return configured number of total-score match points per comparison patient."""
+        config_path = vars(self.kg_repository).get("config_path", DEFAULT_CONFIG_PATH)
+        return load_query_settings(config_path).candidate_ranking.total_score_match_top_k
+
+    def _get_disease_course_window_days(self) -> int | None:
+        """Return configured disease-course window days for date recommendations."""
+        config_path = vars(self.kg_repository).get("config_path", DEFAULT_CONFIG_PATH)
+        return load_query_settings(
+            config_path
+        ).candidate_ranking.disease_course_window_days
+
     def get_patient_training_task_history(
         self,
         patient_id: str,
@@ -879,3 +1037,98 @@ def _parse_date_value(value: str, field_name: str) -> date:
         return date(year, month, day)
     except ValueError as exc:
         raise ValueError(f"{field_name} must be a valid calendar date.") from exc
+
+
+def _normalize_total_score_timepoint(
+    record: dict[str, object],
+) -> dict[str, object] | None:
+    """Normalize one TaskInstanceSet total-score row."""
+    instance_set_id = record.get("instance_set_id")
+    if not isinstance(instance_set_id, str) or not instance_set_id.strip():
+        return None
+    total_score = _coerce_optional_float(record.get("total_score"))
+    if total_score is None:
+        return None
+
+    training_date = record.get("training_date")
+    return {
+        "instance_set_id": instance_set_id.strip(),
+        "training_date": str(training_date) if training_date is not None else None,
+        "total_score": total_score,
+    }
+
+
+def _total_score_match_sort_key(
+    source_score: float,
+    source_date: date | None,
+    timepoint: dict[str, object],
+) -> tuple[float, int, str, str]:
+    """Return a stable sort key for nearest total-score matches."""
+    total_score = float(timepoint["total_score"])
+    training_date = str(timepoint.get("training_date") or "")
+    instance_set_id = str(timepoint.get("instance_set_id") or "")
+    target_date = _parse_optional_date_value(timepoint.get("training_date"))
+    if source_date is not None and target_date is not None:
+        date_delta = abs((target_date - source_date).days)
+    else:
+        date_delta = 10**9
+    return (
+        abs(total_score - source_score),
+        date_delta,
+        training_date,
+        instance_set_id,
+    )
+
+
+def _build_recommended_date(
+    training_date: object,
+    disease_course_window_days: int | None,
+) -> str | None:
+    """Build a recommended downstream base date from a matched training date."""
+    if disease_course_window_days is None:
+        return None
+    parsed_training_date = _parse_optional_date_value(training_date)
+    if parsed_training_date is None:
+        return None
+    return (
+        parsed_training_date + timedelta(days=disease_course_window_days // 2)
+    ).isoformat()
+
+
+def _normalize_optional_non_negative_float(
+    value: object,
+    field_name: str,
+) -> float | None:
+    """Normalize an optional non-negative float argument."""
+    if value is None:
+        return None
+    normalized = _coerce_optional_float(value)
+    if normalized is None or normalized < 0:
+        raise ValueError(f"{field_name} must be a non-negative number.")
+    return normalized
+
+
+def _coerce_optional_float(value: object) -> float | None:
+    """Coerce a raw numeric value to float when possible."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_optional_date_value(value: object) -> date | None:
+    """Parse an optional date value and return None for missing or invalid values."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return _parse_date_value(value, "training_date")
+    except ValueError:
+        return None

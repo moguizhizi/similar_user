@@ -18,6 +18,8 @@
 |---|---|---|---|---|
 | 查询患者从某日期开始的训练日期与游戏集合 | `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | `patient_training_history.py` | `patient_id`, `start_date` | `trainingDate`, `games` |
 | 查询患者训练日期的有序列表 | `PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY` | `patient_training_history.py` | `patient_id` | `orderedDatesa` |
+| 查询患者带总分的训练时间点 | `PATIENT_TOTAL_SCORE_TIMEPOINTS_QUERY` | `patient_training_history.py` | `patient_id` | `instance_set_id`, `training_date`, `total_score` |
+| 查询患者指定训练日期的总分 | `PATIENT_TOTAL_SCORE_BY_DATE_QUERY` | `patient_training_history.py` | `patient_id`, `training_date` | `instance_set_id`, `training_date`, `total_score` |
 | 查询患者训练任务历史明细 | `PATIENT_TRAINING_TASK_HISTORY_QUERY` | `patient_training_history.py` | `patient_id` | `trainingDate`, `s`, `i`, `g` |
 | 查询患者左闭右开日期窗口内的游戏历史 | `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | `patient_training_history.py` | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
 
@@ -60,7 +62,8 @@
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
 | 查询两个患者共同游戏上的常模分序列 | `PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY` | `patient_score_queries.py` | `primary_patient_id`, `comparison_patient_id`, `end_date` | `game`, `scores_p1`, `scores_p2` |
-| 查询患者病程窗口内有二级脑能力值的 TaskInstanceSet | `PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY` | `patient_comparison_queries.py` | `patient_id`, `base_date`, `disease_course_window_days` | `effective_ability_date`, `instance_set_id`, `training_date`, `secondary_ability_scores` |
+| 查询患者左闭右开病程窗口内有二级脑能力值的 TaskInstanceSet | `PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY` | `patient_comparison_queries.py` | `patient_id`, `base_date`, `disease_course_window_days` | `effective_ability_date`, `instance_set_id`, `training_date`, `secondary_ability_scores` |
+| 查询患者左闭右开病程窗口内有总分的 TaskInstanceSet | `PATIENT_TOTAL_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY` | `patient_comparison_queries.py` | `patient_id`, `base_date`, `disease_course_window_days` | `effective_total_score_date`, `instance_set_id`, `training_date`, `total_score` |
 
 ### 实体扩展查询
 
@@ -184,6 +187,8 @@ Disease -- TaskInstanceSet -- Patient
 |---|---|---|---|
 | `PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的训练日期与游戏集合 | `patient_id`, `start_date` | `trainingDate`, `games` |
 | `PATIENT_TASK_INSTANCE_SET_ORDERED_TRAINING_DATES_QUERY` | 查询患者训练日期的有序列表 | `patient_id` | `orderedDatesa` |
+| `PATIENT_TOTAL_SCORE_TIMEPOINTS_QUERY` | 查询患者带总分的训练时间点 | `patient_id` | `instance_set_id`, `training_date`, `total_score` |
+| `PATIENT_TOTAL_SCORE_BY_DATE_QUERY` | 查询患者指定训练日期的总分 | `patient_id`, `training_date` | `instance_set_id`, `training_date`, `total_score` |
 | `PATIENT_TRAINING_TASK_HISTORY_QUERY` | 查询患者训练任务历史明细 | `patient_id` | `trainingDate`, `s`, `i`, `g` |
 | `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | 查询患者左闭右开日期窗口内的游戏历史 | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
 
@@ -232,7 +237,8 @@ Disease -- TaskInstanceSet -- Patient
 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY` | 从某日期开始比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `start_date` | `unknowns1`, `unknowns2` |
 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY` | 早于 end_date 比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `end_date` | `unknowns1`, `unknowns2` |
 | `PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY` | 在左闭右开日期区间内比较两个患者的 unknown 集合 | `primary_patient_id`, `comparison_patient_id`, `start_date`, `end_date` | `unknowns1`, `unknowns2` |
-| `PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY` | 查询患者病程窗口内有二级脑能力值的 TaskInstanceSet | `patient_id`, `base_date`, `disease_course_window_days` | `effective_ability_date`, `instance_set_id`, `training_date`, `secondary_ability_scores` |
+| `PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY` | 查询患者左闭右开病程窗口内有二级脑能力值的 TaskInstanceSet | `patient_id`, `base_date`, `disease_course_window_days` | `effective_ability_date`, `instance_set_id`, `training_date`, `secondary_ability_scores` |
+| `PATIENT_TOTAL_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY` | 查询患者左闭右开病程窗口内有总分的 TaskInstanceSet | `patient_id`, `base_date`, `disease_course_window_days` | `effective_total_score_date`, `instance_set_id`, `training_date`, `total_score` |
 
 ### `patient_score_queries.py`
 

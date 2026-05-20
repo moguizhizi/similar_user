@@ -383,7 +383,7 @@ WHERE
     date(window_s.`训练日期`) >= (
         effective_ability_date - duration({{days: $disease_course_window_days}})
     ) AND
-    date(window_s.`训练日期`) <= effective_ability_date AND
+    date(window_s.`训练日期`) < effective_ability_date AND
     any(field IN {SECONDARY_ABILITY_SCORE_FIELD_LIST} WHERE window_s[field] IS NOT NULL)
 
 RETURN
@@ -391,6 +391,45 @@ RETURN
     window_s.id AS instance_set_id,
     window_s.`训练日期` AS training_date,
     {SECONDARY_ABILITY_SCORE_RETURN_MAP} AS secondary_ability_scores
+
+ORDER BY date(window_s.`训练日期`)
+""".strip()
+
+PATIENT_TOTAL_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s:TaskInstanceSet)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) <= date($base_date) AND
+    s.`总分` IS NOT NULL
+
+WITH
+    p,
+    max(date(s.`训练日期`)) AS effective_total_score_date
+
+MATCH (p)
+--(window_s:TaskInstanceSet)
+
+WHERE
+    window_s.`训练日期` IS NOT NULL AND
+    date(window_s.`训练日期`) >= (
+        effective_total_score_date - duration({days: $disease_course_window_days})
+    ) AND
+    date(window_s.`训练日期`) < effective_total_score_date AND
+    window_s.`总分` IS NOT NULL
+
+WITH DISTINCT
+    effective_total_score_date,
+    window_s,
+    toFloat(window_s.`总分`) AS totalScore
+WHERE totalScore IS NOT NULL
+
+RETURN
+    effective_total_score_date,
+    window_s.id AS instance_set_id,
+    window_s.`训练日期` AS training_date,
+    totalScore AS total_score
 
 ORDER BY date(window_s.`训练日期`)
 """.strip()

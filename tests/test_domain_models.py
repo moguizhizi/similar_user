@@ -448,6 +448,7 @@ class DomainModelsTest(unittest.TestCase):
         node = TaskInstanceSetNode.from_dict(
             {
                 "id": "40_20220401",
+                "总分": "91.5",
                 "二级_书写能力": "20.9",
                 "二级_任务切换": 73.1,
                 "二级_阅读能力": "82.25",
@@ -455,6 +456,7 @@ class DomainModelsTest(unittest.TestCase):
         )
 
         self.assertTrue(expected_fields.issubset(actual_fields))
+        self.assertEqual(node.总分, 91.5)
         self.assertEqual(node.二级_书写能力, 20.9)
         self.assertEqual(node.二级_任务切换, 73.1)
         self.assertEqual(node.二级_阅读能力, 82.25)
