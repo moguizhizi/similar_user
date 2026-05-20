@@ -32,6 +32,40 @@ RETURN
     collect(s.`训练日期`) AS orderedDatesa
 """.strip()
 
+PATIENT_TOTAL_SCORE_TIMEPOINTS_QUERY = """
+MATCH (p:Patient {id: $patient_id})--(s:TaskInstanceSet)
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    s.`总分` IS NOT NULL
+
+WITH DISTINCT s, toFloat(s.`总分`) AS totalScore
+WHERE totalScore IS NOT NULL
+
+RETURN
+    s.id AS instance_set_id,
+    s.`训练日期` AS training_date,
+    totalScore AS total_score
+ORDER BY date(s.`训练日期`), instance_set_id
+""".strip()
+
+PATIENT_TOTAL_SCORE_BY_DATE_QUERY = """
+MATCH (p:Patient {id: $patient_id})--(s:TaskInstanceSet)
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) = date($training_date) AND
+    s.`总分` IS NOT NULL
+
+WITH DISTINCT s, toFloat(s.`总分`) AS totalScore
+WHERE totalScore IS NOT NULL
+
+RETURN
+    s.id AS instance_set_id,
+    s.`训练日期` AS training_date,
+    totalScore AS total_score
+ORDER BY instance_set_id
+LIMIT 1
+""".strip()
+
 PATIENT_TRAINING_TASK_HISTORY_QUERY = """
 MATCH (p:Patient {id: $patient_id})
 --(s:TaskInstanceSet)

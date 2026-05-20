@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+import math
 from typing import Any
 
 from config.settings import CandidateScoringSettings, SetSameScoringSettings
@@ -432,9 +433,11 @@ class SimilarUserCandidateService:
                 disease_course_window_days,
             )
         )
+        primary_ability_scores = _aggregate_secondary_ability_scores(primary_rows)
+        candidate_ability_scores = _aggregate_secondary_ability_scores(candidate_rows)
         distance_details = calculate_secondary_ability_relative_distance(
-            primary_rows,
-            candidate_rows,
+            [{"secondary_ability_scores": primary_ability_scores}],
+            [{"secondary_ability_scores": candidate_ability_scores}],
         )
         distance = _coerce_optional_float(distance_details.get("distance"))
         score = _calculate_disease_course_secondary_ability_score_from_distance(
@@ -445,6 +448,11 @@ class SimilarUserCandidateService:
             "score": score,
             "primary_base_date": primary_base_date,
             "candidate_base_date": resolved_candidate_base_date,
+            "aggregation": "mean",
+            "primary_record_count": len(primary_rows),
+            "candidate_record_count": len(candidate_rows),
+            "primary_aggregated_ability_count": len(primary_ability_scores),
+            "candidate_aggregated_ability_count": len(candidate_ability_scores),
             **distance_details,
         }, score
 
@@ -590,7 +598,42 @@ def _sum_enabled_scores(*scores: float | None) -> float | None:
 
 
 def _coerce_optional_float(value: object) -> float | None:
-    return float(value) if isinstance(value, (int, float)) else None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        numeric_value = float(value)
+    elif isinstance(value, str):
+        try:
+            numeric_value = float(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    return numeric_value if math.isfinite(numeric_value) else None
+
+
+def _aggregate_secondary_ability_scores(
+    rows: list[dict[str, object]],
+) -> dict[str, float]:
+    """Aggregate secondary ability rows into one mean score vector."""
+    score_sums: defaultdict[str, float] = defaultdict(float)
+    score_counts: defaultdict[str, int] = defaultdict(int)
+    for row in rows:
+        scores = row.get("secondary_ability_scores")
+        if not isinstance(scores, dict):
+            continue
+        for field, value in scores.items():
+            numeric_value = _coerce_optional_float(value)
+            if numeric_value is None:
+                continue
+            score_sums[str(field)] += numeric_value
+            score_counts[str(field)] += 1
+
+    return {
+        field: score_sums[field] / score_counts[field]
+        for field in score_sums
+        if score_counts[field] > 0
+    }
 
 
 def _calculate_disease_course_secondary_ability_score_from_distance(

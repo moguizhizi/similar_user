@@ -49,10 +49,13 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
+    PATIENT_TOTAL_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_TRAINING_DATE_GAMES_BY_START_DATE_QUERY,
+    PATIENT_TOTAL_SCORE_BY_DATE_QUERY,
+    PATIENT_TOTAL_SCORE_TIMEPOINTS_QUERY,
     PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -883,6 +886,67 @@ class KgRepositoryTest(unittest.TestCase):
             "disease_course_window_days must be a positive integer.",
         ):
             repository.get_patient_secondary_ability_scores_by_disease_course_window(
+                "40",
+                "2023-10-15",
+                0,
+            )
+
+    def test_get_patient_total_scores_by_disease_course_window(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "effective_total_score_date": "2023-10-10",
+                "instance_set_id": "40_20231009",
+                "training_date": "2023-10-09",
+                "total_score": 88.5,
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_total_scores_by_disease_course_window(
+            " 40 ",
+            " 2023-10-15 ",
+            365,
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "effective_total_score_date": "2023-10-10",
+                    "instance_set_id": "40_20231009",
+                    "training_date": "2023-10-09",
+                    "total_score": 88.5,
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TOTAL_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
+            parameters={
+                "patient_id": "40",
+                "base_date": "2023-10-15",
+                "disease_course_window_days": 365,
+            },
+        )
+
+    def test_get_patient_total_scores_by_disease_course_window_rejects_invalid_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_total_scores_by_disease_course_window(
+                "   ",
+                "2023-10-15",
+                365,
+            )
+        with self.assertRaisesRegex(
+            ValueError,
+            "disease_course_window_days must be a positive integer.",
+        ):
+            repository.get_patient_total_scores_by_disease_course_window(
                 "40",
                 "2023-10-15",
                 0,
@@ -1800,6 +1864,7 @@ class KgRepositoryTest(unittest.TestCase):
         )
         self.assertEqual(settings.pattern_path_storage.output_dir, "data/pattern_paths")
         self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
+        self.assertEqual(settings.candidate_ranking.total_score_match_top_k, 1)
         self.assertEqual(settings.candidate_ranking.disease_course_window_days, 365)
         self.assertTrue(
             settings.candidate_ranking.scoring.common_game_score_similarity
@@ -1853,6 +1918,90 @@ class KgRepositoryTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
             repository.get_patient_task_instance_set_ordered_training_dates("   ")
+
+    def test_get_patient_total_score_timepoints(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "instance_set_id": "30010096_20220522",
+                "training_date": "2022-05-22",
+                "total_score": 91.5,
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_total_score_timepoints(" 30010096 ")
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "instance_set_id": "30010096_20220522",
+                    "training_date": "2022-05-22",
+                    "total_score": 91.5,
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TOTAL_SCORE_TIMEPOINTS_QUERY,
+            parameters={"patient_id": "30010096"},
+        )
+
+    def test_get_patient_total_score_timepoints_rejects_blank_patient_id(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_total_score_timepoints("   ")
+
+    def test_get_patient_total_score_by_date(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "instance_set_id": "30010096_20220522",
+                "training_date": "2022-05-22",
+                "total_score": 91.5,
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_total_score_by_date(
+            " 30010096 ",
+            " 2022-05-22 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "instance_set_id": "30010096_20220522",
+                    "training_date": "2022-05-22",
+                    "total_score": 91.5,
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TOTAL_SCORE_BY_DATE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "training_date": "2022-05-22",
+            },
+        )
+
+    def test_get_patient_total_score_by_date_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_total_score_by_date("   ", "2022-05-22")
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "training_date must be a non-empty string.",
+        ):
+            repository.get_patient_total_score_by_date("30010096", "   ")
 
     def test_get_patient_training_task_history(self) -> None:
         mock_client = Mock()

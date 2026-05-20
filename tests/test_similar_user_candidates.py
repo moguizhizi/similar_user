@@ -329,6 +329,69 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             365,
         )
 
+    def test_calculate_candidate_score_aggregates_disease_course_secondary_ability_window(
+        self,
+    ) -> None:
+        mock_user_service = Mock()
+        mock_user_service.get_patient_secondary_ability_scores_by_disease_course_window.side_effect = [
+            [
+                {
+                    "training_date": "2022-01-01",
+                    "secondary_ability_scores": {
+                        "二级_书写能力": 10,
+                        "二级_任务切换": 30,
+                    },
+                },
+                {
+                    "training_date": "2022-01-02",
+                    "secondary_ability_scores": {
+                        "二级_书写能力": 14,
+                        "二级_任务切换": None,
+                    },
+                },
+            ],
+            [
+                {
+                    "training_date": "2021-12-01",
+                    "secondary_ability_scores": {
+                        "二级_书写能力": 6,
+                        "二级_任务切换": 15,
+                    },
+                }
+            ],
+        ]
+
+        candidate_score, score_details = SimilarUserCandidateService(
+            user_service=mock_user_service
+        ).calculate_candidate_score(
+            primary_patient_id="30010096",
+            candidate_patient_id="20113562",
+            end_date="2022-01-13",
+            candidate_base_date="2021-12-14",
+            disease_course_window_days=365,
+            scoring_settings=CandidateScoringSettings(
+                common_game_score_similarity=False,
+                game_similarity_with_diversity_score=False,
+                disease_course_secondary_ability=True,
+                set_same=SetSameScoringSettings(
+                    disease=False,
+                    symptom=False,
+                    unknown=False,
+                ),
+            ),
+        )
+
+        disease_course_details = score_details["disease_course_secondary_ability"]
+        self.assertEqual(candidate_score, 0.586)
+        self.assertEqual(disease_course_details["score"], 0.586)
+        self.assertAlmostEqual(disease_course_details["distance"], 0.70710678)
+        self.assertEqual(disease_course_details["aggregation"], "mean")
+        self.assertEqual(disease_course_details["primary_record_count"], 2)
+        self.assertEqual(disease_course_details["candidate_record_count"], 1)
+        self.assertEqual(disease_course_details["primary_aggregated_ability_count"], 2)
+        self.assertEqual(disease_course_details["candidate_aggregated_ability_count"], 2)
+        self.assertEqual(disease_course_details["used_count"], 2)
+
     def test_calculate_candidate_score_skips_disease_course_without_window(
         self,
     ) -> None:

@@ -497,6 +497,36 @@ class KgRepository:
             },
         )
 
+    def get_patient_total_scores_by_disease_course_window(
+        self,
+        patient_id: str,
+        base_date: str,
+        disease_course_window_days: int,
+    ) -> list[dict[str, object]]:
+        """Return total scores in a disease-course window."""
+        normalized_patient_id = patient_id.strip()
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+        if (
+            not isinstance(disease_course_window_days, int)
+            or isinstance(disease_course_window_days, bool)
+            or disease_course_window_days <= 0
+        ):
+            raise ValueError("disease_course_window_days must be a positive integer.")
+
+        spec = get_graph_query_spec(
+            "patient_total_scores_by_disease_course_window"
+        )
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "base_date": normalized_base_date,
+                "disease_course_window_days": disease_course_window_days,
+            },
+        )
+
     def get_patient_distinct_symptoms_by_end_date(
         self,
         patient_id: str,
@@ -840,6 +870,44 @@ class KgRepository:
         return self.client.run_query(
             query=spec.query,
             parameters={"patient_id": normalized_patient_id},
+        )
+
+    def get_patient_total_score_timepoints(
+        self,
+        patient_id: str,
+    ) -> list[dict[str, object]]:
+        """Return TaskInstanceSet timepoints that have total scores for one patient."""
+        normalized_patient_id = patient_id.strip()
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        spec = get_graph_query_spec("patient_total_score_timepoints")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={"patient_id": normalized_patient_id},
+        )
+
+    def get_patient_total_score_by_date(
+        self,
+        patient_id: str,
+        training_date: str,
+    ) -> list[dict[str, object]]:
+        """Return a patient's total score on one training date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_training_date = self._normalize_required_string(
+            training_date,
+            "training_date",
+        )
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        spec = get_graph_query_spec("patient_total_score_by_date")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "training_date": normalized_training_date,
+            },
         )
 
     def get_patient_training_task_history(
