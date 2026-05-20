@@ -299,7 +299,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             primary_patient_id="30010096",
             candidate_patient_id="20113562",
             end_date="2022-01-13",
-            candidate_base_date="2021-12-14",
+            candidate_base_dates=["2021-12-14"],
             disease_course_window_days=365,
             scoring_settings=CandidateScoringSettings(
                 common_game_score_similarity=False,
@@ -367,7 +367,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             primary_patient_id="30010096",
             candidate_patient_id="20113562",
             end_date="2022-01-13",
-            candidate_base_date="2021-12-14",
+            candidate_base_dates=["2021-12-14"],
             disease_course_window_days=365,
             scoring_settings=CandidateScoringSettings(
                 common_game_score_similarity=False,
@@ -426,7 +426,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         )
         mock_user_service.get_patient_secondary_ability_scores_by_disease_course_window.assert_not_called()
 
-    def test_aggregate_candidates_uses_candidate_base_date_provider_for_disease_course_score(
+    def test_aggregate_candidates_warns_and_skips_disease_course_without_recommended_date(
         self,
     ) -> None:
         scored_result = {
@@ -470,6 +470,93 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ],
         }
         mock_user_service = Mock()
+        mock_user_service.find_patient_total_score_timepoint_matches.return_value = []
+
+        candidate_service = SimilarUserCandidateService(user_service=mock_user_service)
+        candidate_service.get_candidate_disease_course_base_date = Mock(
+            return_value="2021-12-18"
+        )
+
+        with self.assertLogs(
+            "similar_user.services.similarity.candidate_service",
+            level="WARNING",
+        ) as captured_logs:
+            result = candidate_service.aggregate_candidates_from_scored_paths(
+                scored_result,
+                candidate_top_k=1,
+                disease_course_window_days=365,
+                scoring_settings=CandidateScoringSettings(
+                    common_game_score_similarity=False,
+                    game_similarity_with_diversity_score=False,
+                    disease_course_secondary_ability=True,
+                    set_same=SetSameScoringSettings(
+                        disease=False,
+                        symptom=False,
+                        unknown=False,
+                    ),
+                ),
+            )
+
+        disease_course_details = result["candidates"][0]["score_details"][
+            "disease_course_secondary_ability"
+        ]
+        self.assertEqual(
+            disease_course_details,
+            {
+                "enabled": True,
+                "score": None,
+                "reason": "missing candidate disease-course base dates",
+                "primary_base_date": "2022-01-13",
+                "candidate_base_dates": [],
+            },
+        )
+        self.assertTrue(
+            any(
+                "candidate has no suitable disease-course timepoint" in message
+                for message in captured_logs.output
+            )
+        )
+        candidate_service.get_candidate_disease_course_base_date.assert_not_called()
+        mock_user_service.get_patient_secondary_ability_scores_by_disease_course_window.assert_not_called()
+
+    def test_aggregate_candidates_uses_total_score_recommended_date_for_disease_course_score(
+        self,
+    ) -> None:
+        scored_result = {
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "path_count": 1,
+            "scored_path_count": 1,
+            "retrieval_context": {"score_end_date": "2022-01-13"},
+            "scores": [
+                {
+                    "path_index": 0,
+                    "score": {"total_score": 90.0},
+                    "path": {
+                        "row": {
+                            "p": {"id": "30010096"},
+                            "s1": {"id": "30010096_20220113", "训练日期": "2022-01-13"},
+                            "i1": {"id": "30010096_20220113_348_a"},
+                            "g": {"id": "348", "name": "真假句辨别"},
+                            "i2": {"id": "20113562_20211214_348_a"},
+                            "s2": {"id": "20113562_20211214", "训练日期": "2021-12-14"},
+                            "p2": {"id": "20113562"},
+                        }
+                    },
+                },
+            ],
+        }
+        mock_user_service = Mock()
+        mock_user_service.find_patient_total_score_timepoint_matches.return_value = [
+            {
+                "matched": {
+                    "patient_id": "20113562",
+                    "training_date": "2021-12-14",
+                    "recommended_date": "2022-06-14",
+                }
+            }
+        ]
         mock_user_service.get_patient_secondary_ability_scores_by_disease_course_window.side_effect = [
             [
                 {
@@ -479,15 +566,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ],
             [
                 {
-                    "training_date": "2021-12-01",
+                    "training_date": "2022-06-01",
                     "secondary_ability_scores": {"二级_书写能力": 10},
                 }
             ],
         ]
-
         candidate_service = SimilarUserCandidateService(user_service=mock_user_service)
         candidate_service.get_candidate_disease_course_base_date = Mock(
-            return_value="2021-12-18"
+            return_value="should-not-be-used"
         )
 
         result = candidate_service.aggregate_candidates_from_scored_paths(
@@ -509,21 +595,120 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         disease_course_details = result["candidates"][0]["score_details"][
             "disease_course_secondary_ability"
         ]
-        self.assertEqual(disease_course_details["primary_base_date"], "2022-01-13")
-        self.assertEqual(disease_course_details["candidate_base_date"], "2021-12-18")
-        candidate_service.get_candidate_disease_course_base_date.assert_called_once_with(
-            primary_patient_id="30010096",
-            candidate_patient_id="20113562",
-            primary_base_date="2022-01-13",
+        self.assertEqual(disease_course_details["candidate_base_date"], "2022-06-14")
+        mock_user_service.find_patient_total_score_timepoint_matches.assert_called_once_with(
+            source_patient_id="30010096",
+            source_training_date="2022-01-13",
+            comparison_patient_ids=["20113562"],
         )
+        candidate_service.get_candidate_disease_course_base_date.assert_not_called()
         mock_user_service.get_patient_secondary_ability_scores_by_disease_course_window.assert_any_call(
-            "30010096",
-            "2022-01-13",
+            "20113562",
+            "2022-06-14",
+            365,
+        )
+
+    def test_aggregate_candidates_uses_highest_disease_course_score_from_recommended_dates(
+        self,
+    ) -> None:
+        scored_result = {
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "path_count": 1,
+            "scored_path_count": 1,
+            "retrieval_context": {"score_end_date": "2022-01-13"},
+            "scores": [
+                {
+                    "path_index": 0,
+                    "score": {"total_score": 90.0},
+                    "path": {
+                        "row": {
+                            "p": {"id": "30010096"},
+                            "s1": {"id": "30010096_20220113", "训练日期": "2022-01-13"},
+                            "i1": {"id": "30010096_20220113_348_a"},
+                            "g": {"id": "348", "name": "真假句辨别"},
+                            "i2": {"id": "20113562_20211214_348_a"},
+                            "s2": {"id": "20113562_20211214", "训练日期": "2021-12-14"},
+                            "p2": {"id": "20113562"},
+                        }
+                    },
+                },
+            ],
+        }
+        mock_user_service = Mock()
+        mock_user_service.find_patient_total_score_timepoint_matches.return_value = [
+            {
+                "matched": {
+                    "patient_id": "20113562",
+                    "recommended_date": "2022-06-14",
+                }
+            },
+            {
+                "matched": {
+                    "patient_id": "20113562",
+                    "recommended_date": "2022-07-14",
+                }
+            },
+        ]
+        mock_user_service.get_patient_secondary_ability_scores_by_disease_course_window.side_effect = [
+            [
+                {
+                    "training_date": "2022-01-01",
+                    "secondary_ability_scores": {"二级_书写能力": 10},
+                }
+            ],
+            [
+                {
+                    "training_date": "2022-06-01",
+                    "secondary_ability_scores": {"二级_书写能力": 5},
+                }
+            ],
+            [
+                {
+                    "training_date": "2022-01-01",
+                    "secondary_ability_scores": {"二级_书写能力": 10},
+                }
+            ],
+            [
+                {
+                    "training_date": "2022-07-01",
+                    "secondary_ability_scores": {"二级_书写能力": 10},
+                }
+            ],
+        ]
+        candidate_service = SimilarUserCandidateService(user_service=mock_user_service)
+
+        result = candidate_service.aggregate_candidates_from_scored_paths(
+            scored_result,
+            candidate_top_k=1,
+            disease_course_window_days=365,
+            scoring_settings=CandidateScoringSettings(
+                common_game_score_similarity=False,
+                game_similarity_with_diversity_score=False,
+                disease_course_secondary_ability=True,
+                set_same=SetSameScoringSettings(
+                    disease=False,
+                    symptom=False,
+                    unknown=False,
+                ),
+            ),
+        )
+
+        disease_course_details = result["candidates"][0]["score_details"][
+            "disease_course_secondary_ability"
+        ]
+        self.assertEqual(result["candidates"][0]["candidate_score"], 1.0)
+        self.assertEqual(disease_course_details["candidate_base_date"], "2022-07-14")
+        self.assertEqual(disease_course_details["score"], 1.0)
+        mock_user_service.get_patient_secondary_ability_scores_by_disease_course_window.assert_any_call(
+            "20113562",
+            "2022-06-14",
             365,
         )
         mock_user_service.get_patient_secondary_ability_scores_by_disease_course_window.assert_any_call(
             "20113562",
-            "2021-12-18",
+            "2022-07-14",
             365,
         )
 

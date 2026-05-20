@@ -741,16 +741,31 @@ class UserService:
             "tolerance",
         )
 
-        source_timepoint = self.get_patient_total_score_by_date(
-            normalized_source_patient_id,
-            normalized_source_training_date.isoformat(),
-        )
-        if source_timepoint is None:
+        disease_course_window_days = self._get_disease_course_window_days()
+        if disease_course_window_days is None:
+            LOGGER.warning(
+                "Skipped total-score timepoint matching because disease_course_window_days is missing: source_patient_id=%s, source_training_date=%s",
+                normalized_source_patient_id,
+                normalized_source_training_date.isoformat(),
+            )
             return []
 
-        source_score = float(source_timepoint["total_score"])
+        source_total_score_rows = self.get_patient_total_scores_by_disease_course_window(
+            normalized_source_patient_id,
+            normalized_source_training_date.isoformat(),
+            disease_course_window_days,
+        )
+        source_total_score_summary = _aggregate_total_score_rows(source_total_score_rows)
+        if source_total_score_summary is None:
+            return []
+
+        source_score = float(source_total_score_summary["total_score"])
+        source_timepoint = {
+            "instance_set_id": None,
+            "training_date": normalized_source_training_date.isoformat(),
+            **source_total_score_summary,
+        }
         match_top_k = self._get_total_score_match_top_k()
-        disease_course_window_days = self._get_disease_course_window_days()
         matches: list[dict[str, object]] = []
         for comparison_patient_id in normalized_comparison_patient_ids:
             matched_timepoints = self._find_comparison_total_score_timepoint_matches(
@@ -1055,6 +1070,34 @@ def _normalize_total_score_timepoint(
         "instance_set_id": instance_set_id.strip(),
         "training_date": str(training_date) if training_date is not None else None,
         "total_score": total_score,
+    }
+
+
+def _aggregate_total_score_rows(
+    rows: list[dict[str, object]],
+) -> dict[str, object] | None:
+    """Aggregate disease-course total-score rows into one mean score."""
+    total_scores = [
+        total_score
+        for total_score in (
+            _coerce_optional_float(row.get("total_score"))
+            for row in rows
+            if isinstance(row, dict)
+        )
+        if total_score is not None
+    ]
+    if not total_scores:
+        return None
+    effective_dates = [
+        str(row.get("effective_total_score_date"))
+        for row in rows
+        if isinstance(row, dict) and row.get("effective_total_score_date") is not None
+    ]
+    return {
+        "total_score": sum(total_scores) / len(total_scores),
+        "total_score_aggregation": "mean",
+        "total_score_record_count": len(total_scores),
+        "effective_total_score_date": effective_dates[0] if effective_dates else None,
     }
 
 

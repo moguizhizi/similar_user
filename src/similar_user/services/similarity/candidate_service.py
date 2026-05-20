@@ -154,6 +154,19 @@ class SimilarUserCandidateService:
                 ):
                     pattern_breakdown["best_score"] = scored_path.total_score
 
+        recommended_dates_by_candidate = (
+            self._build_total_score_recommended_dates_by_candidate(
+                primary_patient_id=source_patient_id,
+                source_training_date=score_end_date,
+                candidate_patient_ids=[
+                    candidate_id
+                    for candidate_id in candidate_buckets
+                    if isinstance(candidate_id, str)
+                ],
+                enabled=resolved_scoring_settings.disease_course_secondary_ability,
+            )
+        )
+
         candidates: list[dict[str, Any]] = []
         for bucket in candidate_buckets.values():
             match_count = bucket["match_count"]
@@ -177,6 +190,9 @@ class SimilarUserCandidateService:
                 primary_patient_id=source_patient_id,
                 candidate_patient_id=bucket["patient_id"],
                 end_date=score_end_date,
+                candidate_base_dates=recommended_dates_by_candidate.get(
+                    bucket["patient_id"]
+                ),
                 scoring_settings=resolved_scoring_settings,
                 disease_course_window_days=disease_course_window_days,
             )
@@ -229,7 +245,7 @@ class SimilarUserCandidateService:
         primary_patient_id: object,
         candidate_patient_id: object,
         end_date: str | None,
-        candidate_base_date: str | None = None,
+        candidate_base_dates: list[str] | None = None,
         scoring_settings: CandidateScoringSettings | None = None,
         disease_course_window_days: int | None = None,
     ) -> tuple[float | None, dict[str, Any]]:
@@ -281,25 +297,41 @@ class SimilarUserCandidateService:
             end_date=end_date,
             scoring_settings=resolved_scoring_settings.set_same,
         )
-        resolved_candidate_base_date = candidate_base_date
-        if resolved_candidate_base_date is None:
-            resolved_candidate_base_date = self.get_candidate_disease_course_base_date(
-                primary_patient_id=primary_patient_id.strip(),
-                candidate_patient_id=candidate_patient_id.strip(),
-                primary_base_date=end_date,
-            )
-        disease_course_secondary_ability, disease_course_score = (
-            self._calculate_disease_course_secondary_ability_score(
-                enabled=(
-                    resolved_scoring_settings.disease_course_secondary_ability
-                ),
-                primary_patient_id=primary_patient_id.strip(),
-                candidate_patient_id=candidate_patient_id.strip(),
-                primary_base_date=end_date,
-                candidate_base_date=resolved_candidate_base_date,
-                disease_course_window_days=disease_course_window_days,
-            )
+        resolved_candidate_base_dates = _normalize_candidate_base_dates(
+            candidate_base_dates
         )
+        if (
+            resolved_scoring_settings.disease_course_secondary_ability
+            and disease_course_window_days is not None
+            and not resolved_candidate_base_dates
+        ):
+            LOGGER.warning(
+                "Skipped disease-course secondary ability score because candidate has no suitable disease-course timepoint: primary_patient_id=%s, candidate_patient_id=%s, primary_base_date=%s",
+                primary_patient_id.strip(),
+                candidate_patient_id.strip(),
+                end_date,
+            )
+            disease_course_secondary_ability = {
+                "enabled": True,
+                "score": None,
+                "reason": "missing candidate disease-course base dates",
+                "primary_base_date": end_date,
+                "candidate_base_dates": [],
+            }
+            disease_course_score = None
+        else:
+            disease_course_secondary_ability, disease_course_score = (
+                self._calculate_best_disease_course_secondary_ability_score(
+                    enabled=(
+                        resolved_scoring_settings.disease_course_secondary_ability
+                    ),
+                    primary_patient_id=primary_patient_id.strip(),
+                    candidate_patient_id=candidate_patient_id.strip(),
+                    primary_base_date=end_date,
+                    candidate_base_dates=resolved_candidate_base_dates,
+                    disease_course_window_days=disease_course_window_days,
+                )
+            )
         candidate_score = _sum_enabled_scores(
             similarity_score,
             game_similarity_score,
@@ -327,6 +359,57 @@ class SimilarUserCandidateService:
             "disease_course_secondary_ability": disease_course_secondary_ability,
             "set_same_scores": set_same_scores,
         }
+
+    def _build_total_score_recommended_dates_by_candidate(
+        self,
+        *,
+        primary_patient_id: str | None,
+        source_training_date: str | None,
+        candidate_patient_ids: list[str],
+        enabled: bool,
+    ) -> dict[str, list[str]]:
+        """Build candidate recommended base dates from total-score timepoint matches."""
+        if (
+            not enabled
+            or self.user_service is None
+            or not isinstance(primary_patient_id, str)
+            or not primary_patient_id.strip()
+            or not isinstance(source_training_date, str)
+            or not source_training_date.strip()
+            or not candidate_patient_ids
+        ):
+            return {}
+
+        matches = self.user_service.find_patient_total_score_timepoint_matches(
+            source_patient_id=primary_patient_id.strip(),
+            source_training_date=source_training_date.strip(),
+            comparison_patient_ids=candidate_patient_ids,
+        )
+        if not isinstance(matches, list):
+            return {}
+
+        recommended_dates_by_candidate: dict[str, list[str]] = {}
+        for match in matches:
+            if not isinstance(match, dict):
+                continue
+            matched = match.get("matched")
+            if not isinstance(matched, dict):
+                continue
+            candidate_id = matched.get("patient_id")
+            recommended_date = matched.get("recommended_date")
+            if (
+                isinstance(candidate_id, str)
+                and isinstance(recommended_date, str)
+                and recommended_date.strip()
+            ):
+                recommended_dates = recommended_dates_by_candidate.setdefault(
+                    candidate_id,
+                    [],
+                )
+                normalized_recommended_date = recommended_date.strip()
+                if normalized_recommended_date not in recommended_dates:
+                    recommended_dates.append(normalized_recommended_date)
+        return recommended_dates_by_candidate
 
     def _calculate_common_game_score_similarity(
         self,
@@ -398,6 +481,39 @@ class SimilarUserCandidateService:
             scoring_settings=scoring_settings,
         )
         return score_details, _coerce_optional_float(score_details.get("score"))
+
+    def _calculate_best_disease_course_secondary_ability_score(
+        self,
+        *,
+        enabled: bool,
+        primary_patient_id: str,
+        candidate_patient_id: str,
+        primary_base_date: str,
+        candidate_base_dates: list[str],
+        disease_course_window_days: int | None,
+    ) -> tuple[dict[str, object] | None, float | None]:
+        """Calculate disease-course score for candidate dates and keep the best one."""
+        if not candidate_base_dates:
+            candidate_base_dates = [None]
+
+        best_details: dict[str, object] | None = None
+        best_score: float | None = None
+        for candidate_base_date in candidate_base_dates:
+            details, score = self._calculate_disease_course_secondary_ability_score(
+                enabled=enabled,
+                primary_patient_id=primary_patient_id,
+                candidate_patient_id=candidate_patient_id,
+                primary_base_date=primary_base_date,
+                candidate_base_date=candidate_base_date,
+                disease_course_window_days=disease_course_window_days,
+            )
+            if best_details is None or _candidate_score_sort_value(
+                score
+            ) > _candidate_score_sort_value(best_score):
+                best_details = details
+                best_score = score
+
+        return best_details, best_score
 
     def _calculate_disease_course_secondary_ability_score(
         self,
@@ -610,6 +726,20 @@ def _coerce_optional_float(value: object) -> float | None:
     else:
         return None
     return numeric_value if math.isfinite(numeric_value) else None
+
+
+def _normalize_candidate_base_dates(values: list[str | None] | None) -> list[str]:
+    """Normalize optional candidate base dates while preserving order."""
+    if not values:
+        return []
+    normalized_values: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        normalized_value = value.strip()
+        if normalized_value not in normalized_values:
+            normalized_values.append(normalized_value)
+    return normalized_values
 
 
 def _aggregate_secondary_ability_scores(
