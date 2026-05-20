@@ -209,16 +209,20 @@ class SimilarUserCandidateService:
             bucket["score_details"] = score_details
             candidates.append(bucket)
 
+        disease_course_stats = _build_disease_course_secondary_ability_stats(candidates)
         candidates.sort(
             key=lambda item: _candidate_score_sort_value(item.get("candidate_score")),
             reverse=True,
         )
         candidates = candidates[:candidate_top_k]
         LOGGER.info(
-            "Aggregated similar-user candidates: source_id=%s, source_parameter=%s, candidate_count=%s",
+            "Aggregated similar-user candidates: source_id=%s, source_parameter=%s, pre_score_candidate_count=%s, candidate_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s",
             source_id,
             source_parameter,
+            len(candidate_buckets),
             len(candidates),
+            disease_course_stats["available_count"],
+            disease_course_stats["missing_count"],
         )
 
         return {
@@ -245,6 +249,9 @@ class SimilarUserCandidateService:
                 ),
             },
             "candidate_count": len(candidates),
+            "pre_score_candidate_count": len(candidate_buckets),
+            "disease_course_available_count": disease_course_stats["available_count"],
+            "disease_course_missing_count": disease_course_stats["missing_count"],
             "candidates": candidates,
         }
 
@@ -749,6 +756,31 @@ def _normalize_candidate_base_dates(values: list[str | None] | None) -> list[str
         if normalized_value not in normalized_values:
             normalized_values.append(normalized_value)
     return normalized_values
+
+
+def _build_disease_course_secondary_ability_stats(
+    candidates: list[dict[str, Any]],
+) -> dict[str, int]:
+    available_count = 0
+    missing_count = 0
+    for candidate in candidates:
+        score_details = candidate.get("score_details")
+        disease_course_details = (
+            score_details.get("disease_course_secondary_ability")
+            if isinstance(score_details, dict)
+            else None
+        )
+        if not isinstance(disease_course_details, dict):
+            continue
+        if disease_course_details.get("score") is None:
+            missing_count += 1
+        else:
+            available_count += 1
+
+    return {
+        "available_count": available_count,
+        "missing_count": missing_count,
+    }
 
 
 def _aggregate_secondary_ability_scores(

@@ -158,14 +158,14 @@ def build_similar_user_candidates(
         result.setdefault("retrieval_context", {})[
             "disease_course_window_days"
         ] = resolved_disease_course_window_days
-    disease_course_stats = _build_disease_course_secondary_ability_stats(result)
     LOGGER.info(
-        "Built similar-user candidates from scored paths: patient_id=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s",
+        "Built similar-user candidates from scored paths: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s",
         patient_id,
+        result.get("pre_score_candidate_count"),
         result.get("candidate_count"),
         result.get("scored_path_count"),
-        disease_course_stats["available_count"],
-        disease_course_stats["missing_count"],
+        result.get("disease_course_available_count"),
+        result.get("disease_course_missing_count"),
     )
     return result
 
@@ -339,37 +339,6 @@ def _extract_nested_value(data: dict[str, Any], *keys: str) -> Any:
             return None
         current = current.get(key)
     return current
-
-
-def _build_disease_course_secondary_ability_stats(
-    result: dict[str, Any],
-) -> dict[str, int]:
-    candidates = result.get("candidates")
-    if not isinstance(candidates, list):
-        return {"available_count": 0, "missing_count": 0}
-
-    available_count = 0
-    missing_count = 0
-    for candidate in candidates:
-        if not isinstance(candidate, dict):
-            continue
-        score_details = candidate.get("score_details")
-        disease_course_details = (
-            score_details.get("disease_course_secondary_ability")
-            if isinstance(score_details, dict)
-            else None
-        )
-        if not isinstance(disease_course_details, dict):
-            continue
-        if disease_course_details.get("score") is None:
-            missing_count += 1
-        else:
-            available_count += 1
-
-    return {
-        "available_count": available_count,
-        "missing_count": missing_count,
-    }
 
 
 def _normalize_required_string(value: object, field_name: str) -> str:
