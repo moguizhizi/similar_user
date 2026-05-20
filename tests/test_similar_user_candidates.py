@@ -151,6 +151,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         self.assertEqual(result["retrieval_context"]["score_end_date"], "2022-01-13")
         self.assertEqual(result["candidate_count"], 2)
+        self.assertEqual(result["pre_score_candidate_count"], 2)
+        self.assertEqual(result["disease_course_available_count"], 0)
+        self.assertEqual(result["disease_course_missing_count"], 0)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
         self.assertEqual(result["candidates"][0]["candidate_score"], 2.25)
         self.assertEqual(
@@ -819,6 +822,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         self.assertEqual(result["candidate_top_k"], 2)
         self.assertEqual(result["candidate_count"], 2)
+        self.assertEqual(result["pre_score_candidate_count"], 3)
         self.assertEqual(
             [candidate["patient_id"] for candidate in result["candidates"]],
             ["20113563", "20113564"],
@@ -1206,9 +1210,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             candidates["retrieval_context"]["disease_course_window_days"],
             90,
         )
+        self.assertEqual(candidates["pre_score_candidate_count"], 1)
+        self.assertEqual(candidates["disease_course_available_count"], 1)
+        self.assertEqual(candidates["disease_course_missing_count"], 0)
         mock_logger.info.assert_any_call(
-            "Built similar-user candidates from scored paths: patient_id=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s",
+            "Built similar-user candidates from scored paths: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s",
             "30010096",
+            1,
             1,
             1,
             1,
