@@ -154,6 +154,15 @@ class SimilarUserCandidateService:
                 ):
                     pattern_breakdown["best_score"] = scored_path.total_score
 
+        LOGGER.info(
+            "Prepared similar-user candidate buckets before scoring: source_id=%s, source_parameter=%s, scored_path_count=%s, pre_score_candidate_count=%s, candidate_top_k=%s",
+            source_id,
+            source_parameter,
+            len(scored_domain_paths),
+            len(candidate_buckets),
+            candidate_top_k,
+        )
+
         recommended_dates_by_candidate = (
             self._build_total_score_recommended_dates_by_candidate(
                 primary_patient_id=source_patient_id,

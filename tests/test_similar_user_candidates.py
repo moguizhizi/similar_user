@@ -27,7 +27,11 @@ from similar_user.utils.pattern_storage import save_pattern_result
 
 
 class SimilarUserCandidatesTest(unittest.TestCase):
-    def test_aggregate_candidates_from_scored_paths_deduplicates_and_sorts(self) -> None:
+    @patch("similar_user.services.similarity.candidate_service.LOGGER")
+    def test_aggregate_candidates_from_scored_paths_deduplicates_and_sorts(
+        self,
+        mock_logger: Mock,
+    ) -> None:
         valid_row_a = {
             "p": {"id": "30010096"},
             "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
@@ -195,6 +199,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(
             mock_user_service.get_patient_unknown_set_comparison_by_end_date.call_count,
             2,
+        )
+        mock_logger.info.assert_any_call(
+            "Prepared similar-user candidate buckets before scoring: source_id=%s, source_parameter=%s, scored_path_count=%s, pre_score_candidate_count=%s, candidate_top_k=%s",
+            "30010096",
+            "patient_id",
+            3,
+            2,
+            3,
         )
 
     def test_calculate_candidate_score_uses_enabled_scoring_components_only(self) -> None:
@@ -1087,8 +1099,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(candidates["candidate_count"], 1)
         self.assertEqual(candidates["candidates"][0]["patient_id"], "20113562")
 
+    @patch("scripts.build_similar_user_candidates.LOGGER")
     def test_build_similar_user_candidates_uses_disease_course_window_override(
         self,
+        mock_logger: Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
@@ -1107,6 +1121,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                         "  scoring:",
                         "    common_game_score_similarity: false",
                         "    game_similarity_with_diversity_score: false",
+                        "    disease_course_secondary_ability: true",
                         "    set_same:",
                         "      disease: false",
                         "      symptom: false",
@@ -1136,6 +1151,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                     "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                     "path_count": 1,
                     "scored_path_count": 1,
+                    "retrieval_context": {"score_end_date": "2022-05-22"},
                     "scores": [
                         {
                             "path_index": 0,
@@ -1155,7 +1171,30 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 mock_client_context.__enter__ = Mock(return_value=Mock())
                 mock_client_context.__exit__ = Mock(return_value=None)
                 mock_from_config.return_value = mock_client_context
-                mock_user_service_cls.return_value = Mock()
+                mock_user_service = Mock()
+                mock_user_service.find_patient_total_score_timepoint_matches.return_value = [
+                    {
+                        "matched": {
+                            "patient_id": "20113562",
+                            "recommended_date": "2022-02-01",
+                        }
+                    }
+                ]
+                mock_user_service.get_patient_secondary_ability_scores_by_disease_course_window.side_effect = [
+                    [
+                        {
+                            "training_date": "2022-05-22",
+                            "secondary_ability_scores": {"二级_书写能力": 10},
+                        }
+                    ],
+                    [
+                        {
+                            "training_date": "2022-02-01",
+                            "secondary_ability_scores": {"二级_书写能力": 10},
+                        }
+                    ],
+                ]
+                mock_user_service_cls.return_value = mock_user_service
                 candidates = build_similar_user_candidates(
                     "30010096",
                     config_path=config_path,
@@ -1166,6 +1205,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(
             candidates["retrieval_context"]["disease_course_window_days"],
             90,
+        )
+        mock_logger.info.assert_any_call(
+            "Built similar-user candidates from scored paths: patient_id=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s",
+            "30010096",
+            1,
+            1,
+            1,
+            0,
         )
 
     def test_build_similar_user_candidates_reads_multiple_saved_scored_patterns(
