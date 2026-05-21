@@ -119,7 +119,7 @@ def run_similar_user_pipeline(
     """Run path retrieval, scoring, and candidate ranking as one workflow."""
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     started_at = time.perf_counter()
-    LOGGER.debug(
+    LOGGER.info(
         "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, base_date=%s, window_days=%s, config_path=%s",
         patient_id,
         pattern,
@@ -174,7 +174,7 @@ def run_similar_user_pipeline(
             key: str(value) for key, value in candidate_output_paths.items()
         },
     }
-    LOGGER.debug(
+    LOGGER.info(
         "Completed similar-user pipeline: patient_id=%s, candidate_count=%s, elapsed_seconds=%s",
         patient_id,
         candidate_result.get("candidate_count"),

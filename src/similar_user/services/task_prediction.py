@@ -532,7 +532,18 @@ def build_task_prediction_prompt(
     candidate_training_tasks: list[dict[str, Any]],
     task_top_k: int,
 ) -> str:
-    """Build the JSON-first prompt for LLM task prediction."""
+    """构建用于 LLM 训练任务预测的 JSON 优先提示词。
+
+    参数说明：
+    patient_id：目标用户 ID，用于标识当前要预测训练任务的患者。
+    similar_user_game_counts：相似用户在预测任务时间窗口内的任务出现次数汇总，
+        用于提供“哪些任务在相似用户中更常见”的整体证据。
+    similar_user_task_evidence：按相似用户拆分的任务证据，包含候选用户 ID、
+        相似性分数和该用户窗口内的任务次数，用于让 LLM 判断证据来源和权重。
+    candidate_training_tasks：允许 LLM 选择的候选训练任务池；最终输出的 game_id
+        和 game_name 必须来自这里，避免生成库外任务。
+    task_top_k：要求 LLM 返回的推荐任务数量上限。
+    """
     payload = {
         "patient_id": patient_id,
         "similar_user_game_counts": similar_user_game_counts,

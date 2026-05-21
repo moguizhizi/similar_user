@@ -41,6 +41,8 @@ query:
         disease: false
         symptom: false
         unknown: false
+  training_task_prediction:
+    candidate_task_window_days: 14
 
 similarity:
   top_k: 20

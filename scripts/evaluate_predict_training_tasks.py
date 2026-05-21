@@ -78,7 +78,7 @@ def parse_args() -> argparse.Namespace:
         "--window-days",
         type=int,
         required=True,
-        help="Number of days before base_date used to query candidate-user tasks.",
+        help="Number of days before base_date used to build similar-user paths.",
     )
     parser.add_argument(
         "--pattern",

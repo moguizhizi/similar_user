@@ -467,6 +467,26 @@ class KgRepository:
             },
         )
 
+    def get_patient_profile_entities_by_effective_date(
+        self,
+        patient_id: str,
+        base_date: str,
+    ) -> list[dict[str, object]]:
+        """Return disease, symptom, and unknown nodes on the nearest effective date."""
+        normalized_patient_id = patient_id.strip()
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        spec = get_graph_query_spec("patient_profile_entities_by_effective_date")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "base_date": normalized_base_date,
+            },
+        )
+
     def get_patient_secondary_ability_scores_by_disease_course_window(
         self,
         patient_id: str,

@@ -1,5 +1,31 @@
 """Cypher queries for one patient's related task and medical entity sets."""
 
+PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s:TaskInstanceSet)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) <= date($base_date)
+
+WITH max(date(s.`训练日期`)) AS effective_date
+
+MATCH (p:Patient {id: $patient_id})
+--(s:TaskInstanceSet)
+
+WHERE date(s.`训练日期`) = effective_date
+
+OPTIONAL MATCH (s)--(dis:Disease)
+OPTIONAL MATCH (s)--(sym:Symptom)
+OPTIONAL MATCH (s)--(un:Unknown)
+
+RETURN
+    toString(effective_date) AS effective_date,
+    collect(DISTINCT dis) AS diseases,
+    collect(DISTINCT sym) AS symptoms,
+    collect(DISTINCT un) AS unknowns
+""".strip()
+
 PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY = """
 MATCH (p:Patient {id: $patient_id})
 --(s1:TaskInstanceSet)

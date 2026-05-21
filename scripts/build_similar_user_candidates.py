@@ -98,7 +98,7 @@ def build_similar_user_candidates(
     )
     selected_patterns = tuple(ranking_settings.patterns)
     LOGGER.info(
-        "Building similar-user candidates from saved scored paths: patient_id=%s, patterns=%s, candidate_top_k=%s, disease_course_window_days=%s, config_path=%s, scored_paths_dir=%s",
+        "Starting similar-user candidate build from saved scored paths: patient_id=%s, patterns=%s, candidate_top_k=%s, disease_course_window_days=%s, config_path=%s, scored_paths_dir=%s",
         patient_id,
         selected_patterns,
         ranking_settings.candidate_top_k,

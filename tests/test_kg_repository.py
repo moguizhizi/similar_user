@@ -45,6 +45,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
+    PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
@@ -1083,6 +1084,59 @@ class KgRepositoryTest(unittest.TestCase):
             repository.get_patient_distinct_task_instances_by_date_range(
                 "30010096",
                 "2022-01-01",
+                "   ",
+            )
+
+    def test_get_patient_profile_entities_by_effective_date(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "effective_date": "2022-01-13",
+                "diseases": [{"id": "AU_DIS_0013"}],
+                "symptoms": [{"id": "AU_SYM_0007"}],
+                "unknowns": [{"id": "AU_UNKNOWN_0005"}],
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_profile_entities_by_effective_date(
+            " 30010096 ",
+            " 2022-01-13 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "effective_date": "2022-01-13",
+                    "diseases": [{"id": "AU_DIS_0013"}],
+                    "symptoms": [{"id": "AU_SYM_0007"}],
+                    "unknowns": [{"id": "AU_UNKNOWN_0005"}],
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "base_date": "2022-01-13",
+            },
+        )
+
+    def test_get_patient_profile_entities_by_effective_date_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_profile_entities_by_effective_date(
+                "   ",
+                "2022-01-13",
+            )
+
+        with self.assertRaisesRegex(ValueError, "base_date must be a non-empty string."):
+            repository.get_patient_profile_entities_by_effective_date(
+                "30010096",
                 "   ",
             )
 
