@@ -44,6 +44,7 @@ from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 
 from scripts.predict_training_tasks import run_end_to_end_training_task_prediction
+from scripts.run_similar_user_pipeline import EmptyPathResultsError
 from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
 
 
@@ -93,6 +94,17 @@ def parse_args() -> argparse.Namespace:
         "--skip-path-build",
         action="store_true",
         help="Use existing saved paths and only run scoring plus candidate ranking.",
+    )
+    parser.add_argument(
+        "--query-family",
+        default=None,
+        choices=("training_order", "date_window"),
+        help=(
+            "Query family for paired-statistics patterns. Defaults to training_order "
+            "for patient-series patterns and is not allowed for direct patterns. "
+            "training_order enforces s1/s2 training-date order; "
+            "date_window only filters by the s1 date window."
+        ),
     )
     parser.add_argument(
         "--task-top-k",
@@ -157,6 +169,7 @@ def evaluate_patient(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     skip_path_build: bool = False,
+    query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
 ) -> dict[str, Any]:
@@ -182,10 +195,19 @@ def evaluate_patient(
             pattern=pattern,
             config_path=config_path,
             skip_path_build=skip_path_build,
+            query_family=query_family,
             task_top_k=task_top_k,
             use_llm=use_llm,
         )
         predicted_game_ids = extract_predicted_game_ids(prediction_result)
+    except EmptyPathResultsError as exc:
+        return build_not_evaluable_detail(
+            patient_id=patient_id,
+            base_date=base_date,
+            elapsed_seconds=round(time.perf_counter() - started_at, 3),
+            reason="no_pattern_paths",
+            error_message=str(exc),
+        )
     except Exception as exc:
         return {
             "patient_id": patient_id,
@@ -220,9 +242,11 @@ def build_not_evaluable_detail(
     patient_id: str,
     base_date: str,
     elapsed_seconds: float,
+    reason: str = "no_actual_tasks_on_base_date",
+    error_message: str | None = None,
 ) -> dict[str, Any]:
     """Build detail for patients without actual tasks on base_date."""
-    return {
+    detail: dict[str, Any] = {
         "patient_id": patient_id,
         "base_date": base_date,
         "status": "success_not_evaluable",
@@ -236,9 +260,12 @@ def build_not_evaluable_detail(
         "predicted_task_count": 0,
         "actual_task_count": 0,
         "matched_task_count": 0,
-        "reason": "no_actual_tasks_on_base_date",
+        "reason": reason,
         "elapsed_seconds": elapsed_seconds,
     }
+    if error_message is not None:
+        detail["error_message"] = error_message
+    return detail
 
 
 def extract_predicted_game_ids(result: dict[str, Any]) -> list[str]:
@@ -404,6 +431,7 @@ def run_batch_evaluation(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     skip_path_build: bool = False,
+    query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     limit: int | None = None,
@@ -437,6 +465,7 @@ def run_batch_evaluation(
                 pattern=pattern,
                 config_path=config_path,
                 skip_path_build=skip_path_build,
+                query_family=query_family,
                 task_top_k=task_top_k,
                 use_llm=use_llm,
             )
@@ -559,6 +588,7 @@ def main() -> int:
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,
+            query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             limit=args.limit,

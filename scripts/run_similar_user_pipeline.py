@@ -2,8 +2,8 @@
 
 这个脚本把相似用户候选生成流程串成一个入口：
 
-1. 默认先调用 `scripts/build_pattern_paths.py`，按时间窗口构建并保存固定模式 paths。
-2. 调用 path 评分逻辑，读取已保存 paths 并保存 scored paths。
+1. 默认先调用 `scripts/build_pattern_paths.py`，按配置中的多个模式构建并保存 paths。
+2. 调用 path 评分逻辑，读取已保存 paths 并保存多个模式的 scored paths。
 3. 再调用候选构建逻辑，读取已保存 scored paths 并聚合候选相似用户。
 3. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
 
@@ -36,15 +36,18 @@ from similar_user.domain.graph_schema import (
 from similar_user.utils.logger import get_logger
 
 from scripts.build_similar_user_candidates import build_similar_user_candidates
-from scripts.build_pattern_paths import run_pattern_path_flow
+from scripts.build_pattern_paths import run_configured_pattern_path_flows
 from scripts.score_pattern_paths import (
     DEFAULT_CONFIG_PATH,
-    save_scored_pattern_result,
-    score_pattern_paths,
+    score_and_save_configured_pattern_paths,
 )
 
 
 LOGGER = get_logger(__name__)
+
+
+class EmptyPathResultsError(RuntimeError):
+    """Raised when freshly built pattern paths are all empty."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,7 +59,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--pattern",
         default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        help="Pattern name used to locate the saved result.",
+        help=(
+            "Legacy output field. Path build and scoring use "
+            "candidate_ranking.patterns from the config."
+        ),
     )
     parser.add_argument(
         "--config",
@@ -67,6 +73,15 @@ def parse_args() -> argparse.Namespace:
         "--skip-path-build",
         action="store_true",
         help="Use existing saved paths and only run scoring plus candidate ranking.",
+    )
+    parser.add_argument(
+        "--query-family",
+        default=None,
+        choices=("training_order", "date_window"),
+        help=(
+            "Query family for paired-statistics path building. Defaults to "
+            "training_order; date_window only filters by the s1 date window."
+        ),
     )
     parser.add_argument(
         "--base-date",
@@ -96,6 +111,7 @@ def run_similar_user_pipeline(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path | None = None,
     skip_path_build: bool = False,
+    query_family: str | None = None,
 ) -> dict[str, Any]:
     """Run path retrieval, scoring, and candidate ranking as one workflow."""
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
@@ -111,27 +127,25 @@ def run_similar_user_pipeline(
     )
     path_generation = None
     if not skip_path_build:
-        path_result = run_pattern_path_flow(
+        path_results = run_configured_pattern_path_flows(
             patient_id,
             config_path=resolved_config_path,
             base_date=base_date,
             window_days=window_days,
-            pattern=pattern,
+            query_family=query_family,
         )
-        path_generation = _summarize_path_result(path_result)
-        _raise_if_path_result_empty(
+        path_generation = [_summarize_path_result(item) for item in path_results]
+        _raise_if_path_results_empty(
             path_generation,
             patient_id=patient_id,
             base_date=base_date,
             window_days=window_days,
         )
 
-    scored_result = score_pattern_paths(
+    score_and_save_configured_pattern_paths(
         patient_id,
-        pattern=pattern,
         config_path=resolved_config_path,
     )
-    save_scored_pattern_result(scored_result)
 
     candidate_result = build_similar_user_candidates(
         patient_id,
@@ -178,18 +192,22 @@ def _summarize_path_result(path_result: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _raise_if_path_result_empty(
-    path_generation: dict[str, object],
+def _raise_if_path_results_empty(
+    path_generation: list[dict[str, object]],
     *,
     patient_id: str,
     base_date: str,
     window_days: int,
 ) -> None:
     """Stop the pipeline when freshly built path data is empty."""
-    path_count = path_generation.get("path_count")
-    if isinstance(path_count, int) and path_count > 0:
+    path_count = sum(
+        item.get("path_count")
+        for item in path_generation
+        if isinstance(item.get("path_count"), int)
+    )
+    if path_count > 0:
         return
-    raise ValueError(
+    raise EmptyPathResultsError(
         "path_result does not contain paths: "
         f"patient_id={patient_id}, base_date={base_date}, window_days={window_days}."
     )
@@ -281,6 +299,7 @@ def main() -> int:
             skip_path_build=args.skip_path_build,
             base_date=args.base_date,
             window_days=args.window_days,
+            query_family=args.query_family,
         )
     except Exception as exc:
         LOGGER.exception(

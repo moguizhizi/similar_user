@@ -18,6 +18,7 @@ from scripts.build_similar_user_candidates import (
 )
 from scripts.score_pattern_paths import save_scored_pattern_result
 from scripts.run_similar_user_pipeline import (
+    EmptyPathResultsError,
     main as pipeline_main,
     run_similar_user_pipeline,
     summarize_pipeline_result,
@@ -1535,14 +1536,12 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
     @patch("scripts.run_similar_user_pipeline.time.perf_counter")
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
-    @patch("scripts.run_similar_user_pipeline.save_scored_pattern_result")
-    @patch("scripts.run_similar_user_pipeline.score_pattern_paths")
-    @patch("scripts.run_similar_user_pipeline.run_pattern_path_flow")
+    @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
+    @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
     def test_run_similar_user_pipeline_builds_paths_then_candidates(
         self,
-        mock_run_path_flow: Mock,
-        mock_score_paths: Mock,
-        mock_save_scored: Mock,
+        mock_run_path_flows: Mock,
+        mock_score_and_save: Mock,
         mock_build_candidates: Mock,
         mock_perf_counter: Mock,
     ) -> None:
@@ -1566,13 +1565,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "candidate_count": 1,
             "candidates": [{"patient_id": "20113562"}],
         }
-        mock_run_path_flow.return_value = path_result
         scored_result = {
             "source_id": "30010096",
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "scores": [],
         }
-        mock_score_paths.return_value = scored_result
+        mock_run_path_flows.return_value = [path_result]
+        mock_score_and_save.return_value = [scored_result]
         mock_build_candidates.return_value = candidate_result
 
         result = run_similar_user_pipeline(
@@ -1580,72 +1579,73 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             base_date="2022-01-17",
             window_days=14,
             config_path="config/custom.yaml",
+            query_family="date_window",
         )
 
         self.assertEqual(
             result["path_generation"],
-            {
-                "patient_id": "30010096",
-                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                "path_window": {
-                    "base_date": "2022-01-17",
-                    "start_date": "2022-01-03",
-                    "end_date": "2022-01-17",
-                    "window_days": 14,
-                    "range_semantics": "[start_date, end_date)",
+            [
+                {
+                    "patient_id": "30010096",
+                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                    "path_window": {
+                        "base_date": "2022-01-17",
+                        "start_date": "2022-01-03",
+                        "end_date": "2022-01-17",
+                        "window_days": 14,
+                        "range_semantics": "[start_date, end_date)",
+                    },
+                    "path_count": 1,
                 },
-                "path_count": 1,
-            },
+            ],
         )
         self.assertEqual(result["candidate_result"], candidate_result)
         self.assertFalse(result["skip_path_build"])
         self.assertEqual(result["elapsed_seconds"], 2.345)
-        mock_run_path_flow.assert_called_once_with(
+        mock_run_path_flows.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
             base_date="2022-01-17",
             window_days=14,
-            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            query_family="date_window",
         )
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
         )
-        mock_score_paths.assert_called_once_with(
+        mock_score_and_save.assert_called_once_with(
             "30010096",
-            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config_path="config/custom.yaml",
         )
-        mock_save_scored.assert_called_once_with(scored_result)
 
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
-    @patch("scripts.run_similar_user_pipeline.save_scored_pattern_result")
-    @patch("scripts.run_similar_user_pipeline.score_pattern_paths")
-    @patch("scripts.run_similar_user_pipeline.run_pattern_path_flow")
+    @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
+    @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
     def test_run_similar_user_pipeline_rejects_empty_path_result(
         self,
-        mock_run_path_flow: Mock,
-        mock_score_paths: Mock,
-        mock_save_scored: Mock,
+        mock_run_path_flows: Mock,
+        mock_score_and_save: Mock,
         mock_build_candidates: Mock,
     ) -> None:
-        mock_run_path_flow.return_value = {
-            "patient_id": "30010096",
-            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-            "retrieval_context": {
-                "path_window": {
-                    "base_date": "2022-01-17",
-                    "start_date": "2022-01-03",
-                    "end_date": "2022-01-17",
-                    "window_days": 14,
-                    "range_semantics": "[start_date, end_date)",
+        mock_run_path_flows.return_value = [
+            {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "retrieval_context": {
+                    "path_window": {
+                        "base_date": "2022-01-17",
+                        "start_date": "2022-01-03",
+                        "end_date": "2022-01-17",
+                        "window_days": 14,
+                        "range_semantics": "[start_date, end_date)",
+                    },
+                    "paths": [],
                 },
-                "paths": [],
             },
-        }
+        ]
 
         with self.assertRaisesRegex(
-            ValueError,
+            EmptyPathResultsError,
             "path_result does not contain paths: patient_id=30010096, base_date=2022-01-17, window_days=14.",
         ):
             run_similar_user_pipeline(
@@ -1656,18 +1656,15 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             )
 
         mock_build_candidates.assert_not_called()
-        mock_score_paths.assert_not_called()
-        mock_save_scored.assert_not_called()
+        mock_score_and_save.assert_not_called()
 
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
-    @patch("scripts.run_similar_user_pipeline.save_scored_pattern_result")
-    @patch("scripts.run_similar_user_pipeline.score_pattern_paths")
-    @patch("scripts.run_similar_user_pipeline.run_pattern_path_flow")
+    @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
+    @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
     def test_run_similar_user_pipeline_can_skip_path_build(
         self,
-        mock_run_path_flow: Mock,
-        mock_score_paths: Mock,
-        mock_save_scored: Mock,
+        mock_run_path_flows: Mock,
+        mock_score_and_save: Mock,
         mock_build_candidates: Mock,
     ) -> None:
         candidate_result = {
@@ -1680,7 +1677,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "scores": [],
         }
-        mock_score_paths.return_value = scored_result
+        mock_score_and_save.return_value = [scored_result]
         mock_build_candidates.return_value = candidate_result
 
         result = run_similar_user_pipeline(
@@ -1694,13 +1691,11 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertIsNone(result["path_generation"])
         self.assertEqual(result["candidate_result"], candidate_result)
         self.assertTrue(result["skip_path_build"])
-        mock_run_path_flow.assert_not_called()
-        mock_score_paths.assert_called_once_with(
+        mock_run_path_flows.assert_not_called()
+        mock_score_and_save.assert_called_once_with(
             "30010096",
-            pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config_path="config/custom.yaml",
         )
-        mock_save_scored.assert_called_once_with(scored_result)
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
@@ -1747,6 +1742,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            query_family="date_window",
             base_date="2022-05-22",
             window_days=14,
             output_level="ids",
@@ -1761,6 +1757,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config_path="config/settings.yaml",
             skip_path_build=False,
+            query_family="date_window",
             base_date="2022-05-22",
             window_days=14,
         )
@@ -1791,6 +1788,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            query_family=None,
             base_date="2022-05-22",
             window_days=14,
             output_level="full",
@@ -1827,6 +1825,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            query_family=None,
             base_date="2022-05-22",
             window_days=14,
             output_level="scores",

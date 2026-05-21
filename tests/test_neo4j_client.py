@@ -294,7 +294,7 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             base_date="2022-05-22",
             window_days=14,
             pattern="patient_game_patient",
-            query_family=None,
+            query_family="training_order",
         )
         mock_save_pattern_result.assert_called_once_with(
             {
@@ -306,6 +306,50 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "config/settings.yaml",
         )
         mock_logger.info.assert_called()
+
+    @patch("scripts.build_pattern_paths.save_pattern_result")
+    @patch("scripts.build_pattern_paths.Neo4jClient.from_config")
+    def test_run_pattern_path_flow_preserves_none_query_family_for_direct_pattern(
+        self,
+        mock_from_config: Mock,
+        mock_save_pattern_result: Mock,
+    ) -> None:
+        mock_client = Mock()
+        mock_from_config.return_value.__enter__.return_value = mock_client
+        mock_repository = Mock()
+        mock_repository.config_path = "config/settings.yaml"
+        mock_service = Mock()
+        mock_service.get_pattern_paths.return_value = {
+            "source_id": "AU_DIS_0013",
+            "source_parameter": "disease_id",
+            "pattern": "DISEASE_TASKSET_PATIENT",
+            "retrieval_context": None,
+        }
+        mock_save_pattern_result.return_value = Path(
+            "data/pattern_paths/DISEASE_TASKSET_PATIENT/AU/AU_DIS_0013.json"
+        )
+
+        with patch(
+            "scripts.build_pattern_paths.KgRepository",
+            return_value=mock_repository,
+        ), patch(
+            "scripts.build_pattern_paths.UserService",
+            return_value=mock_service,
+        ):
+            run_pattern_path_flow(
+                "AU_DIS_0013",
+                base_date="2022-05-22",
+                window_days=14,
+                pattern="disease_patient",
+            )
+
+        mock_service.get_pattern_paths.assert_called_once_with(
+            "AU_DIS_0013",
+            base_date="2022-05-22",
+            window_days=14,
+            pattern="disease_patient",
+            query_family=None,
+        )
 
     @patch("scripts.build_pattern_paths.run_pattern_path_flow")
     def test_run_configured_pattern_path_flows_uses_yaml_patterns(
