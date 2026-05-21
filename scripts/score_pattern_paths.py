@@ -33,6 +33,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -146,6 +147,7 @@ def score_pattern_paths(
     top_k: int | None = None,
 ) -> dict[str, object]:
     """Load a saved pattern result and score its domain paths."""
+    started_at = time.perf_counter()
     LOGGER.debug(
         "Scoring pattern paths: source_id=%s, pattern=%s, path_index=%s, top_k=%s, config_path=%s",
         source_id,
@@ -225,6 +227,14 @@ def score_pattern_paths(
         result["path_count"],
         result["scored_path_count"],
     )
+    LOGGER.info(
+        "Completed pattern path scoring: source_id=%s, pattern=%s, path_count=%s, scored_path_count=%s, elapsed_seconds=%s",
+        stored_result.source_id,
+        stored_result.pattern,
+        result["path_count"],
+        result["scored_path_count"],
+        round(time.perf_counter() - started_at, 3),
+    )
     return result
 
 
@@ -236,6 +246,7 @@ def score_configured_pattern_paths(
     top_k: int | None = None,
 ) -> list[dict[str, object]]:
     """Score all configured patient-source pattern paths for one source patient."""
+    started_at = time.perf_counter()
     ranking_settings = load_query_settings(config_path).candidate_ranking
     selected_patterns = tuple(ranking_settings.patterns)
     _validate_patient_source_patterns(selected_patterns)
@@ -247,7 +258,7 @@ def score_configured_pattern_paths(
         top_k,
         config_path,
     )
-    return [
+    results = [
         score_pattern_paths(
             source_id,
             pattern=pattern,
@@ -257,6 +268,15 @@ def score_configured_pattern_paths(
         )
         for pattern in selected_patterns
     ]
+    LOGGER.info(
+        "Completed configured pattern path scoring: source_id=%s, pattern_count=%s, total_path_count=%s, total_scored_path_count=%s, elapsed_seconds=%s",
+        source_id,
+        len(selected_patterns),
+        sum(_extract_int(result.get("path_count")) for result in results),
+        sum(_extract_int(result.get("scored_path_count")) for result in results),
+        round(time.perf_counter() - started_at, 3),
+    )
+    return results
 
 
 def score_and_save_configured_pattern_paths(
@@ -286,7 +306,7 @@ def save_scored_pattern_result(
     detail_path, summary_path = get_scored_pattern_output_paths(result, output_dir)
     _write_json_atomic(detail_path, result)
     _write_json_atomic(summary_path, build_scored_pattern_summary(result))
-    LOGGER.debug(
+    LOGGER.info(
         "Saved scored pattern result: source_id=%s, pattern=%s, detail_path=%s, summary_path=%s",
         result.get("source_id"),
         result.get("pattern"),
@@ -417,6 +437,10 @@ def _normalize_result_string(value: object, field_name: str) -> str:
     return value.strip()
 
 
+def _extract_int(value: object) -> int:
+    return value if isinstance(value, int) else 0
+
+
 def _requires_source_demographics(pattern: PathPattern | str) -> bool:
     return resolve_path_pattern(pattern) in SOURCE_DEMOGRAPHIC_PATTERNS
 
@@ -515,16 +539,10 @@ def main() -> int:
                 top_k=args.top_k,
             )
         if args.path_index is None:
-            output_paths_list = save_scored_pattern_results(
+            save_scored_pattern_results(
                 result,
                 output_dir=args.scored_paths_dir,
             )
-            for output_paths in output_paths_list:
-                LOGGER.info(
-                    "Saved scored pattern result: detail_path=%s, summary_path=%s",
-                    output_paths["detail"],
-                    output_paths["summary"],
-                )
     except Exception as exc:
         LOGGER.exception("Score pattern paths failed: %s", exc)
         return 1

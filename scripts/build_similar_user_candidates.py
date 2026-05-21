@@ -23,6 +23,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -92,6 +93,7 @@ def build_similar_user_candidates(
     disease_course_window_days: int | None = None,
 ) -> dict[str, Any]:
     """Aggregate ranked candidate users from top-k scored paths."""
+    started_at = time.perf_counter()
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     ranking_settings = load_query_settings(resolved_config_path).candidate_ranking
     resolved_disease_course_window_days = (
@@ -159,13 +161,14 @@ def build_similar_user_candidates(
             "disease_course_window_days"
         ] = resolved_disease_course_window_days
     LOGGER.info(
-        "Built similar-user candidates from scored paths: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s",
+        "Completed similar-user candidate build: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s, elapsed_seconds=%s",
         patient_id,
         result.get("pre_score_candidate_count"),
         result.get("candidate_count"),
         result.get("scored_path_count"),
         result.get("disease_course_available_count"),
         result.get("disease_course_missing_count"),
+        round(time.perf_counter() - started_at, 3),
     )
     return result
 

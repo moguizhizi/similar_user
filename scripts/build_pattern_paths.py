@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -144,6 +145,7 @@ def run_pattern_path_flow(
     query_family: str | None = None,
 ) -> dict[str, object]:
     """Build one source's pattern paths from Neo4j and persist the result."""
+    started_at = time.perf_counter()
     effective_query_family = _resolve_effective_query_family(pattern, query_family)
     LOGGER.info(
         "Starting pattern path build: source_id=%s, pattern=%s, query_family=%s, base_date=%s, window_days=%s, config_path=%s",
@@ -166,12 +168,16 @@ def run_pattern_path_flow(
         )
         output_path = save_pattern_result(result, repository.config_path)
         retrieval_context = result.get("retrieval_context") or {}
+        path_count = len(retrieval_context.get("paths", []))
         LOGGER.info(
-            "Completed pattern path build: source_id=%s, path_window=%s, path_count=%s, output_path=%s",
+            "Completed pattern path build: source_id=%s, pattern=%s, query_family=%s, path_window=%s, path_count=%s, output_path=%s, elapsed_seconds=%s",
             source_id,
+            pattern,
+            effective_query_family,
             retrieval_context.get("path_window"),
-            len(retrieval_context.get("paths", [])),
+            path_count,
             output_path,
+            round(time.perf_counter() - started_at, 3),
         )
         return result
 
@@ -185,6 +191,7 @@ def run_configured_pattern_path_flows(
     query_family: str | None = None,
 ) -> list[dict[str, object]]:
     """Build all configured patient-source pattern paths for one source patient."""
+    started_at = time.perf_counter()
     ranking_settings = load_query_settings(config_path).candidate_ranking
     selected_patterns = tuple(ranking_settings.patterns)
     _validate_patient_source_patterns(selected_patterns)
@@ -198,7 +205,7 @@ def run_configured_pattern_path_flows(
         window_days,
         config_path,
     )
-    return [
+    results = [
         run_pattern_path_flow(
             source_id,
             config_path=config_path,
@@ -209,6 +216,14 @@ def run_configured_pattern_path_flows(
         )
         for pattern in selected_patterns
     ]
+    LOGGER.info(
+        "Completed configured pattern path build: source_id=%s, pattern_count=%s, total_path_count=%s, elapsed_seconds=%s",
+        source_id,
+        len(selected_patterns),
+        sum(_extract_path_count(result) for result in results),
+        round(time.perf_counter() - started_at, 3),
+    )
+    return results
 
 
 def _validate_patient_source_patterns(patterns: tuple[str, ...]) -> None:
@@ -224,6 +239,14 @@ def _validate_patient_source_patterns(patterns: tuple[str, ...]) -> None:
             "patterns-from-config only supports patient-source patterns; "
             f"invalid patterns: {invalid}"
         )
+
+
+def _extract_path_count(result: dict[str, object]) -> int:
+    retrieval_context = result.get("retrieval_context")
+    if not isinstance(retrieval_context, dict):
+        return 0
+    paths = retrieval_context.get("paths")
+    return len(paths) if isinstance(paths, list) else 0
 
 
 def _resolve_effective_query_family(
