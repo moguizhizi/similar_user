@@ -83,12 +83,54 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_run_prediction.assert_called_once_with(
             pipeline_result,
             base_date="2022-05-22",
-            window_days=14,
             config_path="config/custom.yaml",
             task_top_k=3,
             use_llm=False,
             include_prompt=True,
         )
+
+    @patch("scripts.predict_training_tasks.TrainingTaskPredictionService")
+    @patch("scripts.predict_training_tasks.UserService")
+    @patch("scripts.predict_training_tasks.Neo4jClient.from_config")
+    @patch("scripts.predict_training_tasks.load_query_settings")
+    def test_run_training_task_prediction_reads_candidate_task_window_from_config(
+        self,
+        mock_load_query_settings: Mock,
+        mock_from_config: Mock,
+        mock_user_service_cls: Mock,
+        mock_service_cls: Mock,
+    ) -> None:
+        mock_load_query_settings.return_value = Mock(
+            training_task_prediction=Mock(candidate_task_window_days=30)
+        )
+        mock_client_context = Mock()
+        mock_client_context.__enter__ = Mock(return_value=Mock())
+        mock_client_context.__exit__ = Mock(return_value=None)
+        mock_from_config.return_value = mock_client_context
+        mock_service = Mock()
+        mock_service.predict_from_pipeline_result.return_value = {"patient_id": "40"}
+        mock_service_cls.return_value = mock_service
+
+        result = predict_training_tasks.run_training_task_prediction(
+            {"patient_id": "40", "candidate_result": {"candidates": []}},
+            base_date="2022-05-22",
+            config_path="config/custom.yaml",
+            task_top_k=3,
+            use_llm=False,
+            include_prompt=True,
+        )
+
+        self.assertEqual(result, {"patient_id": "40"})
+        mock_load_query_settings.assert_called_once_with("config/custom.yaml")
+        mock_service.predict_from_pipeline_result.assert_called_once_with(
+            {"patient_id": "40", "candidate_result": {"candidates": []}},
+            base_date="2022-05-22",
+            window_days=30,
+            task_top_k=3,
+            use_llm=False,
+            include_prompt=True,
+        )
+        mock_user_service_cls.assert_called_once()
 
     def test_summarize_prediction_result_reads_nested_prediction_for_ids(self) -> None:
         result = predict_training_tasks.summarize_prediction_result(

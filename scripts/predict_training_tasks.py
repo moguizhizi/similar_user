@@ -3,7 +3,7 @@
 这个脚本串联相似用户候选生成和训练任务预测：
 
 1. 调用 `scripts/run_similar_user_pipeline.py` 的流程，构建相似用户候选。
-2. 根据目标患者、候选相似用户和训练任务时间窗上下文，构建训练任务推荐输入。
+2. 根据目标患者、候选相似用户和配置中的训练任务时间窗上下文，构建训练任务推荐输入。
 3. 默认调用配置中的 LLM 生成预测结果；使用 `--dry-run` 时跳过 LLM，返回确定性的候选任务结果。
 4. 最后按 `--output-level` 输出任务 ID、任务分数或完整端到端结果。
 
@@ -14,6 +14,8 @@
 
     python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14
     python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14 --save-prompt
+
+其中 `--window-days` 只控制相似用户 path 构建窗口；预测阶段的相似用户任务窗口来自配置。
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ from similar_user.services.task_prediction import (
 )
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
+from config.settings import load_query_settings
 
 from scripts.run_similar_user_pipeline import run_similar_user_pipeline
 from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
@@ -91,7 +94,7 @@ def parse_args() -> argparse.Namespace:
         "--window-days",
         type=int,
         required=True,
-        help="Number of days before base_date used to query candidate-user tasks.",
+        help="Number of days before base_date used to build similar-user paths.",
     )
     parser.add_argument(
         "--task-top-k",
@@ -154,7 +157,6 @@ def run_end_to_end_training_task_prediction(
     prediction_result = run_training_task_prediction(
         pipeline_result,
         base_date=base_date,
-        window_days=window_days,
         config_path=config_path,
         task_top_k=task_top_k,
         use_llm=use_llm,
@@ -171,13 +173,17 @@ def run_training_task_prediction(
     pipeline_result: dict[str, Any],
     *,
     base_date: str,
-    window_days: int,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     include_prompt: bool = False,
 ) -> dict[str, Any]:
     """Run training-task prediction from an existing candidate result."""
+    candidate_task_window_days = (
+        load_query_settings(config_path)
+        .training_task_prediction
+        .candidate_task_window_days
+    )
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
             kg_repository=KgRepository(
@@ -193,7 +199,7 @@ def run_training_task_prediction(
         return service.predict_from_pipeline_result(
             pipeline_result,
             base_date=base_date,
-            window_days=window_days,
+            window_days=candidate_task_window_days,
             task_top_k=task_top_k,
             use_llm=use_llm,
             include_prompt=include_prompt,

@@ -39,6 +39,7 @@
 
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
+| 查询患者在 base_date 当天或之前最近有效日期的画像实体 | `PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `base_date` | `effective_date`, `diseases`, `symptoms`, `unknowns` |
 | 查询患者从某日期开始的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date` | `i1` |
 | 查询患者早于 end_date 的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `end_date` | `i1` |
 | 查询患者左闭右开日期区间内的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date`, `end_date` | `i1` |
@@ -208,6 +209,7 @@ Disease -- TaskInstanceSet -- Patient
 
 | Query | 用途 | 主要参数 | 返回 |
 |---|---|---|---|
+| `PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY` | 查询患者在 base_date 当天或之前最近有效日期的画像实体 | `patient_id`, `base_date` | `effective_date`, `diseases`, `symptoms`, `unknowns` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重任务实例 | `patient_id`, `start_date` | `i1` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重任务实例 | `patient_id`, `end_date` | `i1` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重任务实例 | `patient_id`, `start_date`, `end_date` | `i1` |

@@ -83,6 +83,13 @@ class CandidateRankingSettings:
 
 
 @dataclass(frozen=True)
+class TrainingTaskPredictionSettings:
+    """Configuration for predicting training tasks from similar-user histories."""
+
+    candidate_task_window_days: int = 14
+
+
+@dataclass(frozen=True)
 class LlmSettings:
     """Connection settings for an OpenAI-compatible chat-completions service."""
 
@@ -101,6 +108,7 @@ class QuerySettings:
     graph_path_limit: GraphPathLimitSettings
     pattern_path_storage: PatternPathStorageSettings
     candidate_ranking: CandidateRankingSettings
+    training_task_prediction: TrainingTaskPredictionSettings
 
 
 def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
@@ -201,6 +209,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     graph_path_limit_data = data.get("graph_path_limit") or {}
     pattern_path_storage_data = data.get("pattern_path_storage") or {}
     candidate_ranking_data = data.get("candidate_ranking") or {}
+    training_task_prediction_data = data.get("training_task_prediction") or {}
     bands_data = graph_path_limit_data.get("bands") or []
 
     bands: list[QueryLimitBandSettings] = []
@@ -273,6 +282,18 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             raise ValueError("candidate_ranking patterns must contain non-empty strings.")
         normalized_patterns.append(pattern.strip())
     scoring = _parse_candidate_scoring_settings(candidate_ranking_data.get("scoring"))
+    candidate_task_window_days = training_task_prediction_data.get(
+        "candidate_task_window_days",
+        14,
+    )
+    if (
+        not isinstance(candidate_task_window_days, int)
+        or isinstance(candidate_task_window_days, bool)
+        or candidate_task_window_days <= 0
+    ):
+        raise ValueError(
+            "training_task_prediction candidate_task_window_days must be a positive integer."
+        )
 
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
@@ -289,6 +310,9 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             disease_course_window_days=disease_course_window_days,
             patterns=tuple(normalized_patterns),
             scoring=scoring,
+        ),
+        training_task_prediction=TrainingTaskPredictionSettings(
+            candidate_task_window_days=candidate_task_window_days,
         ),
     )
 

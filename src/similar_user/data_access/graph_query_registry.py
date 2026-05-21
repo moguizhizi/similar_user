@@ -26,6 +26,7 @@ from .cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
@@ -318,6 +319,16 @@ PATIENT_GAME_COLLECTION_SPECS = (
 )
 
 PATIENT_ENTITY_COLLECTION_SPECS = (
+    _spec(
+        name="patient_profile_entities_by_effective_date",
+        category=GraphQueryCategory.PATIENT_ENTITY_COLLECTION,
+        description="查询患者在 base_date 当天或之前最近有效日期的疾病、症状和 unknown 节点",
+        source_label="Patient",
+        source_parameters=("patient_id", "base_date"),
+        path_shape="(p:Patient)--(s:TaskInstanceSet)--(Disease|Symptom|Unknown)",
+        row_fields=("effective_date", "diseases", "symptoms", "unknowns"),
+        query=PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
+    ),
     _spec(
         name="patient_distinct_task_instances_by_start_date",
         category=GraphQueryCategory.PATIENT_ENTITY_COLLECTION,

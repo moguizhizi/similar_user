@@ -8,6 +8,7 @@ from src.similar_user.data_access.cypher_queries import (
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY,
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
+    PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
     PATIENT_TOTAL_SCORE_BY_DATE_QUERY,
     PATIENT_TOTAL_SCORE_TIMEPOINTS_QUERY,
@@ -185,6 +186,28 @@ class GraphQueryRegistryTest(unittest.TestCase):
         self.assertEqual(game_rows_spec.row_fields, ("g",))
         self.assertEqual(game_rows_spec.query, PATIENT_GAMES_BY_DATE_RANGE_QUERY)
 
+    def test_registered_patient_profile_entities_query_declares_contract(self) -> None:
+        spec = get_graph_query_spec("patient_profile_entities_by_effective_date")
+
+        self.assertEqual(spec.category, GraphQueryCategory.PATIENT_ENTITY_COLLECTION)
+        self.assertEqual(spec.source_label, "Patient")
+        self.assertEqual(spec.source_parameters, ("patient_id", "base_date"))
+        self.assertEqual(
+            spec.path_shape,
+            "(p:Patient)--(s:TaskInstanceSet)--(Disease|Symptom|Unknown)",
+        )
+        self.assertEqual(
+            spec.row_fields,
+            ("effective_date", "diseases", "symptoms", "unknowns"),
+        )
+        self.assertEqual(
+            spec.query,
+            PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
+        )
+        self.assertIn("max(date(s.`训练日期`)) AS effective_date", spec.query)
+        self.assertIn("date(s.`训练日期`) <= date($base_date)", spec.query)
+        self.assertIn("WHERE date(s.`训练日期`) = effective_date", spec.query)
+
     def test_registered_patient_comparison_query_declares_contract(self) -> None:
         spec = get_graph_query_spec("patient_game_set_comparison_by_date_range")
 
@@ -278,7 +301,7 @@ class GraphQueryRegistryTest(unittest.TestCase):
                     category=GraphQueryCategory.PATIENT_ENTITY_COLLECTION
                 )
             ),
-            12,
+            13,
         )
         self.assertEqual(
             len(list_graph_query_specs(category=GraphQueryCategory.PATIENT_SET_COMPARISON)),
