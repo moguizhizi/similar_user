@@ -73,15 +73,6 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_CANDIDATES_DIR),
         help="Directory used to store similar-user candidate detail and summary JSON files.",
     )
-    parser.add_argument(
-        "--disease-course-window-days",
-        type=int,
-        default=None,
-        help=(
-            "Disease-course window in days. Overrides "
-            "query.candidate_ranking.disease_course_window_days when provided."
-        ),
-    )
     return parser.parse_args()
 
 
@@ -382,7 +373,6 @@ def main() -> int:
             args.patient_id,
             config_path=args.config,
             scored_paths_dir=args.scored_paths_dir,
-            disease_course_window_days=args.disease_course_window_days,
         )
         output_paths = save_similar_user_candidates_result(
             result,
