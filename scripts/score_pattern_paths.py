@@ -259,6 +259,25 @@ def score_configured_pattern_paths(
     ]
 
 
+def score_and_save_configured_pattern_paths(
+    source_id: str,
+    *,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
+    path_index: int | None = None,
+    top_k: int | None = None,
+    output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+) -> list[dict[str, object]]:
+    """Score configured patient-source pattern paths and persist each result."""
+    results = score_configured_pattern_paths(
+        source_id,
+        config_path=config_path,
+        path_index=path_index,
+        top_k=top_k,
+    )
+    save_scored_pattern_results(results, output_dir=output_dir)
+    return results
+
+
 def save_scored_pattern_result(
     result: dict[str, object],
     output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
@@ -275,6 +294,18 @@ def save_scored_pattern_result(
         summary_path,
     )
     return {"detail": detail_path, "summary": summary_path}
+
+
+def save_scored_pattern_results(
+    results: dict[str, object] | list[dict[str, object]],
+    output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+) -> list[dict[str, Path]]:
+    """Save one or more scored pattern results."""
+    scored_results = results if isinstance(results, list) else [results]
+    return [
+        save_scored_pattern_result(scored_result, output_dir=output_dir)
+        for scored_result in scored_results
+    ]
 
 
 def get_scored_pattern_output_paths(
@@ -484,12 +515,11 @@ def main() -> int:
                 top_k=args.top_k,
             )
         if args.path_index is None:
-            scored_results = result if isinstance(result, list) else [result]
-            for scored_result in scored_results:
-                output_paths = save_scored_pattern_result(
-                    scored_result,
-                    output_dir=args.scored_paths_dir,
-                )
+            output_paths_list = save_scored_pattern_results(
+                result,
+                output_dir=args.scored_paths_dir,
+            )
+            for output_paths in output_paths_list:
                 LOGGER.info(
                     "Saved scored pattern result: detail_path=%s, summary_path=%s",
                     output_paths["detail"],

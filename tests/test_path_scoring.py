@@ -13,6 +13,8 @@ from scripts.score_pattern_paths import (
     main,
     parse_args,
     save_scored_pattern_result,
+    save_scored_pattern_results,
+    score_and_save_configured_pattern_paths,
     score_configured_pattern_paths,
     score_pattern_paths,
 )
@@ -844,6 +846,41 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(summary["scores"][0]["game_name"], "真假句辨别")
         self.assertNotIn("path", summary["scores"][0])
 
+    @patch("scripts.score_pattern_paths.save_scored_pattern_result")
+    def test_save_scored_pattern_results_saves_each_result(
+        self,
+        mock_save_scored: Mock,
+    ) -> None:
+        results = [
+            {"source_id": "30010096", "pattern": "PATTERN_A"},
+            {"source_id": "30010096", "pattern": "PATTERN_B"},
+        ]
+        mock_save_scored.side_effect = [
+            {"detail": Path("a.detail.json"), "summary": Path("a.summary.json")},
+            {"detail": Path("b.detail.json"), "summary": Path("b.summary.json")},
+        ]
+
+        output_paths = save_scored_pattern_results(
+            results,
+            output_dir="data/scored_pattern_paths",
+        )
+
+        self.assertEqual(
+            output_paths,
+            [
+                {"detail": Path("a.detail.json"), "summary": Path("a.summary.json")},
+                {"detail": Path("b.detail.json"), "summary": Path("b.summary.json")},
+            ],
+        )
+        mock_save_scored.assert_any_call(
+            results[0],
+            output_dir="data/scored_pattern_paths",
+        )
+        mock_save_scored.assert_any_call(
+            results[1],
+            output_dir="data/scored_pattern_paths",
+        )
+
     def test_build_scored_pattern_summary_does_not_include_full_path_rows(self) -> None:
         summary = build_scored_pattern_summary(
             {
@@ -1177,6 +1214,38 @@ class PathScoringTest(unittest.TestCase):
                     "AU_DIS_0013",
                     config_path=config_path,
                 )
+
+    @patch("scripts.score_pattern_paths.save_scored_pattern_results")
+    @patch("scripts.score_pattern_paths.score_configured_pattern_paths")
+    def test_score_and_save_configured_pattern_paths_reuses_save_helper(
+        self,
+        mock_score_configured: Mock,
+        mock_save_results: Mock,
+    ) -> None:
+        results = [
+            {"source_id": "30010096", "pattern": "PATTERN_A"},
+            {"source_id": "30010096", "pattern": "PATTERN_B"},
+        ]
+        mock_score_configured.return_value = results
+
+        actual = score_and_save_configured_pattern_paths(
+            "30010096",
+            config_path="config/settings.yaml",
+            top_k=50,
+            output_dir="data/scored_pattern_paths",
+        )
+
+        self.assertEqual(actual, results)
+        mock_score_configured.assert_called_once_with(
+            "30010096",
+            config_path="config/settings.yaml",
+            path_index=None,
+            top_k=50,
+        )
+        mock_save_results.assert_called_once_with(
+            results,
+            output_dir="data/scored_pattern_paths",
+        )
 
     @patch("scripts.score_pattern_paths.LOGGER")
     @patch("scripts.score_pattern_paths.parse_args")

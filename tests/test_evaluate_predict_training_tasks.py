@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from scripts import evaluate_predict_training_tasks
+from scripts.run_similar_user_pipeline import EmptyPathResultsError
 
 
 class EvaluatePredictTrainingTasksTest(unittest.TestCase):
@@ -22,6 +23,8 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 "2022-05-22",
                 "--window-days",
                 "14",
+                "--query-family",
+                "date_window",
             ],
         ):
             args = evaluate_predict_training_tasks.parse_args()
@@ -30,6 +33,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertIsNone(args.patient_ids_file)
         self.assertEqual(args.base_date, "2022-05-22")
         self.assertEqual(args.window_days, 14)
+        self.assertEqual(args.query_family, "date_window")
 
     def test_evaluate_prediction_sets_ignores_ranking_and_dedupes_ids(self) -> None:
         result = evaluate_predict_training_tasks.evaluate_prediction_sets(
@@ -125,6 +129,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             pattern="PATTERN",
             config_path="config/settings.yaml",
             skip_path_build=True,
+            query_family="date_window",
             task_top_k=5,
             use_llm=False,
         )
@@ -143,6 +148,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             pattern="PATTERN",
             config_path="config/settings.yaml",
             skip_path_build=True,
+            query_family="date_window",
             task_top_k=5,
             use_llm=False,
         )
@@ -181,6 +187,31 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             "2022-05-23",
         )
 
+    @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
+    def test_evaluate_patient_marks_empty_paths_as_not_evaluable(
+        self,
+        mock_predict: Mock,
+    ) -> None:
+        mock_predict.side_effect = EmptyPathResultsError("no paths")
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-22", "g": {"id": "2", "name": "任务B"}},
+        ]
+
+        detail = evaluate_predict_training_tasks.evaluate_patient(
+            "40",
+            base_date="2022-05-22",
+            window_days=14,
+            user_service=user_service,
+            use_llm=False,
+        )
+
+        self.assertEqual(detail["status"], "success_not_evaluable")
+        self.assertEqual(detail["reason"], "no_pattern_paths")
+        self.assertEqual(detail["error_message"], "no paths")
+        self.assertIsNone(detail["task_hit"])
+        self.assertEqual(detail["predicted_task_count"], 0)
+
     @patch("scripts.evaluate_predict_training_tasks.Neo4jClient")
     @patch("scripts.evaluate_predict_training_tasks.KgRepository")
     @patch("scripts.evaluate_predict_training_tasks.UserService")
@@ -208,6 +239,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             window_days=14,
             config_path="config/settings.yaml",
             use_llm=False,
+            query_family="date_window",
             limit=2,
         )
 
@@ -230,6 +262,13 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 for call_args in mock_evaluate_patient.call_args_list
             ],
             ["40", "41"],
+        )
+        self.assertEqual(
+            [
+                call_args.kwargs["query_family"]
+                for call_args in mock_evaluate_patient.call_args_list
+            ],
+            ["date_window", "date_window"],
         )
 
     @patch("scripts.evaluate_predict_training_tasks.Neo4jClient")

@@ -57,6 +57,7 @@ from config.settings import load_query_settings
 from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.data_access.pattern_registry import (
+    PatternQueryMode,
     available_path_pattern_aliases,
     get_path_pattern_spec,
     resolve_path_pattern,
@@ -68,6 +69,7 @@ from similar_user.utils.pattern_storage import save_pattern_result
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 DEFAULT_PATTERN = "patient_game_patient"
+DEFAULT_QUERY_FAMILY = "training_order"
 LOGGER = get_logger(__name__)
 
 
@@ -142,11 +144,12 @@ def run_pattern_path_flow(
     query_family: str | None = None,
 ) -> dict[str, object]:
     """Build one source's pattern paths from Neo4j and persist the result."""
+    effective_query_family = _resolve_effective_query_family(pattern, query_family)
     LOGGER.info(
         "Starting pattern path build: source_id=%s, pattern=%s, query_family=%s, base_date=%s, window_days=%s, config_path=%s",
         source_id,
         pattern,
-        query_family,
+        effective_query_family,
         base_date,
         window_days,
         config_path,
@@ -159,7 +162,7 @@ def run_pattern_path_flow(
             base_date=base_date,
             window_days=window_days,
             pattern=pattern,
-            query_family=query_family,
+            query_family=effective_query_family,
         )
         output_path = save_pattern_result(result, repository.config_path)
         retrieval_context = result.get("retrieval_context") or {}
@@ -185,11 +188,12 @@ def run_configured_pattern_path_flows(
     ranking_settings = load_query_settings(config_path).candidate_ranking
     selected_patterns = tuple(ranking_settings.patterns)
     _validate_patient_source_patterns(selected_patterns)
+    effective_query_family = query_family or DEFAULT_QUERY_FAMILY
     LOGGER.info(
         "Starting configured pattern path build: source_id=%s, patterns=%s, query_family=%s, base_date=%s, window_days=%s, config_path=%s",
         source_id,
         selected_patterns,
-        query_family,
+        effective_query_family,
         base_date,
         window_days,
         config_path,
@@ -201,7 +205,7 @@ def run_configured_pattern_path_flows(
             base_date=base_date,
             window_days=window_days,
             pattern=pattern,
-            query_family=query_family,
+            query_family=effective_query_family,
         )
         for pattern in selected_patterns
     ]
@@ -220,6 +224,17 @@ def _validate_patient_source_patterns(patterns: tuple[str, ...]) -> None:
             "patterns-from-config only supports patient-source patterns; "
             f"invalid patterns: {invalid}"
         )
+
+
+def _resolve_effective_query_family(
+    pattern: str,
+    query_family: str | None,
+) -> str | None:
+    """Return the query family that will be used for logging and service calls."""
+    spec = get_path_pattern_spec(resolve_path_pattern(pattern))
+    if spec.query_mode == PatternQueryMode.PAIRED_STATISTICS and query_family is None:
+        return DEFAULT_QUERY_FAMILY
+    return query_family
 
 
 def main() -> int:

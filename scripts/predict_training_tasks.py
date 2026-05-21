@@ -69,6 +69,15 @@ def parse_args() -> argparse.Namespace:
         help="Use existing saved paths and only run scoring plus candidate ranking.",
     )
     parser.add_argument(
+        "--query-family",
+        default=None,
+        choices=("training_order", "date_window"),
+        help=(
+            "Query family for paired-statistics path building. Defaults to "
+            "training_order; date_window only filters by the s1 date window."
+        ),
+    )
+    parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="Path to the YAML config file.",
@@ -127,6 +136,7 @@ def run_end_to_end_training_task_prediction(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     skip_path_build: bool = False,
+    query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     include_prompt: bool = False,
@@ -137,6 +147,7 @@ def run_end_to_end_training_task_prediction(
         pattern=pattern,
         config_path=config_path,
         skip_path_build=skip_path_build,
+        query_family=query_family,
         base_date=base_date,
         window_days=window_days,
     )
@@ -270,6 +281,7 @@ def main() -> int:
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,
+            query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             include_prompt=(args.include_prompt or args.save_prompt),
