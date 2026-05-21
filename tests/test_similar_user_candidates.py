@@ -6,7 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from config.settings import CandidateScoringSettings, SetSameScoringSettings
 from scripts.build_similar_user_candidates import (
@@ -1215,13 +1215,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(candidates["disease_course_available_count"], 1)
         self.assertEqual(candidates["disease_course_missing_count"], 0)
         mock_logger.info.assert_any_call(
-            "Built similar-user candidates from scored paths: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s",
+            "Completed similar-user candidate build: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s, elapsed_seconds=%s",
             "30010096",
             1,
             1,
             1,
             1,
             0,
+            ANY,
         )
 
     def test_build_similar_user_candidates_reads_multiple_saved_scored_patterns(

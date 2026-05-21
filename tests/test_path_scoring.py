@@ -1323,9 +1323,10 @@ class PathScoringTest(unittest.TestCase):
             exit_code = main()
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(mock_logger.info.call_count, 2)
         mock_logger.info.assert_any_call(
-            "Saved scored pattern result: detail_path=%s, summary_path=%s",
+            "Saved scored pattern result: source_id=%s, pattern=%s, detail_path=%s, summary_path=%s",
+            "30010096",
+            "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             Path(temp_dir)
             / "scored_pattern_paths"
             / "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"
@@ -1414,7 +1415,7 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         mock_save_scored.assert_not_called()
-        mock_logger.info.assert_called_once_with(
+        mock_logger.info.assert_any_call(
             json.dumps(expected, ensure_ascii=False, indent=2, default=str)
         )
 

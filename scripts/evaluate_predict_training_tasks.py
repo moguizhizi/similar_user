@@ -438,6 +438,7 @@ def run_batch_evaluation(
     active_on_base_date: bool = False,
 ) -> list[dict[str, Any]]:
     """Evaluate every patient and return per-patient details."""
+    started_at = time.perf_counter()
     if limit is not None and limit <= 0:
         raise ValueError(f"limit must be a positive integer, got {limit}.")
     details: list[dict[str, Any]] = []
@@ -456,6 +457,16 @@ def run_batch_evaluation(
         )
         if limit is not None:
             resolved_patient_ids = resolved_patient_ids[:limit]
+        LOGGER.info(
+            "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, active_on_base_date=%s",
+            len(resolved_patient_ids),
+            base_date,
+            window_days,
+            query_family,
+            task_top_k,
+            use_llm,
+            active_on_base_date,
+        )
         for index, patient_id in enumerate(resolved_patient_ids, start=1):
             detail = evaluate_patient(
                 patient_id,
@@ -477,6 +488,16 @@ def run_batch_evaluation(
                 patient_id,
                 detail.get("status"),
             )
+    summary = summarize_evaluation_details(details)
+    LOGGER.info(
+        "Completed prediction evaluation batch: total_count=%s, evaluated_count=%s, not_evaluable_count=%s, failed_count=%s, task_hit_rate=%s, elapsed_seconds=%s",
+        summary["total_count"],
+        summary["evaluated_count"],
+        summary["not_evaluable_count"],
+        summary["failed_count"],
+        summary["task_hit_rate"],
+        round(time.perf_counter() - started_at, 3),
+    )
     return details
 
 
@@ -567,6 +588,18 @@ def percentile(values: list[float], ratio: float) -> float:
 def main() -> int:
     """Run same-day prediction evaluation and write metrics outputs."""
     args = parse_args()
+    started_at = time.perf_counter()
+    LOGGER.info(
+        "Starting prediction evaluation: patient_id=%s, patient_ids_file=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, output_dir=%s",
+        args.patient_id,
+        args.patient_ids_file,
+        args.base_date,
+        args.window_days,
+        args.query_family,
+        args.task_top_k,
+        not args.dry_run,
+        args.output_dir,
+    )
     try:
         if args.patient_id is not None and args.patient_ids_file is not None:
             raise ValueError(
@@ -607,9 +640,15 @@ def main() -> int:
         return 1
 
     LOGGER.info(
-        "Wrote prediction evaluation outputs: summary=%s, details=%s",
+        "Completed prediction evaluation: total_count=%s, evaluated_count=%s, not_evaluable_count=%s, failed_count=%s, task_hit_rate=%s, summary_path=%s, details_path=%s, elapsed_seconds=%s",
+        summary["total_count"],
+        summary["evaluated_count"],
+        summary["not_evaluable_count"],
+        summary["failed_count"],
+        summary["task_hit_rate"],
         summary_path,
         details_path,
+        round(time.perf_counter() - started_at, 3),
     )
     LOGGER.info(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
     return 0
