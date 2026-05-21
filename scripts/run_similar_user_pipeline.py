@@ -35,7 +35,10 @@ from similar_user.domain.graph_schema import (
 )
 from similar_user.utils.logger import get_logger
 
-from scripts.build_similar_user_candidates import build_similar_user_candidates
+from scripts.build_similar_user_candidates import (
+    build_similar_user_candidates,
+    save_similar_user_candidates_result,
+)
 from scripts.build_pattern_paths import run_configured_pattern_path_flows
 from scripts.score_pattern_paths import (
     DEFAULT_CONFIG_PATH,
@@ -151,6 +154,12 @@ def run_similar_user_pipeline(
         patient_id,
         config_path=resolved_config_path,
     )
+    candidate_output_paths = save_similar_user_candidates_result(candidate_result)
+    LOGGER.info(
+        "Saved similar-user candidates: detail_path=%s, summary_path=%s",
+        candidate_output_paths["detail"],
+        candidate_output_paths["summary"],
+    )
     result = {
         "patient_id": patient_id,
         "pattern": pattern,
@@ -161,6 +170,9 @@ def run_similar_user_pipeline(
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         "path_generation": path_generation,
         "candidate_result": candidate_result,
+        "candidate_output_paths": {
+            key: str(value) for key, value in candidate_output_paths.items()
+        },
     }
     LOGGER.debug(
         "Completed similar-user pipeline: patient_id=%s, candidate_count=%s, elapsed_seconds=%s",

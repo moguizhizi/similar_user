@@ -1508,7 +1508,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             config="config/settings.yaml",
             scored_paths_dir="data/scored_pattern_paths",
             candidates_dir="data/similar_user_candidates",
-            disease_course_window_days=120,
         )
         mock_build_candidates.return_value = expected
         mock_save_candidates.return_value = {
@@ -1523,7 +1522,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             scored_paths_dir="data/scored_pattern_paths",
-            disease_course_window_days=120,
         )
         mock_save_candidates.assert_called_once_with(
             expected,
@@ -1536,6 +1534,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         )
 
     @patch("scripts.run_similar_user_pipeline.time.perf_counter")
+    @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
     @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
     @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
@@ -1544,6 +1543,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_run_path_flows: Mock,
         mock_score_and_save: Mock,
         mock_build_candidates: Mock,
+        mock_save_candidates: Mock,
         mock_perf_counter: Mock,
     ) -> None:
         mock_perf_counter.side_effect = [10.0, 12.345]
@@ -1574,6 +1574,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_run_path_flows.return_value = [path_result]
         mock_score_and_save.return_value = [scored_result]
         mock_build_candidates.return_value = candidate_result
+        mock_save_candidates.return_value = {
+            "detail": Path("data/similar_user_candidates/30/30010096.detail.json"),
+            "summary": Path("data/similar_user_candidates/30/30010096.summary.json"),
+        }
 
         result = run_similar_user_pipeline(
             "30010096",
@@ -1601,6 +1605,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ],
         )
         self.assertEqual(result["candidate_result"], candidate_result)
+        self.assertEqual(
+            result["candidate_output_paths"],
+            {
+                "detail": "data/similar_user_candidates/30/30010096.detail.json",
+                "summary": "data/similar_user_candidates/30/30010096.summary.json",
+            },
+        )
         self.assertFalse(result["skip_path_build"])
         self.assertEqual(result["elapsed_seconds"], 2.345)
         mock_run_path_flows.assert_called_once_with(
@@ -1618,7 +1629,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "30010096",
             config_path="config/custom.yaml",
         )
+        mock_save_candidates.assert_called_once_with(candidate_result)
 
+    @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
     @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
     @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
@@ -1627,6 +1640,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_run_path_flows: Mock,
         mock_score_and_save: Mock,
         mock_build_candidates: Mock,
+        mock_save_candidates: Mock,
     ) -> None:
         mock_run_path_flows.return_value = [
             {
@@ -1658,7 +1672,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         mock_build_candidates.assert_not_called()
         mock_score_and_save.assert_not_called()
+        mock_save_candidates.assert_not_called()
 
+    @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
     @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
     @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
@@ -1667,6 +1683,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_run_path_flows: Mock,
         mock_score_and_save: Mock,
         mock_build_candidates: Mock,
+        mock_save_candidates: Mock,
     ) -> None:
         candidate_result = {
             "patient_id": "30010096",
@@ -1680,6 +1697,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         }
         mock_score_and_save.return_value = [scored_result]
         mock_build_candidates.return_value = candidate_result
+        mock_save_candidates.return_value = {
+            "detail": Path("data/similar_user_candidates/30/30010096.detail.json"),
+            "summary": Path("data/similar_user_candidates/30/30010096.summary.json"),
+        }
 
         result = run_similar_user_pipeline(
             "30010096",
@@ -1691,6 +1712,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         self.assertIsNone(result["path_generation"])
         self.assertEqual(result["candidate_result"], candidate_result)
+        self.assertEqual(
+            result["candidate_output_paths"],
+            {
+                "detail": "data/similar_user_candidates/30/30010096.detail.json",
+                "summary": "data/similar_user_candidates/30/30010096.summary.json",
+            },
+        )
         self.assertTrue(result["skip_path_build"])
         mock_run_path_flows.assert_not_called()
         mock_score_and_save.assert_called_once_with(
@@ -1701,6 +1729,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "30010096",
             config_path="config/custom.yaml",
         )
+        mock_save_candidates.assert_called_once_with(candidate_result)
 
     @patch("scripts.run_similar_user_pipeline.LOGGER")
     @patch("scripts.run_similar_user_pipeline.parse_args")
