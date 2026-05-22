@@ -90,9 +90,24 @@ class TrainingTaskPredictionService:
             excluded_game_ids=repeated_target_game_ids,
         )
 
-        candidate_tasks = build_candidate_training_tasks_from_distinct_games(
-            self.user_service.get_distinct_training_games()
+        profile_candidate_game_rows = (
+            self.user_service.get_patient_profile_candidate_training_games(
+                resolved_patient_id,
+                target_task_window["base_date"],
+            )
         )
+        if not isinstance(profile_candidate_game_rows, list):
+            profile_candidate_game_rows = []
+        candidate_source_type = "patient_profile_entities"
+        candidate_tasks = build_candidate_training_tasks_from_distinct_games(
+            profile_candidate_game_rows
+        )
+        if not candidate_tasks:
+            profile_candidate_game_rows = self.user_service.get_distinct_training_games()
+            candidate_source_type = "distinct_training_games_fallback"
+            candidate_tasks = build_candidate_training_tasks_from_distinct_games(
+                profile_candidate_game_rows
+            )
 
         rule_based_tasks = build_rule_based_predictions(
             candidate_tasks,
@@ -129,6 +144,7 @@ class TrainingTaskPredictionService:
                     candidate.candidate_score is not None for candidate in candidates
                 ),
                 "candidate_task_window": candidate_task_window,
+                "candidate_task_source": candidate_source_type,
             },
             "similar_user_game_counts": similar_user_game_counts,
             "similar_user_task_evidence": similar_user_task_evidence,

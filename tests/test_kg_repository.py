@@ -9,14 +9,17 @@ from unittest.mock import Mock, patch
 
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
+    DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+    SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+    UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
@@ -179,6 +182,69 @@ class KgRepositoryTest(unittest.TestCase):
             query=DISTINCT_TRAINING_GAMES_QUERY,
             parameters={},
         )
+
+    def test_get_disease_taskset_task_game_sampled_per_game(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"row": {"g": {"id": "42", "name": "打怪物"}}}
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_disease_taskset_task_game_sampled_per_game(
+            " AU_DIS_0013 ",
+        )
+
+        self.assertEqual(result, [{"row": {"g": {"id": "42", "name": "打怪物"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+            parameters={"disease_id": "AU_DIS_0013"},
+        )
+
+    def test_get_symptom_taskset_task_game_sampled_per_game(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"row": {"g": {"id": "84", "name": "真假句辨别"}}}
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_symptom_taskset_task_game_sampled_per_game(
+            " AU_SYM_0007 ",
+        )
+
+        self.assertEqual(result, [{"row": {"g": {"id": "84", "name": "真假句辨别"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+            parameters={"symptom_id": "AU_SYM_0007"},
+        )
+
+    def test_get_unknown_taskset_task_game_sampled_per_game(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {"row": {"g": {"id": "12", "name": "未知任务"}}}
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_unknown_taskset_task_game_sampled_per_game(
+            " AU_UNKNOWN_0005 ",
+        )
+
+        self.assertEqual(result, [{"row": {"g": {"id": "12", "name": "未知任务"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+            parameters={"unknown_id": "AU_UNKNOWN_0005"},
+        )
+
+    def test_entity_task_game_expansion_queries_reject_blank_ids(self) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "disease_id must be a non-empty string."):
+            repository.get_disease_taskset_task_game_sampled_per_game("   ")
+
+        with self.assertRaisesRegex(ValueError, "symptom_id must be a non-empty string."):
+            repository.get_symptom_taskset_task_game_sampled_per_game("   ")
+
+        with self.assertRaisesRegex(ValueError, "unknown_id must be a non-empty string."):
+            repository.get_unknown_taskset_task_game_sampled_per_game("   ")
 
     def test_get_patient_training_date_games_by_start_date(self) -> None:
         mock_client = Mock()

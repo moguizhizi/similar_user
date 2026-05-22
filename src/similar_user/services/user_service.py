@@ -42,6 +42,81 @@ class UserService:
         """Return distinct games that appear in training records."""
         return self.kg_repository.get_distinct_training_games()
 
+    def get_patient_profile_entities_by_effective_date(
+        self,
+        patient_id: str,
+        base_date: str,
+    ) -> list[dict[str, object]]:
+        """Return profile entities on the nearest effective date for a patient."""
+        return self.kg_repository.get_patient_profile_entities_by_effective_date(
+            patient_id,
+            base_date,
+        )
+
+    def get_patient_profile_candidate_training_games(
+        self,
+        patient_id: str,
+        base_date: str,
+    ) -> list[dict[str, object]]:
+        """Return games linked to the patient's effective disease/symptom/unknown profile."""
+        profile_rows = self.get_patient_profile_entities_by_effective_date(
+            patient_id,
+            base_date,
+        )
+        game_rows: list[dict[str, object]] = []
+        seen_game_ids: set[str] = set()
+
+        for profile_row in profile_rows:
+            for disease in _iter_nodes(profile_row.get("diseases")):
+                disease_id = _node_identifier(disease)
+                if not disease_id:
+                    continue
+                self._extend_profile_candidate_games(
+                    game_rows,
+                    seen_game_ids,
+                    self.kg_repository.get_disease_taskset_task_game_sampled_per_game(
+                        disease_id,
+                    ),
+                )
+            for symptom in _iter_nodes(profile_row.get("symptoms")):
+                symptom_id = _node_identifier(symptom)
+                if not symptom_id:
+                    continue
+                self._extend_profile_candidate_games(
+                    game_rows,
+                    seen_game_ids,
+                    self.kg_repository.get_symptom_taskset_task_game_sampled_per_game(
+                        symptom_id,
+                    ),
+                )
+            for unknown in _iter_nodes(profile_row.get("unknowns")):
+                unknown_id = _node_identifier(unknown)
+                if not unknown_id:
+                    continue
+                self._extend_profile_candidate_games(
+                    game_rows,
+                    seen_game_ids,
+                    self.kg_repository.get_unknown_taskset_task_game_sampled_per_game(
+                        unknown_id,
+                    ),
+                )
+
+        return game_rows
+
+    @staticmethod
+    def _extend_profile_candidate_games(
+        game_rows: list[dict[str, object]],
+        seen_game_ids: set[str],
+        expansion_rows: list[dict[str, object]],
+    ) -> None:
+        for expansion_row in expansion_rows:
+            game = _extract_expansion_game(expansion_row)
+            game_id = _node_identifier(game)
+            if not game_id or game_id in seen_game_ids:
+                continue
+            game_rows.append({"g": game})
+            seen_game_ids.add(game_id)
+
     def get_patient_training_date_games_by_start_date(
         self,
         patient_id: str,
@@ -1165,6 +1240,32 @@ def _coerce_optional_float(value: object) -> float | None:
         except ValueError:
             return None
     return None
+
+
+def _iter_nodes(value: object) -> list[dict[str, object]]:
+    """Return node dictionaries from a possibly missing Cypher collection."""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _extract_expansion_game(row: dict[str, object]) -> dict[str, object]:
+    """Extract the Game node from an entity expansion row."""
+    nested_row = row.get("row")
+    if isinstance(nested_row, dict):
+        game = nested_row.get("g")
+        if isinstance(game, dict):
+            return game
+    game = row.get("g")
+    if isinstance(game, dict):
+        return game
+    return {}
+
+
+def _node_identifier(node: dict[str, object]) -> str:
+    """Return a stable node identifier, falling back to name when id is missing."""
+    raw_id = node.get("id") or node.get("name")
+    return str(raw_id or "").strip()
 
 
 def _parse_optional_date_value(value: object) -> date | None:
