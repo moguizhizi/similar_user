@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
+import json
 from unittest.mock import Mock, patch
 
 from scripts import evaluate_predict_training_tasks
@@ -34,6 +36,38 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(args.base_date, "2022-05-22")
         self.assertEqual(args.window_days, 14)
         self.assertEqual(args.query_family, "date_window")
+        self.assertEqual(
+            args.analysis_file,
+            "predict_training_tasks_analysis.json",
+        )
+        self.assertIsNone(args.patient_list_date)
+        self.assertEqual(args.patient_list_dir, "data/patient_ids")
+
+    def test_build_patient_ids_file_from_date_uses_export_path_rule(self) -> None:
+        patient_ids_file = evaluate_predict_training_tasks.build_patient_ids_file_from_date(
+            patient_list_date="2023-10-15",
+            patient_list_dir="data/patient_ids",
+        )
+
+        self.assertEqual(
+            patient_ids_file,
+            evaluate_predict_training_tasks.Path(
+                "data/patient_ids/base_2023-10-15/patients_active_2023-10-15.txt"
+            ),
+        )
+
+    def test_write_analysis_output_writes_json_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            analysis_path = evaluate_predict_training_tasks.write_analysis_output(
+                {"evaluated_count": 2},
+                output_dir=temp_dir,
+                analysis_file="analysis.json",
+            )
+
+            self.assertEqual(
+                json.loads(analysis_path.read_text(encoding="utf-8")),
+                {"evaluated_count": 2},
+            )
 
     def test_evaluate_prediction_sets_ignores_ranking_and_dedupes_ids(self) -> None:
         result = evaluate_predict_training_tasks.evaluate_prediction_sets(
@@ -107,6 +141,112 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(summary["avg_elapsed_seconds"], 2.5)
         self.assertEqual(summary["p95_elapsed_seconds"], 4.0)
 
+    def test_analyze_evaluation_details_summarizes_rank_evidence(self) -> None:
+        analysis = evaluate_predict_training_tasks.analyze_evaluation_details(
+            [
+                {
+                    "patient_id": "40",
+                    "status": "success_evaluated",
+                    "task_hit": True,
+                    "precision": 0.5,
+                    "recall": 0.5,
+                    "predicted_task_count": 2,
+                    "actual_task_count": 2,
+                    "matched_task_count": 1,
+                    "matched_game_ids": ["B"],
+                    "predicted_game_similar_user_counts": [
+                        {
+                            "game_id": "A",
+                            "game_name": "任务A",
+                            "similar_user_count_rank": 1,
+                        },
+                        {
+                            "game_id": "B",
+                            "game_name": "任务B",
+                            "similar_user_count_rank": 3,
+                        },
+                    ],
+                    "actual_game_similar_user_counts": [
+                        {
+                            "game_id": "B",
+                            "game_name": "任务B",
+                            "similar_user_count_rank": 3,
+                        },
+                        {
+                            "game_id": "C",
+                            "game_name": "任务C",
+                            "similar_user_count_rank": 12,
+                        },
+                    ],
+                    "similar_user_game_counts_task_count": 10,
+                    "elapsed_seconds": 1.0,
+                },
+                {
+                    "patient_id": "41",
+                    "status": "success_evaluated",
+                    "task_hit": False,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "predicted_task_count": 1,
+                    "actual_task_count": 1,
+                    "matched_task_count": 0,
+                    "matched_game_ids": [],
+                    "predicted_game_similar_user_counts": [
+                        {
+                            "game_id": "D",
+                            "game_name": "任务D",
+                            "similar_user_count_rank": 9,
+                        },
+                    ],
+                    "actual_game_similar_user_counts": [
+                        {
+                            "game_id": "E",
+                            "game_name": "任务E",
+                            "similar_user_count_rank": None,
+                        },
+                    ],
+                    "similar_user_game_counts_task_count": 20,
+                    "elapsed_seconds": 2.0,
+                },
+                {"patient_id": "42", "status": "failed"},
+            ]
+        )
+
+        self.assertEqual(analysis["evaluated_count"], 2)
+        self.assertEqual(
+            analysis["rank_stats"]["predicted"],
+            {
+                "count": 3,
+                "min": 1,
+                "p25": 1,
+                "median": 3,
+                "mean": 4.3333,
+                "p75": 9,
+                "max": 9,
+            },
+        )
+        self.assertEqual(
+            analysis["rank_buckets"]["predicted"],
+            {"1-7": 2, "8-10": 1, "11-20": 0, "21-50": 0, "51+": 0},
+        )
+        self.assertEqual(
+            analysis["rank_buckets"]["missed_actual"],
+            {"1-7": 0, "8-10": 0, "11-20": 1, "21-50": 0, "51+": 0},
+        )
+        self.assertEqual(
+            analysis["missing_from_similar_user_game_counts"],
+            {"predicted_task_count": 0, "actual_task_count": 1},
+        )
+        self.assertEqual(
+            analysis["similar_user_game_counts_task_count_stats"]["mean"],
+            15.0,
+        )
+        self.assertEqual(
+            analysis["top_matched_games"],
+            [{"game_id": "B", "game_name": "任务B", "count": 1}],
+        )
+        self.assertEqual(analysis["per_patient"][0]["actual_rank_max"], 12)
+
     @patch("scripts.evaluate_predict_training_tasks.load_query_settings")
     def test_build_experiment_config_records_window_settings(
         self,
@@ -126,7 +266,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             query_family="date_window",
             task_top_k=7,
             use_llm=False,
-            active_on_base_date=True,
         )
 
         self.assertEqual(config["disease_course_window_days"], 180)
@@ -379,7 +518,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
     @patch("scripts.evaluate_predict_training_tasks.KgRepository")
     @patch("scripts.evaluate_predict_training_tasks.UserService")
     @patch("scripts.evaluate_predict_training_tasks.evaluate_patient")
-    def test_run_batch_evaluation_applies_limit_after_loading_patient_ids(
+    def test_run_batch_evaluation_applies_limit_to_explicit_patient_ids(
         self,
         mock_evaluate_patient: Mock,
         mock_user_service_class: Mock,
@@ -389,7 +528,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         mock_client = Mock()
         mock_client_class.from_config.return_value.__enter__.return_value = mock_client
         mock_user_service = Mock()
-        mock_user_service.get_patient_ids.return_value = ["40", "41", "42"]
         mock_user_service_class.return_value = mock_user_service
         mock_evaluate_patient.side_effect = [
             {"patient_id": "40", "status": "success_evaluated"},
@@ -397,7 +535,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         ]
 
         details = evaluate_predict_training_tasks.run_batch_evaluation(
-            None,
+            ["40", "41", "42"],
             base_date="2022-05-22",
             window_days=14,
             config_path="config/settings.yaml",
@@ -417,7 +555,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             client=mock_client,
             config_path=evaluate_predict_training_tasks.Path("config/settings.yaml"),
         )
-        mock_user_service.get_patient_ids.assert_called_once_with()
+        mock_user_service.get_patient_ids.assert_not_called()
         self.assertEqual(mock_evaluate_patient.call_count, 2)
         self.assertEqual(
             [
@@ -434,55 +572,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             ["date_window", "date_window"],
         )
 
-    @patch("scripts.evaluate_predict_training_tasks.Neo4jClient")
-    @patch("scripts.evaluate_predict_training_tasks.KgRepository")
-    @patch("scripts.evaluate_predict_training_tasks.UserService")
-    @patch("scripts.evaluate_predict_training_tasks.evaluate_patient")
-    def test_run_batch_evaluation_can_load_only_base_date_active_patients(
-        self,
-        mock_evaluate_patient: Mock,
-        mock_user_service_class: Mock,
-        mock_repository_class: Mock,
-        mock_client_class: Mock,
-    ) -> None:
-        mock_client = Mock()
-        mock_client_class.from_config.return_value.__enter__.return_value = mock_client
-        mock_user_service = Mock()
-        mock_user_service.get_patient_ids_with_training_on_date.return_value = [
-            "40",
-            "41",
-        ]
-        mock_user_service_class.return_value = mock_user_service
-        mock_evaluate_patient.side_effect = [
-            {"patient_id": "40", "status": "success_evaluated"},
-            {"patient_id": "41", "status": "success_evaluated"},
-        ]
-
-        details = evaluate_predict_training_tasks.run_batch_evaluation(
-            None,
-            base_date="2022-05-22",
-            window_days=14,
-            config_path="config/settings.yaml",
-            use_llm=False,
-            active_on_base_date=True,
-        )
-
-        self.assertEqual(
-            details,
-            [
-                {"patient_id": "40", "status": "success_evaluated"},
-                {"patient_id": "41", "status": "success_evaluated"},
-            ],
-        )
-        mock_repository_class.assert_called_once_with(
-            client=mock_client,
-            config_path=evaluate_predict_training_tasks.Path("config/settings.yaml"),
-        )
-        mock_user_service.get_patient_ids_with_training_on_date.assert_called_once_with(
-            "2022-05-22",
-        )
-        mock_user_service.get_patient_ids.assert_not_called()
-
     def test_resolve_patient_ids_prefers_explicit_patient_ids(self) -> None:
         user_service = Mock()
 
@@ -490,12 +579,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             user_service,
             patient_ids=["40"],
             base_date="2022-05-22",
-            active_on_base_date=True,
         )
 
         self.assertEqual(result, ["40"])
         user_service.get_patient_ids.assert_not_called()
-        user_service.get_patient_ids_with_training_on_date.assert_not_called()
 
     def test_run_batch_evaluation_rejects_non_positive_limit(self) -> None:
         with self.assertRaisesRegex(
@@ -507,6 +594,17 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 base_date="2022-05-22",
                 window_days=14,
                 limit=0,
+            )
+
+    def test_run_batch_evaluation_rejects_missing_patient_ids(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "patient_ids must contain at least one patient ID.",
+        ):
+            evaluate_predict_training_tasks.run_batch_evaluation(
+                [],
+                base_date="2022-05-22",
+                window_days=14,
             )
 
     @patch("scripts.evaluate_predict_training_tasks.run_batch_evaluation")
@@ -522,6 +620,183 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 "patients.txt",
                 "--patient-id",
                 "40",
+                "--base-date",
+                "2022-05-22",
+                "--window-days",
+                "14",
+            ],
+        ):
+            exit_code = evaluate_predict_training_tasks.main()
+
+        self.assertEqual(exit_code, 1)
+        mock_run_batch_evaluation.assert_not_called()
+
+    @patch("scripts.evaluate_predict_training_tasks.write_analysis_output")
+    @patch("scripts.evaluate_predict_training_tasks.write_outputs")
+    @patch("scripts.evaluate_predict_training_tasks.build_experiment_config")
+    @patch("scripts.evaluate_predict_training_tasks.export_patient_ids_with_training_on_date")
+    @patch("scripts.evaluate_predict_training_tasks.run_batch_evaluation")
+    def test_main_reads_patient_ids_from_patient_list_date_file(
+        self,
+        mock_run_batch_evaluation: Mock,
+        mock_export_patient_ids: Mock,
+        mock_build_experiment_config: Mock,
+        mock_write_outputs: Mock,
+        mock_write_analysis_output: Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            patient_ids_file = (
+                evaluate_predict_training_tasks.Path(temp_dir)
+                / "base_2023-10-15"
+                / "patients_active_2023-10-15.txt"
+            )
+            patient_ids_file.parent.mkdir(parents=True)
+            patient_ids_file.write_text("40\n41\n", encoding="utf-8")
+            mock_run_batch_evaluation.return_value = [
+                {
+                    "status": "success_evaluated",
+                    "task_hit": True,
+                    "precision": 1.0,
+                    "recall": 1.0,
+                    "f1": 1.0,
+                    "predicted_task_count": 1,
+                    "actual_task_count": 1,
+                    "matched_task_count": 1,
+                    "elapsed_seconds": 1.0,
+                }
+            ]
+            mock_build_experiment_config.return_value = {
+                "base_date": "2023-10-15",
+                "window_days": 14,
+                "disease_course_window_days": 14,
+                "task_top_k": 7,
+                "query_family": None,
+                "use_llm": False,
+            }
+            mock_write_outputs.return_value = (
+                evaluate_predict_training_tasks.Path("summary.json"),
+                evaluate_predict_training_tasks.Path("details.jsonl"),
+            )
+            mock_write_analysis_output.return_value = (
+                evaluate_predict_training_tasks.Path("analysis.json")
+            )
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "evaluate_predict_training_tasks.py",
+                    "--patient-list-date",
+                    "2023-10-15",
+                    "--patient-list-dir",
+                    temp_dir,
+                    "--base-date",
+                    "2023-10-15",
+                    "--window-days",
+                    "14",
+                    "--dry-run",
+                ],
+            ):
+                exit_code = evaluate_predict_training_tasks.main()
+
+        self.assertEqual(exit_code, 0)
+        mock_export_patient_ids.assert_not_called()
+        mock_run_batch_evaluation.assert_called_once()
+        self.assertEqual(mock_run_batch_evaluation.call_args.args[0], ["40", "41"])
+
+    @patch("scripts.evaluate_predict_training_tasks.write_analysis_output")
+    @patch("scripts.evaluate_predict_training_tasks.write_outputs")
+    @patch("scripts.evaluate_predict_training_tasks.build_experiment_config")
+    @patch("scripts.evaluate_predict_training_tasks.export_patient_ids_with_training_on_date")
+    @patch("scripts.evaluate_predict_training_tasks.run_batch_evaluation")
+    def test_main_exports_patient_list_date_file_when_missing(
+        self,
+        mock_run_batch_evaluation: Mock,
+        mock_export_patient_ids: Mock,
+        mock_build_experiment_config: Mock,
+        mock_write_outputs: Mock,
+        mock_write_analysis_output: Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            patient_ids_file = (
+                evaluate_predict_training_tasks.Path(temp_dir)
+                / "base_2023-10-15"
+                / "patients_active_2023-10-15.txt"
+            )
+
+            def export_side_effect(**_: object) -> None:
+                patient_ids_file.parent.mkdir(parents=True)
+                patient_ids_file.write_text("40\n41\n", encoding="utf-8")
+
+            mock_export_patient_ids.side_effect = export_side_effect
+            mock_run_batch_evaluation.return_value = [
+                {
+                    "status": "success_evaluated",
+                    "task_hit": True,
+                    "precision": 1.0,
+                    "recall": 1.0,
+                    "f1": 1.0,
+                    "predicted_task_count": 1,
+                    "actual_task_count": 1,
+                    "matched_task_count": 1,
+                    "elapsed_seconds": 1.0,
+                }
+            ]
+            mock_build_experiment_config.return_value = {
+                "base_date": "2023-10-15",
+                "window_days": 14,
+                "disease_course_window_days": 14,
+                "task_top_k": 7,
+                "query_family": None,
+                "use_llm": False,
+            }
+            mock_write_outputs.return_value = (
+                evaluate_predict_training_tasks.Path("summary.json"),
+                evaluate_predict_training_tasks.Path("details.jsonl"),
+            )
+            mock_write_analysis_output.return_value = (
+                evaluate_predict_training_tasks.Path("analysis.json")
+            )
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "evaluate_predict_training_tasks.py",
+                    "--patient-list-date",
+                    "2023-10-15",
+                    "--patient-list-dir",
+                    temp_dir,
+                    "--base-date",
+                    "2023-10-15",
+                    "--window-days",
+                    "14",
+                    "--config",
+                    "config/settings.yaml",
+                    "--dry-run",
+                ],
+            ):
+                exit_code = evaluate_predict_training_tasks.main()
+
+        self.assertEqual(exit_code, 0)
+        mock_export_patient_ids.assert_called_once_with(
+            base_date="2023-10-15",
+            config_path="config/settings.yaml",
+            output_dir=temp_dir,
+        )
+        mock_run_batch_evaluation.assert_called_once()
+        self.assertEqual(mock_run_batch_evaluation.call_args.args[0], ["40", "41"])
+
+    @patch("scripts.evaluate_predict_training_tasks.run_batch_evaluation")
+    def test_main_rejects_missing_patient_source(
+        self,
+        mock_run_batch_evaluation: Mock,
+    ) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "evaluate_predict_training_tasks.py",
                 "--base-date",
                 "2022-05-22",
                 "--window-days",

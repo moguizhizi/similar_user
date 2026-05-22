@@ -669,7 +669,7 @@ def build_task_prediction_prompt(
         },
     }
     return (
-        TASK_PREDICTION_PROMPT_TEMPLATE_V1
+        TASK_PREDICTION_PROMPT_TEMPLATE_V2
         + f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
     )
 
