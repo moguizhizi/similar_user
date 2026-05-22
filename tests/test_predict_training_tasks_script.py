@@ -206,7 +206,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             task_top_k=5,
             dry_run=True,
             include_prompt=False,
-            save_prompt=False,
+            no_save_prompt=True,
             prompt_output_dir="data/prompts",
             output_level="scores",
         )
@@ -250,7 +250,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
     @patch("scripts.predict_training_tasks.parse_args")
     @patch("scripts.predict_training_tasks.run_end_to_end_training_task_prediction")
     @patch("scripts.predict_training_tasks.write_prompt_to_file")
-    def test_main_saves_prompt_when_requested(
+    def test_main_saves_prompt_by_default(
         self,
         mock_write_prompt_to_file: Mock,
         mock_run_end_to_end: Mock,
@@ -268,7 +268,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             task_top_k=5,
             dry_run=True,
             include_prompt=False,
-            save_prompt=True,
+            no_save_prompt=False,
             prompt_output_dir="data/custom-prompts",
             output_level="full",
         )

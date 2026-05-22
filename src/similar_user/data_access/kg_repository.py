@@ -94,6 +94,51 @@ class KgRepository:
             parameters={},
         )
 
+    def get_disease_taskset_task_game_sampled_per_game(
+        self,
+        disease_id: str,
+    ) -> list[dict[str, object]]:
+        """Return one sampled TaskInstanceSet/TaskInstance row per game for a disease."""
+        normalized_disease_id = self._normalize_required_string(
+            disease_id,
+            "disease_id",
+        )
+        spec = get_graph_query_spec("disease_taskset_task_game_sampled_per_game")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={"disease_id": normalized_disease_id},
+        )
+
+    def get_symptom_taskset_task_game_sampled_per_game(
+        self,
+        symptom_id: str,
+    ) -> list[dict[str, object]]:
+        """Return one sampled TaskInstanceSet/TaskInstance row per game for a symptom."""
+        normalized_symptom_id = self._normalize_required_string(
+            symptom_id,
+            "symptom_id",
+        )
+        spec = get_graph_query_spec("symptom_taskset_task_game_sampled_per_game")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={"symptom_id": normalized_symptom_id},
+        )
+
+    def get_unknown_taskset_task_game_sampled_per_game(
+        self,
+        unknown_id: str,
+    ) -> list[dict[str, object]]:
+        """Return one sampled TaskInstanceSet/TaskInstance row per game for unknown."""
+        normalized_unknown_id = self._normalize_required_string(
+            unknown_id,
+            "unknown_id",
+        )
+        spec = get_graph_query_spec("unknown_taskset_task_game_sampled_per_game")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={"unknown_id": normalized_unknown_id},
+        )
+
     def get_patient_training_date_games_by_start_date(
         self,
         patient_id: str,

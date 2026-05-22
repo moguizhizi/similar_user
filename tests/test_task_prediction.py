@@ -311,6 +311,10 @@ class TaskPredictionTest(unittest.TestCase):
             {"g": {"id": "4", "name": "全局任务D", "任务类型": "类型D"}},
             {"g": {"id": "5", "name": "全局任务E", "任务类型": "类型E"}},
         ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "6", "name": "画像任务F", "任务类型": "类型F"}},
+            {"g": {"id": "7", "name": "画像任务G", "任务类型": "类型G"}},
+        ]
         service = TrainingTaskPredictionService(user_service=user_service)
 
         result = service.predict_from_pipeline_result(
@@ -376,12 +380,20 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertEqual(
             result["candidate_training_tasks"],
             [
-                {"game_id": "4", "game_name": "全局任务D"},
-                {"game_id": "5", "game_name": "全局任务E"},
+                {"game_id": "6", "game_name": "画像任务F"},
+                {"game_id": "7", "game_name": "画像任务G"},
             ],
         )
-        self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "4")
-        user_service.get_distinct_training_games.assert_called_once_with()
+        self.assertEqual(
+            result["candidate_source"]["candidate_task_source"],
+            "patient_profile_entities",
+        )
+        self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "6")
+        user_service.get_patient_profile_candidate_training_games.assert_called_once_with(
+            "40",
+            "2022-05-22",
+        )
+        user_service.get_distinct_training_games.assert_not_called()
         user_service.get_patient_training_task_history_by_date_window.assert_any_call(
             "40",
             "2022-05-20",
@@ -416,6 +428,9 @@ class TaskPredictionTest(unittest.TestCase):
             {"g": {"id": "1", "name": "任务A"}},
             {"g": {"id": "2", "name": "任务B"}},
         ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "2", "name": "任务B"}},
+        ]
         service = TrainingTaskPredictionService(user_service=user_service)
 
         result = service.predict_from_pipeline_result(
@@ -443,6 +458,42 @@ class TaskPredictionTest(unittest.TestCase):
                 }
             ],
         )
+        self.assertEqual(result["candidate_training_tasks"], [{"game_id": "2", "game_name": "任务B"}])
+
+    def test_predict_from_pipeline_result_falls_back_to_distinct_games_without_profile_tasks(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.side_effect = [
+            [{"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}],
+            [{"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}],
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = []
+        user_service.get_distinct_training_games.return_value = [
+            {"g": {"id": "4", "name": "全局任务D"}},
+        ]
+        service = TrainingTaskPredictionService(user_service=user_service)
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": ["201"]},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=1,
+        )
+
+        self.assertEqual(
+            result["candidate_training_tasks"],
+            [{"game_id": "4", "game_name": "全局任务D"}],
+        )
+        self.assertEqual(
+            result["candidate_source"]["candidate_task_source"],
+            "distinct_training_games_fallback",
+        )
+        user_service.get_distinct_training_games.assert_called_once_with()
 
     def test_predict_from_pipeline_result_reads_patient_id_from_candidate_summary(
         self,
