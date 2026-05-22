@@ -184,6 +184,16 @@ def run_training_task_prediction(
         query_settings.candidate_ranking.disease_course_window_days
         or query_settings.training_task_prediction.candidate_task_window_days
     )
+    raw_prompt_candidate_compression_enabled = getattr(
+        query_settings.training_task_prediction,
+        "prompt_candidate_compression_enabled",
+        True,
+    )
+    prompt_candidate_compression_enabled = (
+        raw_prompt_candidate_compression_enabled
+        if isinstance(raw_prompt_candidate_compression_enabled, bool)
+        else True
+    )
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
             kg_repository=KgRepository(
@@ -195,6 +205,7 @@ def run_training_task_prediction(
         service = TrainingTaskPredictionService(
             user_service=user_service,
             llm_client=llm_client,
+            prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
         )
         return service.predict_from_pipeline_result(
             pipeline_result,

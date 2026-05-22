@@ -32,7 +32,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             args = evaluate_predict_training_tasks.parse_args()
 
         self.assertEqual(args.patient_id, "40")
-        self.assertIsNone(args.patient_ids_file)
         self.assertEqual(args.base_date, "2022-05-22")
         self.assertEqual(args.window_days, 14)
         self.assertEqual(args.query_family, "date_window")
@@ -40,13 +39,14 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             args.analysis_file,
             "predict_training_tasks_analysis.json",
         )
-        self.assertIsNone(args.patient_list_date)
         self.assertEqual(args.patient_list_dir, "data/patient_ids")
 
-    def test_build_patient_ids_file_from_date_uses_export_path_rule(self) -> None:
-        patient_ids_file = evaluate_predict_training_tasks.build_patient_ids_file_from_date(
-            patient_list_date="2023-10-15",
-            patient_list_dir="data/patient_ids",
+    def test_build_patient_ids_file_from_base_date_uses_export_path_rule(self) -> None:
+        patient_ids_file = (
+            evaluate_predict_training_tasks.build_patient_ids_file_from_base_date(
+                base_date="2023-10-15",
+                patient_list_dir="data/patient_ids",
+            )
         )
 
         self.assertEqual(
@@ -274,6 +274,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(config["base_date"], "2022-05-22")
         self.assertEqual(config["task_top_k"], 7)
         self.assertFalse(config["use_llm"])
+        self.assertEqual(
+            config["prompt_template"],
+            evaluate_predict_training_tasks.CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+        )
         mock_load_query_settings.assert_called_once_with("config/settings.yaml")
 
     def test_build_experiment_output_dir_uses_parameterized_subdir(self) -> None:
@@ -607,36 +611,12 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 window_days=14,
             )
 
-    @patch("scripts.evaluate_predict_training_tasks.run_batch_evaluation")
-    def test_main_rejects_patient_id_and_file_together(
-        self,
-        mock_run_batch_evaluation: Mock,
-    ) -> None:
-        with patch.object(
-            sys,
-            "argv",
-            [
-                "evaluate_predict_training_tasks.py",
-                "patients.txt",
-                "--patient-id",
-                "40",
-                "--base-date",
-                "2022-05-22",
-                "--window-days",
-                "14",
-            ],
-        ):
-            exit_code = evaluate_predict_training_tasks.main()
-
-        self.assertEqual(exit_code, 1)
-        mock_run_batch_evaluation.assert_not_called()
-
     @patch("scripts.evaluate_predict_training_tasks.write_analysis_output")
     @patch("scripts.evaluate_predict_training_tasks.write_outputs")
     @patch("scripts.evaluate_predict_training_tasks.build_experiment_config")
     @patch("scripts.evaluate_predict_training_tasks.export_patient_ids_with_training_on_date")
     @patch("scripts.evaluate_predict_training_tasks.run_batch_evaluation")
-    def test_main_reads_patient_ids_from_patient_list_date_file(
+    def test_main_reads_patient_ids_from_base_date_file(
         self,
         mock_run_batch_evaluation: Mock,
         mock_export_patient_ids: Mock,
@@ -686,8 +666,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 "argv",
                 [
                     "evaluate_predict_training_tasks.py",
-                    "--patient-list-date",
-                    "2023-10-15",
                     "--patient-list-dir",
                     temp_dir,
                     "--base-date",
@@ -709,7 +687,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
     @patch("scripts.evaluate_predict_training_tasks.build_experiment_config")
     @patch("scripts.evaluate_predict_training_tasks.export_patient_ids_with_training_on_date")
     @patch("scripts.evaluate_predict_training_tasks.run_batch_evaluation")
-    def test_main_exports_patient_list_date_file_when_missing(
+    def test_main_exports_base_date_file_when_missing(
         self,
         mock_run_batch_evaluation: Mock,
         mock_export_patient_ids: Mock,
@@ -763,8 +741,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 "argv",
                 [
                     "evaluate_predict_training_tasks.py",
-                    "--patient-list-date",
-                    "2023-10-15",
                     "--patient-list-dir",
                     temp_dir,
                     "--base-date",
@@ -786,27 +762,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         )
         mock_run_batch_evaluation.assert_called_once()
         self.assertEqual(mock_run_batch_evaluation.call_args.args[0], ["40", "41"])
-
-    @patch("scripts.evaluate_predict_training_tasks.run_batch_evaluation")
-    def test_main_rejects_missing_patient_source(
-        self,
-        mock_run_batch_evaluation: Mock,
-    ) -> None:
-        with patch.object(
-            sys,
-            "argv",
-            [
-                "evaluate_predict_training_tasks.py",
-                "--base-date",
-                "2022-05-22",
-                "--window-days",
-                "14",
-            ],
-        ):
-            exit_code = evaluate_predict_training_tasks.main()
-
-        self.assertEqual(exit_code, 1)
-        mock_run_batch_evaluation.assert_not_called()
 
 
 if __name__ == "__main__":
