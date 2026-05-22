@@ -27,6 +27,7 @@ class SimilarUserCandidate:
 
     patient_id: str
     candidate_score: float | None = None
+    candidate_base_date: str | None = None
 
     @property
     def weight(self) -> float:
@@ -55,7 +56,6 @@ class TrainingTaskPredictionService:
         """Predict next training tasks from a similar-user pipeline result."""
         resolved_patient_id = self._resolve_patient_id(pipeline_result)
         target_task_window = build_target_task_window(base_date)
-        candidate_task_window = build_candidate_task_window(base_date, window_days)
         candidates = extract_similar_user_candidates(pipeline_result)
         if not candidates:
             raise ValueError("similar user pipeline output does not contain candidates.")
@@ -65,30 +65,21 @@ class TrainingTaskPredictionService:
             target_task_window["start_date"],
             target_task_window["end_date"],
         )
-        similar_user_histories = {
-            candidate.patient_id: self.user_service.get_patient_training_task_history_by_date_window(
-                candidate.patient_id,
-                candidate_task_window["start_date"],
-                candidate_task_window["end_date"],
+        candidate_task_windows = {
+            candidate.patient_id: build_candidate_task_window(
+                candidate.candidate_base_date or base_date,
+                window_days,
             )
             for candidate in candidates
         }
-
-        repeated_target_game_ids = find_consecutive_target_game_ids(target_history)
-        similar_user_game_counts = build_similar_user_game_counts(
-            candidates,
-            similar_user_histories,
-        )
-        similar_user_game_counts = filter_game_counts_by_ids(
-            similar_user_game_counts,
-            repeated_target_game_ids,
-        )
-
-        similar_user_task_evidence = build_similar_user_task_evidence(
-            candidates,
-            similar_user_histories,
-            excluded_game_ids=repeated_target_game_ids,
-        )
+        similar_user_histories = {
+            candidate.patient_id: self.user_service.get_patient_training_task_history_by_date_window(
+                candidate.patient_id,
+                candidate_task_windows[candidate.patient_id]["start_date"],
+                candidate_task_windows[candidate.patient_id]["end_date"],
+            )
+            for candidate in candidates
+        }
 
         profile_candidate_game_rows = (
             self.user_service.get_patient_profile_candidate_training_games(
@@ -109,6 +100,31 @@ class TrainingTaskPredictionService:
                 profile_candidate_game_rows
             )
 
+        repeated_target_game_ids = find_consecutive_target_game_ids(target_history)
+        allowed_candidate_game_ids = _extract_candidate_task_game_ids(candidate_tasks)
+        similar_user_game_counts = build_similar_user_game_counts(
+            candidates,
+            similar_user_histories,
+        )
+        similar_user_game_counts = filter_game_counts_by_ids(
+            similar_user_game_counts,
+            repeated_target_game_ids,
+        )
+        similar_user_game_counts = filter_game_counts_to_ids(
+            similar_user_game_counts,
+            allowed_candidate_game_ids,
+        )
+
+        similar_user_task_evidence = build_similar_user_task_evidence(
+            candidates,
+            similar_user_histories,
+            excluded_game_ids=repeated_target_game_ids,
+        )
+        similar_user_task_evidence = filter_task_evidence_to_ids(
+            similar_user_task_evidence,
+            allowed_candidate_game_ids,
+        )
+
         rule_based_tasks = build_rule_based_predictions(
             candidate_tasks,
             top_k=task_top_k,
@@ -127,12 +143,17 @@ class TrainingTaskPredictionService:
         if use_llm:
             if self.llm_client is None:
                 raise ValueError("llm_client is required when use_llm is true.")
-            raw_llm_output = self.llm_client.chat(
-                prompt,
-                system_prompt=SYSTEM_PROMPT,
-                temperature=0.2,
-            )
-            llm_prediction = parse_json_object_from_text(raw_llm_output)
+            try:
+                raw_llm_output = self.llm_client.chat(
+                    prompt,
+                    system_prompt=SYSTEM_PROMPT,
+                    temperature=0.2,
+                )
+                llm_prediction = parse_json_object_from_text(raw_llm_output)
+            except Exception as exc:
+                setattr(exc, "llm_prompt", prompt)
+                setattr(exc, "patient_id", resolved_patient_id)
+                raise
 
         result: dict[str, Any] = {
             "patient_id": resolved_patient_id,
@@ -143,7 +164,7 @@ class TrainingTaskPredictionService:
                 "has_candidate_scores": any(
                     candidate.candidate_score is not None for candidate in candidates
                 ),
-                "candidate_task_window": candidate_task_window,
+                "candidate_task_windows": candidate_task_windows,
                 "candidate_task_source": candidate_source_type,
             },
             "similar_user_game_counts": similar_user_game_counts,
@@ -483,6 +504,47 @@ def filter_game_counts_by_ids(
     ]
 
 
+def filter_game_counts_to_ids(
+    game_counts: list[dict[str, Any]],
+    allowed_game_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Keep only game-count rows whose IDs are in the allowed candidate task set."""
+    if not allowed_game_ids:
+        return []
+    return [
+        game_count
+        for game_count in game_counts
+        if _normalize_text(game_count.get("game_id")) in allowed_game_ids
+    ]
+
+
+def filter_task_evidence_to_ids(
+    task_evidence: list[dict[str, Any]],
+    allowed_game_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Keep only per-candidate evidence tasks in the allowed candidate task set."""
+    if not allowed_game_ids:
+        return []
+
+    filtered_evidence: list[dict[str, Any]] = []
+    for evidence in task_evidence:
+        tasks = evidence.get("tasks")
+        if not isinstance(tasks, list):
+            continue
+        filtered_tasks = [
+            task
+            for task in tasks
+            if isinstance(task, dict)
+            and _normalize_text(task.get("game_id")) in allowed_game_ids
+        ]
+        if not filtered_tasks:
+            continue
+        filtered_item = dict(evidence)
+        filtered_item["tasks"] = filtered_tasks
+        filtered_evidence.append(filtered_item)
+    return filtered_evidence
+
+
 def find_consecutive_target_game_ids(
     target_history: list[dict[str, Any]],
 ) -> set[str]:
@@ -650,6 +712,7 @@ def _parse_candidate(raw_candidate: Any) -> SimilarUserCandidate | None:
     return SimilarUserCandidate(
         patient_id=patient_id,
         candidate_score=_normalize_float(raw_candidate.get("candidate_score")),
+        candidate_base_date=_extract_candidate_base_date(raw_candidate),
     )
 
 
@@ -716,6 +779,36 @@ def _normalize_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _extract_candidate_base_date(raw_candidate: dict[str, Any]) -> str | None:
+    """Extract candidate disease-course base date from full or summarized scores."""
+    score_details = raw_candidate.get("score_details")
+    if isinstance(score_details, dict):
+        disease_course_details = score_details.get("disease_course_secondary_ability")
+        if isinstance(disease_course_details, dict):
+            candidate_base_date = _normalize_text(
+                disease_course_details.get("candidate_base_date")
+            )
+            if candidate_base_date is not None:
+                return candidate_base_date
+
+    score_summary = raw_candidate.get("score_summary")
+    if isinstance(score_summary, dict):
+        disease_course_summary = score_summary.get("disease_course_secondary_ability")
+        if isinstance(disease_course_summary, dict):
+            return _normalize_text(disease_course_summary.get("candidate_base_date"))
+    return None
+
+
+def _extract_candidate_task_game_ids(candidate_tasks: list[dict[str, Any]]) -> set[str]:
+    """Extract selectable game IDs from candidate task rows."""
+    game_ids: set[str] = set()
+    for task in candidate_tasks:
+        game_id = _normalize_text(task.get("game_id"))
+        if game_id is not None:
+            game_ids.add(game_id)
+    return game_ids
 
 
 def _dedupe_recent_games(

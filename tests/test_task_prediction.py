@@ -17,7 +17,9 @@ from src.similar_user.services.task_prediction import (
     build_similar_user_task_evidence,
     build_target_task_window,
     extract_similar_user_candidates,
+    filter_game_counts_to_ids,
     filter_recent_target_repeated_games,
+    filter_task_evidence_to_ids,
     parse_json_object_from_text,
     parse_date_value,
     summarize_training_history,
@@ -286,6 +288,53 @@ class TaskPredictionTest(unittest.TestCase):
             [{"game_id": "2", "game_name": "任务B", "count": 1}],
         )
 
+    def test_filter_game_counts_to_ids_keeps_candidate_task_subset(self) -> None:
+        result = filter_game_counts_to_ids(
+            [
+                {"game_id": "1", "game_name": "任务A", "count": 3},
+                {"game_id": "2", "game_name": "任务B", "count": 1},
+            ],
+            {"2"},
+        )
+
+        self.assertEqual(
+            result,
+            [{"game_id": "2", "game_name": "任务B", "count": 1}],
+        )
+
+    def test_filter_task_evidence_to_ids_removes_empty_candidate_evidence(
+        self,
+    ) -> None:
+        result = filter_task_evidence_to_ids(
+            [
+                {
+                    "patient_id": "201",
+                    "candidate_score": 1.0,
+                    "tasks": [
+                        {"game_id": "1", "game_name": "任务A", "count": 3},
+                        {"game_id": "2", "game_name": "任务B", "count": 1},
+                    ],
+                },
+                {
+                    "patient_id": "202",
+                    "candidate_score": 0.5,
+                    "tasks": [{"game_id": "3", "game_name": "任务C", "count": 1}],
+                },
+            ],
+            {"2"},
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "patient_id": "201",
+                    "candidate_score": 1.0,
+                    "tasks": [{"game_id": "2", "game_name": "任务B", "count": 1}],
+                }
+            ],
+        )
+
     def test_build_rule_based_predictions_returns_ranked_tasks(self) -> None:
         predictions = build_rule_based_predictions(
             [
@@ -312,7 +361,7 @@ class TaskPredictionTest(unittest.TestCase):
             {"g": {"id": "5", "name": "全局任务E", "任务类型": "类型E"}},
         ]
         user_service.get_patient_profile_candidate_training_games.return_value = [
-            {"g": {"id": "6", "name": "画像任务F", "任务类型": "类型F"}},
+            {"g": {"id": "1", "name": "任务A", "任务类型": "类型A"}},
             {"g": {"id": "7", "name": "画像任务G", "任务类型": "类型G"}},
         ]
         service = TrainingTaskPredictionService(user_service=user_service)
@@ -322,8 +371,24 @@ class TaskPredictionTest(unittest.TestCase):
                 "patient_id": "40",
                 "candidate_summary": {
                     "candidates": [
-                        {"patient_id": "201", "candidate_score": 2.0},
-                        {"patient_id": "202", "candidate_score": 1.0},
+                        {
+                            "patient_id": "201",
+                            "candidate_score": 2.0,
+                            "score_details": {
+                                "disease_course_secondary_ability": {
+                                    "candidate_base_date": "2022-06-14",
+                                }
+                            },
+                        },
+                        {
+                            "patient_id": "202",
+                            "candidate_score": 1.0,
+                            "score_details": {
+                                "disease_course_secondary_ability": {
+                                    "candidate_base_date": "2022-07-14",
+                                }
+                            },
+                        },
                     ]
                 },
             },
@@ -343,11 +408,6 @@ class TaskPredictionTest(unittest.TestCase):
                     "game_name": "任务A",
                     "count": 1,
                 },
-                {
-                    "game_id": "2",
-                    "game_name": "任务B",
-                    "count": 1,
-                },
             ],
         )
         self.assertEqual(
@@ -358,29 +418,34 @@ class TaskPredictionTest(unittest.TestCase):
                     "candidate_score": 2.0,
                     "tasks": [{"game_id": "1", "game_name": "任务A", "count": 1}],
                 },
-                {
-                    "patient_id": "202",
-                    "candidate_score": 1.0,
-                    "tasks": [{"game_id": "2", "game_name": "任务B", "count": 1}],
-                },
             ],
         )
         self.assertEqual(
-            result["candidate_source"]["candidate_task_window"],
+            result["candidate_source"]["candidate_task_windows"],
             {
-                "base_date": "2022-05-22",
-                "start_date": "2022-05-08",
-                "end_date": "2022-05-22",
-                "window_days": 14,
-                "includes_base_date": False,
-                "range_semantics": "[start_date, end_date)",
+                "201": {
+                    "base_date": "2022-06-14",
+                    "start_date": "2022-05-31",
+                    "end_date": "2022-06-14",
+                    "window_days": 14,
+                    "includes_base_date": False,
+                    "range_semantics": "[start_date, end_date)",
+                },
+                "202": {
+                    "base_date": "2022-07-14",
+                    "start_date": "2022-06-30",
+                    "end_date": "2022-07-14",
+                    "window_days": 14,
+                    "includes_base_date": False,
+                    "range_semantics": "[start_date, end_date)",
+                },
             },
         )
         self.assertNotIn("target_history_summary", result)
         self.assertEqual(
             result["candidate_training_tasks"],
             [
-                {"game_id": "6", "game_name": "画像任务F"},
+                {"game_id": "1", "game_name": "任务A"},
                 {"game_id": "7", "game_name": "画像任务G"},
             ],
         )
@@ -388,7 +453,7 @@ class TaskPredictionTest(unittest.TestCase):
             result["candidate_source"]["candidate_task_source"],
             "patient_profile_entities",
         )
-        self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "6")
+        self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "1")
         user_service.get_patient_profile_candidate_training_games.assert_called_once_with(
             "40",
             "2022-05-22",
@@ -401,13 +466,13 @@ class TaskPredictionTest(unittest.TestCase):
         )
         user_service.get_patient_training_task_history_by_date_window.assert_any_call(
             "201",
-            "2022-05-08",
-            "2022-05-22",
+            "2022-05-31",
+            "2022-06-14",
         )
         user_service.get_patient_training_task_history_by_date_window.assert_any_call(
             "202",
-            "2022-05-08",
-            "2022-05-22",
+            "2022-06-30",
+            "2022-07-14",
         )
 
     def test_predict_from_pipeline_result_filters_counts_seen_in_target_two_days(
@@ -557,6 +622,37 @@ class TaskPredictionTest(unittest.TestCase):
                 window_days=14,
                 use_llm=False,
             )
+
+    def test_predict_from_pipeline_result_attaches_prompt_to_llm_errors(self) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.side_effect = [
+            [{"trainingDate": "2022-05-21", "g": {"id": "9", "name": "目标任务"}}],
+            [{"trainingDate": "2022-05-10", "g": {"id": "1", "name": "任务A"}}],
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "1", "name": "任务A"}}
+        ]
+        llm_client = Mock()
+        llm_client.chat.side_effect = RuntimeError("llm failed")
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            llm_client=llm_client,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "llm failed") as context:
+            service.predict_from_pipeline_result(
+                {
+                    "patient_id": "40",
+                    "candidate_summary": {"candidate_ids": ["201"]},
+                },
+                base_date="2022-05-22",
+                window_days=14,
+                use_llm=True,
+                task_top_k=1,
+            )
+
+        self.assertIn("candidate_training_tasks", context.exception.llm_prompt)
+        self.assertEqual(context.exception.patient_id, "40")
 
 
 if __name__ == "__main__":

@@ -103,8 +103,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(summary["p95_elapsed_seconds"], 4.0)
 
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
+    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
     def test_evaluate_patient_uses_base_date_as_actual_label_window(
         self,
+        mock_write_prompt: Mock,
         mock_predict: Mock,
     ) -> None:
         mock_predict.return_value = {
@@ -115,6 +117,9 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 ]
             }
         }
+        mock_write_prompt.return_value = evaluate_predict_training_tasks.Path(
+            "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt"
+        )
         user_service = Mock()
         user_service.get_patient_training_task_history_by_date_window.return_value = [
             {"trainingDate": "2022-05-22", "g": {"id": "2", "name": "任务B"}},
@@ -141,6 +146,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertTrue(detail["task_hit"])
         self.assertEqual(detail["precision"], 0.5)
         self.assertEqual(detail["recall"], 0.5)
+        self.assertEqual(
+            detail["prompt_path"],
+            "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt",
+        )
         mock_predict.assert_called_once_with(
             "40",
             base_date="2022-05-22",
@@ -151,6 +160,12 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             query_family="date_window",
             task_top_k=5,
             use_llm=False,
+            include_prompt=True,
+        )
+        mock_write_prompt.assert_called_once_with(
+            mock_predict.return_value,
+            output_dir=evaluate_predict_training_tasks.DEFAULT_PROMPT_OUTPUT_DIR,
+            base_date="2022-05-22",
         )
         user_service.get_patient_training_task_history_by_date_window.assert_called_once_with(
             "40",
@@ -159,8 +174,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         )
 
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
+    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
     def test_evaluate_patient_skips_prediction_without_actual_tasks(
         self,
+        mock_write_prompt: Mock,
         mock_predict: Mock,
     ) -> None:
         user_service = Mock()
@@ -181,6 +198,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertIsNone(detail["task_hit"])
         self.assertEqual(detail["predicted_task_count"], 0)
         mock_predict.assert_not_called()
+        mock_write_prompt.assert_not_called()
         user_service.get_patient_training_task_history_by_date_window.assert_called_once_with(
             "40",
             "2022-05-22",
@@ -188,8 +206,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         )
 
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
+    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
     def test_evaluate_patient_marks_empty_paths_as_not_evaluable(
         self,
+        mock_write_prompt: Mock,
         mock_predict: Mock,
     ) -> None:
         mock_predict.side_effect = EmptyPathResultsError("no paths")
@@ -211,6 +231,50 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(detail["error_message"], "no paths")
         self.assertIsNone(detail["task_hit"])
         self.assertEqual(detail["predicted_task_count"], 0)
+        mock_write_prompt.assert_not_called()
+
+    @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
+    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
+    def test_evaluate_patient_saves_prompt_from_prediction_failure(
+        self,
+        mock_write_prompt: Mock,
+        mock_predict: Mock,
+    ) -> None:
+        error = RuntimeError("llm failed")
+        error.llm_prompt = "prompt body"
+        mock_predict.side_effect = error
+        mock_write_prompt.return_value = evaluate_predict_training_tasks.Path(
+            "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt"
+        )
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-22", "g": {"id": "2", "name": "任务B"}},
+        ]
+
+        detail = evaluate_predict_training_tasks.evaluate_patient(
+            "40",
+            base_date="2022-05-22",
+            window_days=14,
+            user_service=user_service,
+            use_llm=True,
+        )
+
+        self.assertEqual(detail["status"], "failed")
+        self.assertEqual(detail["error_message"], "llm failed")
+        self.assertEqual(
+            detail["prompt_path"],
+            "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt",
+        )
+        mock_write_prompt.assert_called_once_with(
+            {
+                "training_task_prediction": {
+                    "patient_id": "40",
+                    "llm_prompt": "prompt body",
+                }
+            },
+            output_dir=evaluate_predict_training_tasks.DEFAULT_PROMPT_OUTPUT_DIR,
+            base_date="2022-05-22",
+        )
 
     @patch("scripts.evaluate_predict_training_tasks.Neo4jClient")
     @patch("scripts.evaluate_predict_training_tasks.KgRepository")

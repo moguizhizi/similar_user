@@ -179,10 +179,10 @@ def run_training_task_prediction(
     include_prompt: bool = False,
 ) -> dict[str, Any]:
     """Run training-task prediction from an existing candidate result."""
+    query_settings = load_query_settings(config_path)
     candidate_task_window_days = (
-        load_query_settings(config_path)
-        .training_task_prediction
-        .candidate_task_window_days
+        query_settings.candidate_ranking.disease_course_window_days
+        or query_settings.training_task_prediction.candidate_task_window_days
     )
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(

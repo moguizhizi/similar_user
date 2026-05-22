@@ -101,7 +101,8 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_service_cls: Mock,
     ) -> None:
         mock_load_query_settings.return_value = Mock(
-            training_task_prediction=Mock(candidate_task_window_days=30)
+            candidate_ranking=Mock(disease_course_window_days=365),
+            training_task_prediction=Mock(candidate_task_window_days=30),
         )
         mock_client_context = Mock()
         mock_client_context.__enter__ = Mock(return_value=Mock())
@@ -125,7 +126,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_service.predict_from_pipeline_result.assert_called_once_with(
             {"patient_id": "40", "candidate_result": {"candidates": []}},
             base_date="2022-05-22",
-            window_days=30,
+            window_days=365,
             task_top_k=3,
             use_llm=False,
             include_prompt=True,

@@ -43,7 +43,11 @@ from similar_user.services.task_prediction import (
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 
-from scripts.predict_training_tasks import run_end_to_end_training_task_prediction
+from scripts.predict_training_tasks import (
+    DEFAULT_PROMPT_OUTPUT_DIR,
+    run_end_to_end_training_task_prediction,
+    write_prompt_to_file,
+)
 from scripts.run_similar_user_pipeline import EmptyPathResultsError
 from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
 
@@ -133,6 +137,16 @@ def parse_args() -> argparse.Namespace:
         help="Per-patient detail JSONL filename under output-dir.",
     )
     parser.add_argument(
+        "--no-save-prompt",
+        action="store_true",
+        help="Do not save generated LLM prompts during evaluation.",
+    )
+    parser.add_argument(
+        "--prompt-output-dir",
+        default=str(DEFAULT_PROMPT_OUTPUT_DIR),
+        help="Directory used to store generated prompt text files.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -172,6 +186,8 @@ def evaluate_patient(
     query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
+    save_prompt: bool = True,
+    prompt_output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
 ) -> dict[str, Any]:
     """Run prediction and compare it with the patient's same-day true tasks."""
     started_at = time.perf_counter()
@@ -198,7 +214,15 @@ def evaluate_patient(
             query_family=query_family,
             task_top_k=task_top_k,
             use_llm=use_llm,
+            include_prompt=save_prompt,
         )
+        prompt_path = None
+        if save_prompt:
+            prompt_path = write_prompt_to_file(
+                prediction_result,
+                output_dir=prompt_output_dir,
+                base_date=base_date,
+            )
         predicted_game_ids = extract_predicted_game_ids(prediction_result)
     except EmptyPathResultsError as exc:
         return build_not_evaluable_detail(
@@ -209,12 +233,35 @@ def evaluate_patient(
             error_message=str(exc),
         )
     except Exception as exc:
+        prompt_path = None
+        llm_prompt = getattr(exc, "llm_prompt", None)
+        if save_prompt and isinstance(llm_prompt, str) and llm_prompt.strip():
+            try:
+                prompt_path = write_prompt_to_file(
+                    {
+                        "training_task_prediction": {
+                            "patient_id": patient_id,
+                            "llm_prompt": llm_prompt,
+                        }
+                    },
+                    output_dir=prompt_output_dir,
+                    base_date=base_date,
+                )
+            except Exception as prompt_exc:
+                LOGGER.warning(
+                    "Failed to save prompt after prediction failure: patient_id=%s, "
+                    "base_date=%s, error=%s",
+                    patient_id,
+                    base_date,
+                    prompt_exc,
+                )
         return {
             "patient_id": patient_id,
             "base_date": base_date,
             "status": "failed",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "prompt_path": str(prompt_path) if prompt_path is not None else None,
             "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         }
 
@@ -233,6 +280,7 @@ def evaluate_patient(
         "predicted_task_count": len(predicted_game_ids),
         "actual_task_count": len(actual_game_ids),
         "matched_task_count": len(metrics["matched_game_ids"]),
+        "prompt_path": str(prompt_path) if prompt_path is not None else None,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
     }
 
@@ -436,6 +484,8 @@ def run_batch_evaluation(
     use_llm: bool = True,
     limit: int | None = None,
     active_on_base_date: bool = False,
+    save_prompt: bool = True,
+    prompt_output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
 ) -> list[dict[str, Any]]:
     """Evaluate every patient and return per-patient details."""
     started_at = time.perf_counter()
@@ -479,6 +529,8 @@ def run_batch_evaluation(
                 query_family=query_family,
                 task_top_k=task_top_k,
                 use_llm=use_llm,
+                save_prompt=save_prompt,
+                prompt_output_dir=prompt_output_dir,
             )
             details.append(detail)
             LOGGER.info(
@@ -626,6 +678,8 @@ def main() -> int:
             use_llm=not args.dry_run,
             limit=args.limit,
             active_on_base_date=args.active_on_base_date,
+            save_prompt=not args.no_save_prompt,
+            prompt_output_dir=args.prompt_output_dir,
         )
         summary = summarize_evaluation_details(details)
         summary_path, details_path = write_outputs(
