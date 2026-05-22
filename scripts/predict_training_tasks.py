@@ -13,7 +13,7 @@
 常用执行方式：
 
     python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14
-    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14 --save-prompt
+    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14 --no-save-prompt
 
 其中 `--window-days` 只控制相似用户 path 构建窗口；预测阶段的相似用户任务窗口来自配置。
 """
@@ -119,14 +119,14 @@ def parse_args() -> argparse.Namespace:
         help="Include the generated LLM prompt in full output.",
     )
     parser.add_argument(
-        "--save-prompt",
+        "--no-save-prompt",
         action="store_true",
-        help="Save the generated LLM prompt to a text file for later lookup.",
+        help="Do not save the generated LLM prompt to a text file.",
     )
     parser.add_argument(
         "--prompt-output-dir",
         default=str(DEFAULT_PROMPT_OUTPUT_DIR),
-        help="Directory used by --save-prompt to store prompt text files.",
+        help="Directory used to store generated prompt text files.",
     )
     return parser.parse_args()
 
@@ -290,11 +290,11 @@ def main() -> int:
             query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
-            include_prompt=(args.include_prompt or args.save_prompt),
+            include_prompt=(args.include_prompt or not args.no_save_prompt),
         )
         output = summarize_prediction_result(result, output_level=args.output_level)
         prompt_path = None
-        if args.save_prompt:
+        if not args.no_save_prompt:
             prompt_path = write_prompt_to_file(
                 result,
                 output_dir=args.prompt_output_dir,
