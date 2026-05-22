@@ -22,6 +22,7 @@
 | 查询患者指定训练日期的总分 | `PATIENT_TOTAL_SCORE_BY_DATE_QUERY` | `patient_training_history.py` | `patient_id`, `training_date` | `instance_set_id`, `training_date`, `total_score` |
 | 查询患者训练任务历史明细 | `PATIENT_TRAINING_TASK_HISTORY_QUERY` | `patient_training_history.py` | `patient_id` | `trainingDate`, `s`, `i`, `g` |
 | 查询患者左闭右开日期窗口内的游戏历史 | `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | `patient_training_history.py` | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
+| 查询患者左闭右开日期窗口内的专属任务游戏历史 | `PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | `patient_training_history.py` | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
 
 ### 患者游戏集合
 
@@ -73,8 +74,11 @@
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
 | 从疾病扩展到相关游戏，每个游戏随机保留一条路径 | `DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `disease_id` | `row` |
+| 从疾病扩展到专属任务相关游戏，每个游戏随机保留一条路径 | `DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `disease_id` | `row` |
 | 从症状扩展到相关游戏，每个游戏随机保留一条路径 | `SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `symptom_id` | `row` |
+| 从症状扩展到专属任务相关游戏，每个游戏随机保留一条路径 | `SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `symptom_id` | `row` |
 | 从未知节点扩展到相关游戏，每个游戏随机保留一条路径 | `UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `unknown_id` | `row` |
+| 从未知节点扩展到专属任务相关游戏，每个游戏随机保留一条路径 | `UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `unknown_id` | `row` |
 
 ### 固定模式 path 检索
 
@@ -192,6 +196,7 @@ Disease -- TaskInstanceSet -- Patient
 | `PATIENT_TOTAL_SCORE_BY_DATE_QUERY` | 查询患者指定训练日期的总分 | `patient_id`, `training_date` | `instance_set_id`, `training_date`, `total_score` |
 | `PATIENT_TRAINING_TASK_HISTORY_QUERY` | 查询患者训练任务历史明细 | `patient_id` | `trainingDate`, `s`, `i`, `g` |
 | `PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | 查询患者左闭右开日期窗口内的游戏历史 | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
+| `PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY` | 查询患者左闭右开日期窗口内的专属任务游戏历史 | `patient_id`, `start_date`, `end_date` | `trainingDate`, `g` |
 
 ### `patient_game_queries.py`
 

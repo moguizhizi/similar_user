@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .cypher_queries import (
+    DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISTINCT_TRAINING_GAMES_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
@@ -38,6 +39,7 @@ from .cypher_queries import (
     PATIENT_TOTAL_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
     PATIENT_IDS_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
+    PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
     SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
@@ -51,7 +53,9 @@ from .cypher_queries import (
     PATIENT_UNKNOWN_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_UNKNOWN_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
+    SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+    UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
 
@@ -125,6 +129,21 @@ DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     query=DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
 
+DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
+    name="disease_taskset_exclusive_task_game_sampled_per_game",
+    category=GraphQueryCategory.ENTITY_EXPANSION,
+    description="从疾病扩展到专属任务相关游戏，每个游戏随机保留一条路径",
+    source_label="Disease",
+    source_parameters=("disease_id",),
+    path_shape=(
+        "(d:Disease)--(s:TaskInstanceSet)--"
+        "(i:TaskInstance {任务类型: '专属'})--(g:Game)"
+    ),
+    row_fields=("d", "s", "i", "g"),
+    group_field="g",
+    query=DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+)
+
 SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     name="symptom_taskset_task_game_sampled_per_game",
     category=GraphQueryCategory.ENTITY_EXPANSION,
@@ -137,6 +156,21 @@ SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     query=SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
 
+SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
+    name="symptom_taskset_exclusive_task_game_sampled_per_game",
+    category=GraphQueryCategory.ENTITY_EXPANSION,
+    description="从症状扩展到专属任务相关游戏，每个游戏随机保留一条路径",
+    source_label="Symptom",
+    source_parameters=("symptom_id",),
+    path_shape=(
+        "(sym:Symptom)--(s:TaskInstanceSet)--"
+        "(i:TaskInstance {任务类型: '专属'})--(g:Game)"
+    ),
+    row_fields=("sym", "s", "i", "g"),
+    group_field="g",
+    query=SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+)
+
 UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     name="unknown_taskset_task_game_sampled_per_game",
     category=GraphQueryCategory.ENTITY_EXPANSION,
@@ -147,6 +181,21 @@ UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     row_fields=("un", "s", "i", "g"),
     group_field="g",
     query=UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+)
+
+UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
+    name="unknown_taskset_exclusive_task_game_sampled_per_game",
+    category=GraphQueryCategory.ENTITY_EXPANSION,
+    description="从未知节点扩展到专属任务相关游戏，每个游戏随机保留一条路径",
+    source_label="Unknown",
+    source_parameters=("unknown_id",),
+    path_shape=(
+        "(un:Unknown)--(s:TaskInstanceSet)--"
+        "(i:TaskInstance {任务类型: '专属'})--(g:Game)"
+    ),
+    row_fields=("un", "s", "i", "g"),
+    group_field="g",
+    query=UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
 
 PATIENT_IDENTITY_SPECS = (
@@ -242,6 +291,19 @@ PATIENT_TRAINING_HISTORY_SPECS = (
         path_shape="(p:Patient)--(s:TaskInstanceSet)--(i:TaskInstance)--(g:Game)",
         row_fields=("trainingDate", "g"),
         query=PATIENT_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+    ),
+    _spec(
+        name="patient_exclusive_training_task_history_by_date_window",
+        category=GraphQueryCategory.PATIENT_TRAINING_HISTORY,
+        description="查询患者左闭右开日期窗口内的专属任务游戏历史",
+        source_label="Patient",
+        source_parameters=("patient_id", "start_date", "end_date"),
+        path_shape=(
+            "(p:Patient)--(s:TaskInstanceSet)--"
+            "(i:TaskInstance {任务类型: '专属'})--(g:Game)"
+        ),
+        row_fields=("trainingDate", "g"),
+        query=PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
     ),
 )
 
@@ -647,8 +709,11 @@ PATIENT_SCORE_COMPARISON_SPECS = (
 
 GRAPH_QUERY_SPEC_LIST = (
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC,
+    DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC,
+    SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC,
+    UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC,
     *PATIENT_IDENTITY_SPECS,
     *PATIENT_TRAINING_HISTORY_SPECS,
     *PATIENT_GAME_COLLECTION_SPECS,

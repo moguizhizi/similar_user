@@ -73,7 +73,7 @@ class TrainingTaskPredictionService:
             for candidate in candidates
         }
         similar_user_histories = {
-            candidate.patient_id: self.user_service.get_patient_training_task_history_by_date_window(
+            candidate.patient_id: self.user_service.get_patient_exclusive_training_task_history_by_date_window(
                 candidate.patient_id,
                 candidate_task_windows[candidate.patient_id]["start_date"],
                 candidate_task_windows[candidate.patient_id]["end_date"],

@@ -351,8 +351,10 @@ class TaskPredictionTest(unittest.TestCase):
 
     def test_predict_from_pipeline_result_uses_pipeline_candidates_without_llm(self) -> None:
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.side_effect = [
-            [{"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}],
+        user_service.get_patient_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}
+        ]
+        user_service.get_patient_exclusive_training_task_history_by_date_window.side_effect = [
             [{"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}],
             [{"trainingDate": "2022-01-03", "g": {"id": "2", "name": "任务B"}}],
         ]
@@ -459,17 +461,17 @@ class TaskPredictionTest(unittest.TestCase):
             "2022-05-22",
         )
         user_service.get_distinct_training_games.assert_not_called()
-        user_service.get_patient_training_task_history_by_date_window.assert_any_call(
+        user_service.get_patient_training_task_history_by_date_window.assert_called_once_with(
             "40",
             "2022-05-20",
             "2022-05-22",
         )
-        user_service.get_patient_training_task_history_by_date_window.assert_any_call(
+        user_service.get_patient_exclusive_training_task_history_by_date_window.assert_any_call(
             "201",
             "2022-05-31",
             "2022-06-14",
         )
-        user_service.get_patient_training_task_history_by_date_window.assert_any_call(
+        user_service.get_patient_exclusive_training_task_history_by_date_window.assert_any_call(
             "202",
             "2022-06-30",
             "2022-07-14",
@@ -479,15 +481,13 @@ class TaskPredictionTest(unittest.TestCase):
         self,
     ) -> None:
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.side_effect = [
-            [
-                {"trainingDate": "2022-05-20", "g": {"id": "1", "name": "任务A"}},
-                {"trainingDate": "2022-05-21", "g": {"id": "1", "name": "任务A"}},
-            ],
-            [
-                {"trainingDate": "2022-05-09", "g": {"id": "1", "name": "任务A"}},
-                {"trainingDate": "2022-05-10", "g": {"id": "2", "name": "任务B"}},
-            ],
+        user_service.get_patient_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-20", "g": {"id": "1", "name": "任务A"}},
+            {"trainingDate": "2022-05-21", "g": {"id": "1", "name": "任务A"}},
+        ]
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-09", "g": {"id": "1", "name": "任务A"}},
+            {"trainingDate": "2022-05-10", "g": {"id": "2", "name": "任务B"}},
         ]
         user_service.get_distinct_training_games.return_value = [
             {"g": {"id": "1", "name": "任务A"}},
@@ -529,9 +529,11 @@ class TaskPredictionTest(unittest.TestCase):
         self,
     ) -> None:
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.side_effect = [
-            [{"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}],
-            [{"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}],
+        user_service.get_patient_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}
+        ]
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}
         ]
         user_service.get_patient_profile_candidate_training_games.return_value = []
         user_service.get_distinct_training_games.return_value = [
@@ -564,9 +566,11 @@ class TaskPredictionTest(unittest.TestCase):
         self,
     ) -> None:
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.side_effect = [
-            [{"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}],
-            [{"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}],
+        user_service.get_patient_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}
+        ]
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}
         ]
         user_service.get_distinct_training_games.return_value = [
             {"g": {"id": "1", "name": "任务A"}},
@@ -625,9 +629,11 @@ class TaskPredictionTest(unittest.TestCase):
 
     def test_predict_from_pipeline_result_attaches_prompt_to_llm_errors(self) -> None:
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.side_effect = [
-            [{"trainingDate": "2022-05-21", "g": {"id": "9", "name": "目标任务"}}],
-            [{"trainingDate": "2022-05-10", "g": {"id": "1", "name": "任务A"}}],
+        user_service.get_patient_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-21", "g": {"id": "9", "name": "目标任务"}}
+        ]
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-10", "g": {"id": "1", "name": "任务A"}}
         ]
         user_service.get_patient_profile_candidate_training_games.return_value = [
             {"g": {"id": "1", "name": "任务A"}}

@@ -109,6 +109,23 @@ class KgRepository:
             parameters={"disease_id": normalized_disease_id},
         )
 
+    def get_disease_taskset_exclusive_task_game_sampled_per_game(
+        self,
+        disease_id: str,
+    ) -> list[dict[str, object]]:
+        """Return one sampled exclusive TaskInstance row per game for a disease."""
+        normalized_disease_id = self._normalize_required_string(
+            disease_id,
+            "disease_id",
+        )
+        spec = get_graph_query_spec(
+            "disease_taskset_exclusive_task_game_sampled_per_game"
+        )
+        return self.client.run_query(
+            query=spec.query,
+            parameters={"disease_id": normalized_disease_id},
+        )
+
     def get_symptom_taskset_task_game_sampled_per_game(
         self,
         symptom_id: str,
@@ -124,6 +141,23 @@ class KgRepository:
             parameters={"symptom_id": normalized_symptom_id},
         )
 
+    def get_symptom_taskset_exclusive_task_game_sampled_per_game(
+        self,
+        symptom_id: str,
+    ) -> list[dict[str, object]]:
+        """Return one sampled exclusive TaskInstance row per game for a symptom."""
+        normalized_symptom_id = self._normalize_required_string(
+            symptom_id,
+            "symptom_id",
+        )
+        spec = get_graph_query_spec(
+            "symptom_taskset_exclusive_task_game_sampled_per_game"
+        )
+        return self.client.run_query(
+            query=spec.query,
+            parameters={"symptom_id": normalized_symptom_id},
+        )
+
     def get_unknown_taskset_task_game_sampled_per_game(
         self,
         unknown_id: str,
@@ -134,6 +168,23 @@ class KgRepository:
             "unknown_id",
         )
         spec = get_graph_query_spec("unknown_taskset_task_game_sampled_per_game")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={"unknown_id": normalized_unknown_id},
+        )
+
+    def get_unknown_taskset_exclusive_task_game_sampled_per_game(
+        self,
+        unknown_id: str,
+    ) -> list[dict[str, object]]:
+        """Return one sampled exclusive TaskInstance row per game for unknown."""
+        normalized_unknown_id = self._normalize_required_string(
+            unknown_id,
+            "unknown_id",
+        )
+        spec = get_graph_query_spec(
+            "unknown_taskset_exclusive_task_game_sampled_per_game"
+        )
         return self.client.run_query(
             query=spec.query,
             parameters={"unknown_id": normalized_unknown_id},
@@ -1004,6 +1055,31 @@ class KgRepository:
             raise ValueError("patient_id must be a non-empty string.")
 
         spec = get_graph_query_spec("patient_training_task_history_by_date_window")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "start_date": normalized_start_date,
+                "end_date": normalized_end_date,
+            },
+        )
+
+    def get_patient_exclusive_training_task_history_by_date_window(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task history in a left-closed, right-open date window."""
+        normalized_patient_id = patient_id.strip()
+        normalized_start_date = self._normalize_required_string(start_date, "start_date")
+        normalized_end_date = self._normalize_required_string(end_date, "end_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+
+        spec = get_graph_query_spec(
+            "patient_exclusive_training_task_history_by_date_window"
+        )
         return self.client.run_query(
             query=spec.query,
             parameters={

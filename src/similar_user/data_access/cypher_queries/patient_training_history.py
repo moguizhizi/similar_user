@@ -108,3 +108,25 @@ RETURN
     trainingDate,
     g
 """.strip()
+
+PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s:TaskInstanceSet)
+--(i:TaskInstance)
+--(g:Game)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) >= date($start_date) AND
+    date(s.`训练日期`) < date($end_date) AND
+    i.`任务类型` = "专属"
+
+WITH
+    date(s.`训练日期`) AS trainingDate,
+    g
+ORDER BY trainingDate
+
+RETURN
+    trainingDate,
+    g
+""".strip()
