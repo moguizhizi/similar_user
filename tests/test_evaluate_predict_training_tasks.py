@@ -59,6 +59,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                     "predicted_task_count": 3,
                     "actual_task_count": 2,
                     "matched_task_count": 2,
+                    "similar_user_game_counts_task_count": 10,
                     "elapsed_seconds": 1.0,
                 },
                 {
@@ -70,6 +71,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                     "predicted_task_count": 1,
                     "actual_task_count": 2,
                     "matched_task_count": 0,
+                    "similar_user_game_counts_task_count": 20,
                     "elapsed_seconds": 3.0,
                 },
                 {
@@ -99,8 +101,62 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(summary["macro_f1"], 0.3333)
         self.assertEqual(summary["avg_predicted_task_count"], 2.0)
         self.assertEqual(summary["avg_actual_task_count"], 2.0)
+        self.assertEqual(summary["avg_similar_user_game_counts_task_count"], 15.0)
+        self.assertEqual(summary["min_similar_user_game_counts_task_count"], 10)
+        self.assertEqual(summary["max_similar_user_game_counts_task_count"], 20)
         self.assertEqual(summary["avg_elapsed_seconds"], 2.5)
         self.assertEqual(summary["p95_elapsed_seconds"], 4.0)
+
+    @patch("scripts.evaluate_predict_training_tasks.load_query_settings")
+    def test_build_experiment_config_records_window_settings(
+        self,
+        mock_load_query_settings: Mock,
+    ) -> None:
+        mock_load_query_settings.return_value = Mock(
+            candidate_ranking=Mock(disease_course_window_days=180),
+            training_task_prediction=Mock(candidate_task_window_days=30),
+        )
+
+        config = evaluate_predict_training_tasks.build_experiment_config(
+            base_date="2022-05-22",
+            window_days=14,
+            pattern="PATTERN",
+            config_path="config/settings.yaml",
+            skip_path_build=True,
+            query_family="date_window",
+            task_top_k=7,
+            use_llm=False,
+            active_on_base_date=True,
+        )
+
+        self.assertEqual(config["disease_course_window_days"], 180)
+        self.assertEqual(config["fallback_candidate_task_window_days"], 30)
+        self.assertEqual(config["effective_candidate_task_window_days"], 180)
+        self.assertEqual(config["base_date"], "2022-05-22")
+        self.assertEqual(config["task_top_k"], 7)
+        self.assertFalse(config["use_llm"])
+        mock_load_query_settings.assert_called_once_with("config/settings.yaml")
+
+    def test_build_experiment_output_dir_uses_parameterized_subdir(self) -> None:
+        output_dir = evaluate_predict_training_tasks.build_experiment_output_dir(
+            "data/evaluation",
+            {
+                "base_date": "2022-05-22",
+                "window_days": 14,
+                "disease_course_window_days": 180,
+                "task_top_k": 7,
+                "query_family": "date_window",
+                "use_llm": False,
+            },
+        )
+
+        self.assertEqual(
+            output_dir,
+            evaluate_predict_training_tasks.Path(
+                "data/evaluation/"
+                "base_2022-05-22_window_14_dcw_180_topk_7_qf_date-window_dry_run"
+            ),
+        )
 
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
     @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
@@ -111,6 +167,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
     ) -> None:
         mock_predict.return_value = {
             "training_task_prediction": {
+                "similar_user_game_counts": [
+                    {"game_id": "2", "game_name": "任务B", "count": 4},
+                    {"game_id": "4", "game_name": "任务D", "count": 1},
+                ],
                 "predicted_training_tasks": [
                     {"game_id": "1"},
                     {"game_id": "2"},
@@ -121,7 +181,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt"
         )
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.return_value = [
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
             {"trainingDate": "2022-05-22", "g": {"id": "2", "name": "任务B"}},
             {"trainingDate": "2022-05-22", "g": {"id": "3", "name": "任务C"}},
         ]
@@ -141,7 +201,46 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
 
         self.assertEqual(detail["status"], "success_evaluated")
         self.assertEqual(detail["predicted_game_ids"], ["1", "2"])
+        self.assertEqual(
+            detail["predicted_game_similar_user_counts"],
+            [
+                {
+                    "game_id": "1",
+                    "game_name": None,
+                    "similar_user_count": 0,
+                    "similar_user_count_rank": None,
+                    "appears_in_similar_user_game_counts": False,
+                },
+                {
+                    "game_id": "2",
+                    "game_name": "任务B",
+                    "similar_user_count": 4,
+                    "similar_user_count_rank": 1,
+                    "appears_in_similar_user_game_counts": True,
+                },
+            ],
+        )
         self.assertEqual(detail["actual_game_ids"], ["2", "3"])
+        self.assertEqual(detail["similar_user_game_counts_task_count"], 2)
+        self.assertEqual(
+            detail["actual_game_similar_user_counts"],
+            [
+                {
+                    "game_id": "2",
+                    "game_name": "任务B",
+                    "similar_user_count": 4,
+                    "similar_user_count_rank": 1,
+                    "appears_in_similar_user_game_counts": True,
+                },
+                {
+                    "game_id": "3",
+                    "game_name": None,
+                    "similar_user_count": 0,
+                    "similar_user_count_rank": None,
+                    "appears_in_similar_user_game_counts": False,
+                },
+            ],
+        )
         self.assertEqual(detail["matched_game_ids"], ["2"])
         self.assertTrue(detail["task_hit"])
         self.assertEqual(detail["precision"], 0.5)
@@ -167,7 +266,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             output_dir=evaluate_predict_training_tasks.DEFAULT_PROMPT_OUTPUT_DIR,
             base_date="2022-05-22",
         )
-        user_service.get_patient_training_task_history_by_date_window.assert_called_once_with(
+        user_service.get_patient_exclusive_training_task_history_by_date_window.assert_called_once_with(
             "40",
             "2022-05-22",
             "2022-05-23",
@@ -181,7 +280,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         mock_predict: Mock,
     ) -> None:
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.return_value = []
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = []
 
         detail = evaluate_predict_training_tasks.evaluate_patient(
             "40",
@@ -199,7 +298,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(detail["predicted_task_count"], 0)
         mock_predict.assert_not_called()
         mock_write_prompt.assert_not_called()
-        user_service.get_patient_training_task_history_by_date_window.assert_called_once_with(
+        user_service.get_patient_exclusive_training_task_history_by_date_window.assert_called_once_with(
             "40",
             "2022-05-22",
             "2022-05-23",
@@ -214,7 +313,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
     ) -> None:
         mock_predict.side_effect = EmptyPathResultsError("no paths")
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.return_value = [
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
             {"trainingDate": "2022-05-22", "g": {"id": "2", "name": "任务B"}},
         ]
 
@@ -247,7 +346,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt"
         )
         user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.return_value = [
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
             {"trainingDate": "2022-05-22", "g": {"id": "2", "name": "任务B"}},
         ]
 

@@ -13,12 +13,36 @@ from ..utils.logger import get_logger
 
 
 LOGGER = get_logger(__name__)
-DEFAULT_TASK_TOP_K = 5
+DEFAULT_TASK_TOP_K = 7
 
 SYSTEM_PROMPT = """
 你是训练任务预测助手。你只能基于输入中的目标用户历史、相似用户历史和候选训练任务进行预测。
 不要做医学诊断，不要输出候选任务之外的任务。请返回合法 JSON。
 """.strip()
+
+TASK_PREDICTION_PROMPT_TEMPLATE_V1 = (
+    "请根据以下 JSON 数据预测目标用户下一阶段更可能适合的训练任务。"
+    "字段含义：candidate_training_tasks 是唯一允许选择的候选任务池；"
+    "similar_user_game_counts 是相似用户时间窗口内各任务出现的总次数；"
+    "similar_user_task_evidence 是每个相似用户的相似性分数及其时间窗口内任务次数；"
+    "candidate_score 越大表示该候选用户与目标用户越相似。"
+    "请优先参考相似性分数较高用户的任务证据，并结合总体出现次数排序。"
+    "只允许从 candidate_training_tasks 中选择，返回 JSON 对象，不要添加 Markdown。\n\n"
+)
+
+TASK_PREDICTION_PROMPT_TEMPLATE_V2 = (
+    "请根据以下 JSON 数据预测目标用户下一阶段更可能适合的训练任务。"
+    "字段含义：candidate_training_tasks 是唯一允许选择的候选任务池；"
+    "similar_user_game_counts 是相似用户时间窗口内各任务出现的总次数；"
+    "similar_user_task_evidence 是每个相似用户的相似性分数及其时间窗口内任务次数；"
+    "candidate_score 越大表示该候选用户与目标用户越相似。"
+    "请综合总体出现次数和高相似用户证据，不要只按 similar_user_game_counts 的总次数排名选择。"
+    "如果某任务总体次数中等，但由 candidate_score 较高的相似用户反复支持，也应考虑推荐。"
+    "推荐结果应兼顾高频任务和中等频次但证据质量高的任务。"
+    "只允许从 candidate_training_tasks 中选择，不要重复 game_id。"
+    "必须返回 output_requirement.top_k 个任务；如果候选任务不足 top_k，则返回全部候选任务。"
+    "返回 JSON 对象，不要添加 Markdown。\n\n"
+)
 
 
 @dataclass(frozen=True)
@@ -645,14 +669,8 @@ def build_task_prediction_prompt(
         },
     }
     return (
-        "请根据以下 JSON 数据预测目标用户下一阶段更可能适合的训练任务。"
-        "字段含义：candidate_training_tasks 是唯一允许选择的候选任务池；"
-        "similar_user_game_counts 是相似用户时间窗口内各任务出现的总次数；"
-        "similar_user_task_evidence 是每个相似用户的相似性分数及其时间窗口内任务次数；"
-        "candidate_score 越大表示该候选用户与目标用户越相似。"
-        "请优先参考相似性分数较高用户的任务证据，并结合总体出现次数排序。"
-        "只允许从 candidate_training_tasks 中选择，返回 JSON 对象，不要添加 Markdown。\n\n"
-        f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
+        TASK_PREDICTION_PROMPT_TEMPLATE_V1
+        + f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
     )
 
 
