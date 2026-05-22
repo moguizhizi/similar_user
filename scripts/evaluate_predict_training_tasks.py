@@ -30,6 +30,7 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
+from config.settings import load_query_settings
 from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.domain.graph_schema import (
@@ -224,6 +225,17 @@ def evaluate_patient(
                 base_date=base_date,
             )
         predicted_game_ids = extract_predicted_game_ids(prediction_result)
+        actual_game_similar_user_counts = build_actual_game_similar_user_counts(
+            actual_game_ids,
+            prediction_result,
+        )
+        predicted_game_similar_user_counts = build_game_similar_user_counts(
+            predicted_game_ids,
+            prediction_result,
+        )
+        similar_user_game_counts_task_count = count_similar_user_game_count_tasks(
+            prediction_result
+        )
     except EmptyPathResultsError as exc:
         return build_not_evaluable_detail(
             patient_id=patient_id,
@@ -271,7 +283,10 @@ def evaluate_patient(
         "base_date": base_date,
         "status": "success_evaluated",
         "predicted_game_ids": predicted_game_ids,
+        "predicted_game_similar_user_counts": predicted_game_similar_user_counts,
         "actual_game_ids": actual_game_ids,
+        "actual_game_similar_user_counts": actual_game_similar_user_counts,
+        "similar_user_game_counts_task_count": similar_user_game_counts_task_count,
         "matched_game_ids": metrics["matched_game_ids"],
         "task_hit": metrics["task_hit"],
         "precision": metrics["precision"],
@@ -338,15 +353,87 @@ def extract_predicted_game_ids(result: dict[str, Any]) -> list[str]:
     return game_ids
 
 
+def build_actual_game_similar_user_counts(
+    actual_game_ids: list[str],
+    result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Map actual same-day game IDs to prompt similar-user aggregate counts."""
+    return build_game_similar_user_counts(actual_game_ids, result)
+
+
+def count_similar_user_game_count_tasks(result: dict[str, Any]) -> int:
+    """Return the number of task rows in prompt similar-user aggregate counts."""
+    prediction_result = result.get("training_task_prediction")
+    if isinstance(prediction_result, dict):
+        result = prediction_result
+    raw_counts = result.get("similar_user_game_counts")
+    if not isinstance(raw_counts, list):
+        return 0
+    return sum(
+        1
+        for raw_count in raw_counts
+        if isinstance(raw_count, dict) and normalize_text(raw_count.get("game_id"))
+    )
+
+
+def build_game_similar_user_counts(
+    game_ids: list[str],
+    result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Map game IDs to prompt similar-user aggregate counts."""
+    prediction_result = result.get("training_task_prediction")
+    if isinstance(prediction_result, dict):
+        result = prediction_result
+    raw_counts = result.get("similar_user_game_counts")
+    if not isinstance(raw_counts, list):
+        raw_counts = []
+
+    sorted_counts = sorted(
+        raw_counts,
+        key=lambda raw_count: (
+            -int(raw_count.get("count") or 0) if isinstance(raw_count, dict) else 0,
+            str(raw_count.get("game_id") or "") if isinstance(raw_count, dict) else "",
+        ),
+    )
+    count_rank_by_game_id: dict[str, int] = {}
+    counts_by_game_id: dict[str, dict[str, Any]] = {}
+    for index, raw_count in enumerate(sorted_counts, start=1):
+        if not isinstance(raw_count, dict):
+            continue
+        game_id = normalize_text(raw_count.get("game_id"))
+        if game_id is None:
+            continue
+        count_rank_by_game_id[game_id] = index
+        counts_by_game_id[game_id] = raw_count
+
+    mappings: list[dict[str, Any]] = []
+    for game_id in dedupe_texts(game_ids):
+        raw_count = counts_by_game_id.get(game_id)
+        mappings.append(
+            {
+                "game_id": game_id,
+                "game_name": normalize_text(raw_count.get("game_name"))
+                if raw_count is not None
+                else None,
+                "similar_user_count": int(raw_count.get("count") or 0)
+                if raw_count is not None
+                else 0,
+                "similar_user_count_rank": count_rank_by_game_id.get(game_id),
+                "appears_in_similar_user_game_counts": raw_count is not None,
+            }
+        )
+    return mappings
+
+
 def get_actual_game_ids_on_base_date(
     user_service: UserService,
     patient_id: str,
     base_date: str,
 ) -> list[str]:
-    """Return distinct game IDs trained by the patient on base_date."""
+    """Return distinct exclusive-task game IDs trained by the patient on base_date."""
     parsed_base_date = parse_date_value(base_date, "base_date")
     end_date = parsed_base_date + timedelta(days=1)
-    history_rows = user_service.get_patient_training_task_history_by_date_window(
+    history_rows = user_service.get_patient_exclusive_training_task_history_by_date_window(
         patient_id,
         parsed_base_date.isoformat(),
         end_date.isoformat(),
@@ -409,6 +496,11 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         for detail in details
         if isinstance(detail.get("elapsed_seconds"), int | float)
     ]
+    similar_user_game_counts_task_counts = [
+        int(detail["similar_user_game_counts_task_count"])
+        for detail in evaluated_details
+        if isinstance(detail.get("similar_user_game_counts_task_count"), int | float)
+    ]
 
     return {
         "total_count": total_count,
@@ -438,6 +530,20 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         "avg_actual_task_count": round(
             average_count(evaluated_details, "actual_task_count"),
             4,
+        ),
+        "avg_similar_user_game_counts_task_count": round(
+            average_numbers(
+                [float(value) for value in similar_user_game_counts_task_counts]
+            ),
+            4,
+        ),
+        "min_similar_user_game_counts_task_count": min(
+            similar_user_game_counts_task_counts,
+            default=0,
+        ),
+        "max_similar_user_game_counts_task_count": max(
+            similar_user_game_counts_task_counts,
+            default=0,
         ),
         "avg_elapsed_seconds": round(average_numbers(elapsed_seconds), 4),
         "p95_elapsed_seconds": round(percentile(elapsed_seconds, 0.95), 4),
@@ -469,6 +575,69 @@ def write_outputs(
         encoding="utf-8",
     )
     return summary_path, details_path
+
+
+def build_experiment_config(
+    *,
+    base_date: str,
+    window_days: int,
+    pattern: str,
+    config_path: str | Path,
+    skip_path_build: bool,
+    query_family: str | None,
+    task_top_k: int,
+    use_llm: bool,
+    active_on_base_date: bool,
+) -> dict[str, Any]:
+    """Build experiment metadata saved with evaluation outputs."""
+    query_settings = load_query_settings(config_path)
+    disease_course_window_days = (
+        query_settings.candidate_ranking.disease_course_window_days
+    )
+    fallback_candidate_task_window_days = (
+        query_settings.training_task_prediction.candidate_task_window_days
+    )
+    return {
+        "base_date": base_date,
+        "window_days": window_days,
+        "pattern": pattern,
+        "config_path": str(config_path),
+        "skip_path_build": skip_path_build,
+        "query_family": query_family,
+        "task_top_k": task_top_k,
+        "use_llm": use_llm,
+        "active_on_base_date": active_on_base_date,
+        "disease_course_window_days": disease_course_window_days,
+        "fallback_candidate_task_window_days": fallback_candidate_task_window_days,
+        "effective_candidate_task_window_days": (
+            disease_course_window_days or fallback_candidate_task_window_days
+        ),
+    }
+
+
+def build_experiment_output_dir(
+    output_dir: str | Path,
+    experiment_config: dict[str, Any],
+) -> Path:
+    """Return a parameterized output directory to avoid overwriting experiments."""
+    disease_course_window_days = experiment_config.get("disease_course_window_days")
+    query_family = experiment_config.get("query_family") or "default"
+    use_llm = "llm" if experiment_config.get("use_llm") else "dry_run"
+    parts = [
+        f"base_{_slug_part(experiment_config.get('base_date'))}",
+        f"window_{_slug_part(experiment_config.get('window_days'))}",
+        f"dcw_{_slug_part(disease_course_window_days)}",
+        f"topk_{_slug_part(experiment_config.get('task_top_k'))}",
+        f"qf_{_slug_part(query_family)}",
+        use_llm,
+    ]
+    return Path(output_dir) / "_".join(parts)
+
+
+def _slug_part(value: Any) -> str:
+    """Return a filesystem-friendly value for experiment directory names."""
+    text = str(value if value is not None else "none").strip()
+    return "".join(char if char.isalnum() else "-" for char in text) or "none"
 
 
 def run_batch_evaluation(
@@ -682,10 +851,26 @@ def main() -> int:
             prompt_output_dir=args.prompt_output_dir,
         )
         summary = summarize_evaluation_details(details)
+        experiment_config = build_experiment_config(
+            base_date=args.base_date,
+            window_days=args.window_days,
+            pattern=args.pattern,
+            config_path=args.config,
+            skip_path_build=args.skip_path_build,
+            query_family=args.query_family,
+            task_top_k=args.task_top_k,
+            use_llm=not args.dry_run,
+            active_on_base_date=args.active_on_base_date,
+        )
+        summary["experiment_config"] = experiment_config
+        resolved_output_dir = build_experiment_output_dir(
+            args.output_dir,
+            experiment_config,
+        )
         summary_path, details_path = write_outputs(
             details,
             summary,
-            output_dir=args.output_dir,
+            output_dir=resolved_output_dir,
             summary_file=args.summary_file,
             details_file=args.details_file,
         )
