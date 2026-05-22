@@ -32,10 +32,10 @@ query:
       - "patient_unknown_patient"
     candidate_top_k: 10
     total_score_match_top_k: 1
-    disease_course_window_days: 14
+    disease_course_window_days: 365
     scoring:
-      common_game_score_similarity: false
-      game_similarity_with_diversity_score: false
+      common_game_score_similarity: true
+      game_similarity_with_diversity_score: true
       disease_course_secondary_ability: true
       set_same:
         disease: false
@@ -43,7 +43,6 @@ query:
         unknown: false
   training_task_prediction:
     candidate_task_window_days: 14
-    prompt_candidate_compression_enabled: false
 
 similarity:
   top_k: 20

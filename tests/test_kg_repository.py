@@ -2040,18 +2040,18 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertEqual(settings.pattern_path_storage.output_dir, "data/pattern_paths")
         self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
         self.assertEqual(settings.candidate_ranking.total_score_match_top_k, 1)
-        self.assertEqual(settings.candidate_ranking.disease_course_window_days, 14)
+        self.assertEqual(settings.candidate_ranking.disease_course_window_days, 365)
         self.assertEqual(
             settings.training_task_prediction.candidate_task_window_days,
             14,
         )
-        self.assertFalse(
+        self.assertTrue(
             settings.training_task_prediction.prompt_candidate_compression_enabled
         )
-        self.assertFalse(
+        self.assertTrue(
             settings.candidate_ranking.scoring.common_game_score_similarity
         )
-        self.assertFalse(
+        self.assertTrue(
             settings.candidate_ranking.scoring.game_similarity_with_diversity_score
         )
         self.assertTrue(
