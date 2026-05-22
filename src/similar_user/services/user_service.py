@@ -58,7 +58,7 @@ class UserService:
         patient_id: str,
         base_date: str,
     ) -> list[dict[str, object]]:
-        """Return games linked to the patient's effective disease/symptom/unknown profile."""
+        """Return exclusive-task games linked to the patient's effective profile."""
         profile_rows = self.get_patient_profile_entities_by_effective_date(
             patient_id,
             base_date,
@@ -74,7 +74,7 @@ class UserService:
                 self._extend_profile_candidate_games(
                     game_rows,
                     seen_game_ids,
-                    self.kg_repository.get_disease_taskset_task_game_sampled_per_game(
+                    self.kg_repository.get_disease_taskset_exclusive_task_game_sampled_per_game(
                         disease_id,
                     ),
                 )
@@ -85,7 +85,7 @@ class UserService:
                 self._extend_profile_candidate_games(
                     game_rows,
                     seen_game_ids,
-                    self.kg_repository.get_symptom_taskset_task_game_sampled_per_game(
+                    self.kg_repository.get_symptom_taskset_exclusive_task_game_sampled_per_game(
                         symptom_id,
                     ),
                 )
@@ -96,7 +96,7 @@ class UserService:
                 self._extend_profile_candidate_games(
                     game_rows,
                     seen_game_ids,
-                    self.kg_repository.get_unknown_taskset_task_game_sampled_per_game(
+                    self.kg_repository.get_unknown_taskset_exclusive_task_game_sampled_per_game(
                         unknown_id,
                     ),
                 )
@@ -945,6 +945,21 @@ class UserService:
             patient_id,
             start_date,
             end_date,
+        )
+
+    def get_patient_exclusive_training_task_history_by_date_window(
+        self,
+        patient_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task history in a left-closed, right-open date window."""
+        return (
+            self.kg_repository.get_patient_exclusive_training_task_history_by_date_window(
+                patient_id,
+                start_date,
+                end_date,
+            )
         )
 
     def _load_window_statistics(

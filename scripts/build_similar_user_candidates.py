@@ -295,13 +295,24 @@ def _build_candidate_score_summary(score_details: object) -> dict[str, Any]:
         "disease_course_secondary_ability",
         "distance",
     )
+    disease_course_secondary_ability_candidate_base_date = _extract_nested_value(
+        details,
+        "disease_course_secondary_ability",
+        "candidate_base_date",
+    )
+    disease_course_secondary_ability_summary = {
+        "score": disease_course_secondary_ability_score,
+        "distance": disease_course_secondary_ability_distance,
+    }
+    if disease_course_secondary_ability_candidate_base_date is not None:
+        disease_course_secondary_ability_summary[
+            "candidate_base_date"
+        ] = disease_course_secondary_ability_candidate_base_date
+
     return {
         "common_game_score_similarity": common_game_score_similarity,
         "game_similarity_with_diversity_score": game_similarity_with_diversity_score,
-        "disease_course_secondary_ability": {
-            "score": disease_course_secondary_ability_score,
-            "distance": disease_course_secondary_ability_distance,
-        },
+        "disease_course_secondary_ability": disease_course_secondary_ability_summary,
         "set_same_score": {
             "total": set_same_score,
             "disease": _extract_nested_value(

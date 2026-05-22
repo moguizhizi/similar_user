@@ -83,13 +83,13 @@ class UserServiceTest(unittest.TestCase):
                 "unknowns": [{"id": "AU_UNKNOWN_0005"}],
             }
         ]
-        mock_repository.get_disease_taskset_task_game_sampled_per_game.return_value = [
+        mock_repository.get_disease_taskset_exclusive_task_game_sampled_per_game.return_value = [
             {"row": {"g": {"id": "1", "name": "疾病任务"}}}
         ]
-        mock_repository.get_symptom_taskset_task_game_sampled_per_game.return_value = [
+        mock_repository.get_symptom_taskset_exclusive_task_game_sampled_per_game.return_value = [
             {"row": {"g": {"id": "2", "name": "症状任务"}}}
         ]
-        mock_repository.get_unknown_taskset_task_game_sampled_per_game.return_value = [
+        mock_repository.get_unknown_taskset_exclusive_task_game_sampled_per_game.return_value = [
             {"row": {"g": {"id": "1", "name": "疾病任务"}}},
             {"row": {"g": {"id": "3", "name": "未知任务"}}},
         ]
@@ -112,13 +112,13 @@ class UserServiceTest(unittest.TestCase):
             "30010096",
             "2022-01-13",
         )
-        mock_repository.get_disease_taskset_task_game_sampled_per_game.assert_called_once_with(
+        mock_repository.get_disease_taskset_exclusive_task_game_sampled_per_game.assert_called_once_with(
             "AU_DIS_0013",
         )
-        mock_repository.get_symptom_taskset_task_game_sampled_per_game.assert_called_once_with(
+        mock_repository.get_symptom_taskset_exclusive_task_game_sampled_per_game.assert_called_once_with(
             "AU_SYM_0007",
         )
-        mock_repository.get_unknown_taskset_task_game_sampled_per_game.assert_called_once_with(
+        mock_repository.get_unknown_taskset_exclusive_task_game_sampled_per_game.assert_called_once_with(
             "AU_UNKNOWN_0005",
         )
 
@@ -1775,6 +1775,39 @@ class UserServiceTest(unittest.TestCase):
             ],
         )
         mock_repository.get_patient_training_task_history_by_date_window.assert_called_once_with(
+            "30010096",
+            "2022-05-20",
+            "2022-05-22",
+        )
+
+    def test_get_patient_exclusive_training_task_history_by_date_window_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {
+                "trainingDate": "2022-05-21",
+                "g": {"id": "42", "name": "打怪物"},
+            }
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_exclusive_training_task_history_by_date_window(
+            "30010096",
+            "2022-05-20",
+            "2022-05-22",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "trainingDate": "2022-05-21",
+                    "g": {"id": "42", "name": "打怪物"},
+                }
+            ],
+        )
+        mock_repository.get_patient_exclusive_training_task_history_by_date_window.assert_called_once_with(
             "30010096",
             "2022-05-20",
             "2022-05-22",

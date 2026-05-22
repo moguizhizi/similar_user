@@ -5,7 +5,9 @@ from __future__ import annotations
 import unittest
 
 from src.similar_user.data_access.cypher_queries import (
+    DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+    PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
     PATIENT_DISTINCT_GAMES_BY_START_DATE_QUERY,
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
@@ -14,7 +16,9 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_TOTAL_SCORE_TIMEPOINTS_QUERY,
     PATIENT_TOTAL_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
     SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
+    SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+    UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
 from src.similar_user.data_access.graph_query_registry import (
@@ -57,6 +61,39 @@ class GraphQueryRegistryTest(unittest.TestCase):
         self.assertEqual(spec.group_field, "g")
         self.assertEqual(spec.query, SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY)
 
+    def test_registered_exclusive_task_expansions_declare_contracts(self) -> None:
+        disease_spec = get_graph_query_spec(
+            "disease_taskset_exclusive_task_game_sampled_per_game"
+        )
+        symptom_spec = get_graph_query_spec(
+            "symptom_taskset_exclusive_task_game_sampled_per_game"
+        )
+        unknown_spec = get_graph_query_spec(
+            "unknown_taskset_exclusive_task_game_sampled_per_game"
+        )
+
+        self.assertEqual(disease_spec.source_label, "Disease")
+        self.assertEqual(disease_spec.source_parameter, "disease_id")
+        self.assertIn("专属", disease_spec.path_shape)
+        self.assertEqual(
+            disease_spec.query,
+            DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+        )
+        self.assertEqual(symptom_spec.source_label, "Symptom")
+        self.assertEqual(symptom_spec.source_parameter, "symptom_id")
+        self.assertIn("专属", symptom_spec.path_shape)
+        self.assertEqual(
+            symptom_spec.query,
+            SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+        )
+        self.assertEqual(unknown_spec.source_label, "Unknown")
+        self.assertEqual(unknown_spec.source_parameter, "unknown_id")
+        self.assertIn("专属", unknown_spec.path_shape)
+        self.assertEqual(
+            unknown_spec.query,
+            UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+        )
+
     def test_registered_unknown_expansion_declares_contract(self) -> None:
         spec = get_graph_query_spec("unknown_taskset_task_game_sampled_per_game")
 
@@ -78,8 +115,11 @@ class GraphQueryRegistryTest(unittest.TestCase):
         self.assertEqual(
             tuple(spec.name for spec in specs),
             (
+                "disease_taskset_exclusive_task_game_sampled_per_game",
                 "disease_taskset_task_game_sampled_per_game",
+                "symptom_taskset_exclusive_task_game_sampled_per_game",
                 "symptom_taskset_task_game_sampled_per_game",
+                "unknown_taskset_exclusive_task_game_sampled_per_game",
                 "unknown_taskset_task_game_sampled_per_game",
             ),
         )
@@ -90,8 +130,11 @@ class GraphQueryRegistryTest(unittest.TestCase):
         self.assertEqual(
             tuple(spec.name for spec in specs),
             (
+                "disease_taskset_exclusive_task_game_sampled_per_game",
                 "disease_taskset_task_game_sampled_per_game",
+                "symptom_taskset_exclusive_task_game_sampled_per_game",
                 "symptom_taskset_task_game_sampled_per_game",
+                "unknown_taskset_exclusive_task_game_sampled_per_game",
                 "unknown_taskset_task_game_sampled_per_game",
             ),
         )
@@ -134,6 +177,26 @@ class GraphQueryRegistryTest(unittest.TestCase):
             "(p:Patient)--(s:TaskInstanceSet)--(i:TaskInstance)--(g:Game)",
         )
         self.assertEqual(spec.row_fields, ("trainingDate", "s", "i", "g"))
+
+    def test_registered_patient_exclusive_training_history_window_query_declares_contract(
+        self,
+    ) -> None:
+        spec = get_graph_query_spec(
+            "patient_exclusive_training_task_history_by_date_window"
+        )
+
+        self.assertEqual(spec.category, GraphQueryCategory.PATIENT_TRAINING_HISTORY)
+        self.assertEqual(spec.source_label, "Patient")
+        self.assertEqual(
+            spec.source_parameters,
+            ("patient_id", "start_date", "end_date"),
+        )
+        self.assertIn("专属", spec.path_shape)
+        self.assertEqual(spec.row_fields, ("trainingDate", "g"))
+        self.assertEqual(
+            spec.query,
+            PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+        )
 
     def test_registered_patient_total_score_timepoints_query_declares_contract(
         self,
@@ -289,7 +352,7 @@ class GraphQueryRegistryTest(unittest.TestCase):
                     category=GraphQueryCategory.PATIENT_TRAINING_HISTORY
                 )
             ),
-            6,
+            7,
         )
         self.assertEqual(
             len(list_graph_query_specs(category=GraphQueryCategory.PATIENT_GAME_COLLECTION)),

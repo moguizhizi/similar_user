@@ -9,16 +9,19 @@ from unittest.mock import Mock, patch
 
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
+    DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+    SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+    UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -45,6 +48,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
@@ -215,6 +219,57 @@ class KgRepositoryTest(unittest.TestCase):
         mock_client.run_query.assert_called_once_with(
             query=SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
             parameters={"symptom_id": "AU_SYM_0007"},
+        )
+
+    def test_get_exclusive_task_game_expansion_queries(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.side_effect = [
+            [{"row": {"i": {"任务类型": "专属"}, "g": {"id": "42"}}}],
+            [{"row": {"i": {"任务类型": "专属"}, "g": {"id": "84"}}}],
+            [{"row": {"i": {"任务类型": "专属"}, "g": {"id": "12"}}}],
+        ]
+        repository = KgRepository(client=mock_client)
+
+        disease_result = (
+            repository.get_disease_taskset_exclusive_task_game_sampled_per_game(
+                " AU_DIS_0013 ",
+            )
+        )
+        symptom_result = (
+            repository.get_symptom_taskset_exclusive_task_game_sampled_per_game(
+                " AU_SYM_0007 ",
+            )
+        )
+        unknown_result = (
+            repository.get_unknown_taskset_exclusive_task_game_sampled_per_game(
+                " AU_UNKNOWN_0005 ",
+            )
+        )
+
+        self.assertEqual(
+            disease_result,
+            [{"row": {"i": {"任务类型": "专属"}, "g": {"id": "42"}}}],
+        )
+        self.assertEqual(
+            symptom_result,
+            [{"row": {"i": {"任务类型": "专属"}, "g": {"id": "84"}}}],
+        )
+        self.assertEqual(
+            unknown_result,
+            [{"row": {"i": {"任务类型": "专属"}, "g": {"id": "12"}}}],
+        )
+        self.assertEqual(mock_client.run_query.call_count, 3)
+        mock_client.run_query.assert_any_call(
+            query=DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+            parameters={"disease_id": "AU_DIS_0013"},
+        )
+        mock_client.run_query.assert_any_call(
+            query=SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+            parameters={"symptom_id": "AU_SYM_0007"},
+        )
+        mock_client.run_query.assert_any_call(
+            query=UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+            parameters={"unknown_id": "AU_UNKNOWN_0005"},
         )
 
     def test_get_unknown_taskset_task_game_sampled_per_game(self) -> None:
@@ -1986,10 +2041,14 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
         self.assertEqual(settings.candidate_ranking.total_score_match_top_k, 1)
         self.assertEqual(settings.candidate_ranking.disease_course_window_days, 365)
-        self.assertTrue(
+        self.assertEqual(
+            settings.training_task_prediction.candidate_task_window_days,
+            14,
+        )
+        self.assertFalse(
             settings.candidate_ranking.scoring.common_game_score_similarity
         )
-        self.assertTrue(
+        self.assertFalse(
             settings.candidate_ranking.scoring.game_similarity_with_diversity_score
         )
         self.assertTrue(
@@ -2191,6 +2250,40 @@ class KgRepositoryTest(unittest.TestCase):
             },
         )
 
+    def test_get_patient_exclusive_training_task_history_by_date_window(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "trainingDate": "2022-05-21",
+                "g": {"id": "42", "name": "打怪物"},
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_exclusive_training_task_history_by_date_window(
+            " 30010096 ",
+            " 2022-05-20 ",
+            " 2022-05-22 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "trainingDate": "2022-05-21",
+                    "g": {"id": "42", "name": "打怪物"},
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-05-20",
+                "end_date": "2022-05-22",
+            },
+        )
+
     def test_get_patient_training_task_history_by_date_window_rejects_blank_inputs(
         self,
     ) -> None:
@@ -2212,6 +2305,27 @@ class KgRepositoryTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
             repository.get_patient_training_task_history_by_date_window(
+                "30010096",
+                "2022-05-20",
+                "   ",
+            )
+
+        with self.assertRaisesRegex(ValueError, "patient_id must be a non-empty string."):
+            repository.get_patient_exclusive_training_task_history_by_date_window(
+                "   ",
+                "2022-05-20",
+                "2022-05-22",
+            )
+
+        with self.assertRaisesRegex(ValueError, "start_date must be a non-empty string."):
+            repository.get_patient_exclusive_training_task_history_by_date_window(
+                "30010096",
+                "   ",
+                "2022-05-22",
+            )
+
+        with self.assertRaisesRegex(ValueError, "end_date must be a non-empty string."):
+            repository.get_patient_exclusive_training_task_history_by_date_window(
                 "30010096",
                 "2022-05-20",
                 "   ",
