@@ -117,6 +117,15 @@ def parse_args() -> argparse.Namespace:
             "Defaults to micro_recall."
         ),
     )
+    parser.add_argument(
+        "--write-promoted-baseline",
+        action="store_true",
+        help=(
+            "After ranking completed experiments, append the best experiment as "
+            "promoted_baseline_overrides in the experiment YAML without changing "
+            "the active baseline_overrides."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -589,6 +598,102 @@ def serialize_csv_value(value: Any) -> str | int | float | None:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
 
 
+def build_promoted_baseline_payload(
+    best_experiment: dict[str, Any],
+    *,
+    stage: str,
+) -> dict[str, Any]:
+    """Build a non-active promoted baseline suggestion from one leaderboard row."""
+    overrides = best_experiment.get("overrides")
+    if not isinstance(overrides, dict) or not overrides:
+        raise ValueError("best_experiment overrides must contain at least one override.")
+    rank_metric = best_experiment.get("rank_metric")
+    metric_value = best_experiment.get(rank_metric) if isinstance(rank_metric, str) else None
+    return {
+        "source_stage": stage,
+        "source_experiment": best_experiment.get("name"),
+        "rank": best_experiment.get("rank"),
+        "rank_metric": rank_metric,
+        "metric_value": metric_value,
+        "summary_path": best_experiment.get("summary_path"),
+        "overrides": overrides,
+    }
+
+
+def write_promoted_baseline_overrides(
+    experiment_config_path: str | Path,
+    promoted_baseline: dict[str, Any],
+) -> Path:
+    """Append a promoted_baseline_overrides suggestion to an experiment YAML file."""
+    path = Path(experiment_config_path)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    start_index, end_index = find_active_top_level_block(
+        lines,
+        "promoted_baseline_overrides",
+    )
+    promoted_lines = build_top_level_yaml_block_lines(
+        "promoted_baseline_overrides",
+        promoted_baseline,
+    )
+
+    if start_index is None or end_index is None:
+        updated_lines = [*lines, "", *promoted_lines]
+    else:
+        updated_lines = [
+            *lines[:start_index],
+            "# Previous promoted_baseline_overrides:",
+            *comment_yaml_lines(lines[start_index:end_index]),
+            "",
+            *promoted_lines,
+            *lines[end_index:],
+        ]
+
+    path.write_text("\n".join(updated_lines).rstrip() + "\n", encoding="utf-8")
+    return path
+
+
+def find_active_top_level_block(
+    lines: list[str],
+    block_name: str,
+) -> tuple[int | None, int | None]:
+    """Find an active top-level YAML block by name."""
+    block_header = f"{block_name}:"
+    start_index: int | None = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == block_header and not line.startswith((" ", "\t", "#")):
+            start_index = index
+            break
+    if start_index is None:
+        return None, None
+
+    end_index = len(lines)
+    for index in range(start_index + 1, len(lines)):
+        line = lines[index]
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not line.startswith((" ", "\t")):
+            end_index = index
+            break
+    return start_index, end_index
+
+
+def build_top_level_yaml_block_lines(block_name: str, value: dict[str, Any]) -> list[str]:
+    """Build YAML lines for one top-level mapping block."""
+    text = yaml.safe_dump(
+        {block_name: value},
+        allow_unicode=True,
+        sort_keys=False,
+    )
+    return text.rstrip().splitlines()
+
+
+def comment_yaml_lines(lines: list[str]) -> list[str]:
+    """Comment YAML lines while keeping their original content readable."""
+    return [f"# {line}" if line else "#" for line in lines]
+
+
 def _slug_part(value: Any) -> str:
     """Return a filesystem-friendly string."""
     text = str(value if value is not None else "none").strip().lower()
@@ -630,6 +735,21 @@ def main() -> int:
         result["leaderboard_json_path"] = str(leaderboard_json_path)
         result["leaderboard_csv_path"] = str(leaderboard_csv_path)
         result["best_experiment"] = leaderboard[0] if leaderboard else None
+        if args.write_promoted_baseline:
+            if args.dry_run:
+                raise ValueError("--write-promoted-baseline cannot be used with --dry-run.")
+            if not leaderboard:
+                raise ValueError("Cannot write promoted baseline without leaderboard rows.")
+            promoted_baseline = build_promoted_baseline_payload(
+                leaderboard[0],
+                stage=stage,
+            )
+            promoted_path = write_promoted_baseline_overrides(
+                args.experiment_config,
+                promoted_baseline,
+            )
+            result["promoted_baseline_overrides_path"] = str(promoted_path)
+            result["promoted_baseline_overrides"] = promoted_baseline
         summary_path = write_grid_summary(result, output_root)
         result["summary_path"] = str(summary_path)
     except Exception as exc:

@@ -328,6 +328,114 @@ class RunEvaluationGridTest(unittest.TestCase):
         self.assertIn("rank,name,rank_metric", csv_text)
         self.assertIn("exp_001", csv_text)
 
+    def test_build_promoted_baseline_payload_uses_best_experiment_metrics(self) -> None:
+        payload = run_evaluation_grid.build_promoted_baseline_payload(
+            {
+                "rank": 1,
+                "name": "exp_001",
+                "rank_metric": "micro_recall",
+                "micro_recall": 0.3,
+                "summary_path": "summary.json",
+                "overrides": {"query.a": 1},
+            },
+            stage="coarse_10_users",
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "source_stage": "coarse_10_users",
+                "source_experiment": "exp_001",
+                "rank": 1,
+                "rank_metric": "micro_recall",
+                "metric_value": 0.3,
+                "summary_path": "summary.json",
+                "overrides": {"query.a": 1},
+            },
+        )
+
+    def test_write_promoted_baseline_overrides_appends_non_active_block(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "evaluation_grid.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'stage: "coarse_10_users"',
+                        "",
+                        "baseline_overrides:",
+                        "  query.a: 1",
+                        "",
+                        "experiments:",
+                        "  - name: baseline",
+                        "    overrides: {}",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            run_evaluation_grid.write_promoted_baseline_overrides(
+                config_path,
+                {
+                    "source_stage": "coarse_10_users",
+                    "source_experiment": "exp_001",
+                    "rank_metric": "micro_recall",
+                    "metric_value": 0.3,
+                    "overrides": {"query.a": 2},
+                },
+            )
+
+            updated_text = config_path.read_text(encoding="utf-8")
+            updated_config = run_evaluation_grid.load_experiment_config(config_path)
+
+        self.assertIn("baseline_overrides:\n  query.a: 1", updated_text)
+        self.assertIn("promoted_baseline_overrides:", updated_text)
+        self.assertEqual(updated_config["baseline_overrides"], {"query.a": 1})
+        self.assertEqual(
+            updated_config["promoted_baseline_overrides"]["overrides"],
+            {"query.a": 2},
+        )
+
+    def test_write_promoted_baseline_overrides_comments_previous_promotion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "evaluation_grid.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'stage: "coarse_10_users"',
+                        "",
+                        "promoted_baseline_overrides:",
+                        "  source_experiment: old",
+                        "  overrides:",
+                        "    query.a: 1",
+                        "",
+                        "experiments:",
+                        "  - name: baseline",
+                        "    overrides: {}",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            run_evaluation_grid.write_promoted_baseline_overrides(
+                config_path,
+                {
+                    "source_experiment": "new",
+                    "overrides": {"query.a": 2},
+                },
+            )
+
+            updated_text = config_path.read_text(encoding="utf-8")
+            updated_config = run_evaluation_grid.load_experiment_config(config_path)
+
+        self.assertIn("# Previous promoted_baseline_overrides:", updated_text)
+        self.assertIn("# promoted_baseline_overrides:", updated_text)
+        self.assertEqual(
+            updated_config["promoted_baseline_overrides"]["source_experiment"],
+            "new",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,3 +34,17 @@ experiments:
   - name: prompt_template_v1
     overrides:
       query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V1"
+
+promoted_baseline_overrides:
+  source_stage: coarse_10_users
+  source_experiment: exp_005_prompt-template-v1
+  rank: 1
+  rank_metric: micro_recall
+  metric_value: 0.1887
+  summary_path: data/evaluation_grid/coarse-10-users/runs/exp_005_prompt-template-v1/base_2023-10-15_window_14_dcw_14_topk_7_qf_default_llm/predict_training_tasks_summary.json
+  overrides:
+    query.candidate_ranking.disease_course_window_days: 14
+    query.candidate_ranking.total_score_match_top_k: 1
+    query.score_pattern_paths.top_k: 150
+    query.training_task_prediction.prompt_candidate_compression_enabled: false
+    query.training_task_prediction.prompt_template_name: TASK_PREDICTION_PROMPT_TEMPLATE_V1
