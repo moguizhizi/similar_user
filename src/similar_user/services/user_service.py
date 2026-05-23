@@ -60,14 +60,14 @@ class UserService:
             base_date,
         )
 
-    def get_patient_profile_education_age_exclusive_task_games(
+    def get_patient_profile_gender_education_age_exclusive_task_games(
         self,
         patient_id: str,
         base_date: str,
         age_window: int,
     ) -> list[dict[str, object]]:
         """Return exclusive-task games matching patient profile and age window."""
-        return self.kg_repository.get_patient_profile_education_age_exclusive_task_games(
+        return self.kg_repository.get_patient_profile_gender_education_age_exclusive_task_games(
             patient_id,
             base_date,
             age_window,
@@ -122,51 +122,14 @@ class UserService:
         self,
         patient_id: str,
         base_date: str,
+        age_window: int = 0,
     ) -> list[dict[str, object]]:
-        """Return exclusive-task games linked to the patient's effective profile."""
-        profile_rows = self.get_patient_profile_entities_by_effective_date(
+        """Return exclusive-task games matching patient profile filters."""
+        return self.get_patient_profile_gender_education_age_exclusive_task_games(
             patient_id,
             base_date,
+            age_window,
         )
-        game_rows: list[dict[str, object]] = []
-        seen_game_ids: set[str] = set()
-
-        for profile_row in profile_rows:
-            for disease in _iter_nodes(profile_row.get("diseases")):
-                disease_id = _node_identifier(disease)
-                if not disease_id:
-                    continue
-                self._extend_profile_candidate_games(
-                    game_rows,
-                    seen_game_ids,
-                    self.kg_repository.get_disease_taskset_exclusive_task_game_sampled_per_game(
-                        disease_id,
-                    ),
-                )
-            for symptom in _iter_nodes(profile_row.get("symptoms")):
-                symptom_id = _node_identifier(symptom)
-                if not symptom_id:
-                    continue
-                self._extend_profile_candidate_games(
-                    game_rows,
-                    seen_game_ids,
-                    self.kg_repository.get_symptom_taskset_exclusive_task_game_sampled_per_game(
-                        symptom_id,
-                    ),
-                )
-            for unknown in _iter_nodes(profile_row.get("unknowns")):
-                unknown_id = _node_identifier(unknown)
-                if not unknown_id:
-                    continue
-                self._extend_profile_candidate_games(
-                    game_rows,
-                    seen_game_ids,
-                    self.kg_repository.get_unknown_taskset_exclusive_task_game_sampled_per_game(
-                        unknown_id,
-                    ),
-                )
-
-        return game_rows
 
     @staticmethod
     def _extend_profile_candidate_games(

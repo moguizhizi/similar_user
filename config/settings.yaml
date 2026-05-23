@@ -44,7 +44,6 @@ query:
         symptom: false
         unknown: false
   training_task_prediction:
-    candidate_task_window_days: 14
     prompt_candidate_compression_enabled: false
 
 similarity:

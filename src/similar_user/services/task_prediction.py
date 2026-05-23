@@ -50,6 +50,10 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V2 = (
 
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE = TASK_PREDICTION_PROMPT_TEMPLATE_V2
+TASK_PREDICTION_PROMPT_TEMPLATES = {
+    "TASK_PREDICTION_PROMPT_TEMPLATE_V1": TASK_PREDICTION_PROMPT_TEMPLATE_V1,
+    "TASK_PREDICTION_PROMPT_TEMPLATE_V2": TASK_PREDICTION_PROMPT_TEMPLATE_V2,
+}
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,7 @@ class TrainingTaskPredictionService:
     user_service: UserService
     llm_client: LlmClient | None = None
     prompt_candidate_compression_enabled: bool = True
+    prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
 
     def predict_from_pipeline_result(
         self,
@@ -209,6 +214,7 @@ class TrainingTaskPredictionService:
             similar_user_task_evidence=prompt_similar_user_task_evidence,
             candidate_training_tasks=prompt_candidate_tasks,
             task_top_k=task_top_k,
+            prompt_template_name=self.prompt_template_name,
         )
 
         llm_prediction: dict[str, Any] | None = None
@@ -244,6 +250,7 @@ class TrainingTaskPredictionService:
             "similar_user_game_counts": prompt_similar_user_game_counts,
             "similar_user_task_evidence": prompt_similar_user_task_evidence,
             "candidate_training_tasks": prompt_candidate_tasks,
+            "prompt_template": self.prompt_template_name,
             "predicted_training_tasks": _resolve_predicted_tasks(
                 llm_prediction,
                 rule_based_tasks,
@@ -742,6 +749,7 @@ def build_task_prediction_prompt(
     similar_user_task_evidence: list[dict[str, Any]],
     candidate_training_tasks: list[dict[str, Any]],
     task_top_k: int,
+    prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
 ) -> str:
     """构建用于 LLM 训练任务预测的 JSON 优先提示词。
 
@@ -777,10 +785,23 @@ def build_task_prediction_prompt(
             },
         },
     }
-    return (
-        CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE
-        + f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
-    )
+    prompt_template = get_task_prediction_prompt_template(prompt_template_name)
+    return prompt_template + f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
+
+
+def get_task_prediction_prompt_template(prompt_template_name: str) -> str:
+    """Return a named prompt template or raise a clear config error."""
+    if not isinstance(prompt_template_name, str) or not prompt_template_name.strip():
+        raise ValueError("prompt_template_name must be a non-empty string.")
+    normalized_name = prompt_template_name.strip()
+    prompt_template = TASK_PREDICTION_PROMPT_TEMPLATES.get(normalized_name)
+    if prompt_template is None:
+        available_names = ", ".join(sorted(TASK_PREDICTION_PROMPT_TEMPLATES))
+        raise ValueError(
+            f"Unknown prompt_template_name: {normalized_name}. "
+            f"Available templates: {available_names}."
+        )
+    return prompt_template
 
 
 def _resolve_predicted_tasks(

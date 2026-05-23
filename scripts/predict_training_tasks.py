@@ -37,6 +37,7 @@ from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.services.llm_client import LlmClient
 from similar_user.services.task_prediction import (
+    CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
     DEFAULT_TASK_TOP_K,
     TrainingTaskPredictionService,
 )
@@ -180,10 +181,21 @@ def run_training_task_prediction(
 ) -> dict[str, Any]:
     """Run training-task prediction from an existing candidate result."""
     query_settings = load_query_settings(config_path)
-    candidate_task_window_days = (
+    disease_course_window_days = (
         query_settings.candidate_ranking.disease_course_window_days
-        or query_settings.training_task_prediction.candidate_task_window_days
     )
+    if disease_course_window_days is None:
+        raise ValueError(
+            "candidate_ranking disease_course_window_days is required for training-task prediction."
+        )
+    if (
+        not isinstance(disease_course_window_days, int)
+        or isinstance(disease_course_window_days, bool)
+        or disease_course_window_days <= 0
+    ):
+        raise ValueError(
+            "candidate_ranking disease_course_window_days must be a positive integer."
+        )
     raw_prompt_candidate_compression_enabled = getattr(
         query_settings.training_task_prediction,
         "prompt_candidate_compression_enabled",
@@ -193,6 +205,17 @@ def run_training_task_prediction(
         raw_prompt_candidate_compression_enabled
         if isinstance(raw_prompt_candidate_compression_enabled, bool)
         else True
+    )
+    raw_prompt_template_name = getattr(
+        query_settings.training_task_prediction,
+        "prompt_template_name",
+        CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+    )
+    prompt_template_name = (
+        raw_prompt_template_name.strip()
+        if isinstance(raw_prompt_template_name, str)
+        and raw_prompt_template_name.strip()
+        else CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
     )
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
@@ -206,11 +229,12 @@ def run_training_task_prediction(
             user_service=user_service,
             llm_client=llm_client,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
+            prompt_template_name=prompt_template_name,
         )
         return service.predict_from_pipeline_result(
             pipeline_result,
             base_date=base_date,
-            window_days=candidate_task_window_days,
+            window_days=disease_course_window_days,
             task_top_k=task_top_k,
             use_llm=use_llm,
             include_prompt=include_prompt,

@@ -26,7 +26,7 @@ RETURN
     collect(DISTINCT un) AS unknowns
 """.strip()
 
-PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY = """
+PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY = """
 MATCH (p:Patient {id: $patient_id})
 --(profile_s:TaskInstanceSet)
 
@@ -88,58 +88,64 @@ WITH
     symptoms,
     [x IN collect(DISTINCT un) WHERE x IS NOT NULL] AS unknowns
 
-CALL {
-    WITH diseases, gender, education, min_age, max_age
+CALL (diseases, symptoms, unknowns, gender, education, min_age, max_age) {
     UNWIND diseases AS entity
     MATCH (entity)--(s:TaskInstanceSet)--(candidate_p:Patient)
     MATCH (s)--(i:TaskInstance)--(g:Game)
     WHERE
         candidate_p.`性别` = gender AND
         i.`任务类型` = "专属" AND
+        (entity.id IS NOT NULL OR entity.name IS NOT NULL) AND
         s.`执行学历` = education AND
         s.`执行年龄` IS NOT NULL AND
         toInteger(toFloat(s.`执行年龄`)) >= min_age AND
         toInteger(toFloat(s.`执行年龄`)) <= max_age
     RETURN
         g,
-        s,
-        i
+        CASE
+            WHEN entity.id IS NOT NULL THEN toString(entity.id)
+            ELSE toString(entity.name)
+        END AS support_source
 
     UNION ALL
 
-    WITH symptoms, gender, education, min_age, max_age
     UNWIND symptoms AS entity
     MATCH (entity)--(s:TaskInstanceSet)--(candidate_p:Patient)
     MATCH (s)--(i:TaskInstance)--(g:Game)
     WHERE
         candidate_p.`性别` = gender AND
         i.`任务类型` = "专属" AND
+        (entity.id IS NOT NULL OR entity.name IS NOT NULL) AND
         s.`执行学历` = education AND
         s.`执行年龄` IS NOT NULL AND
         toInteger(toFloat(s.`执行年龄`)) >= min_age AND
         toInteger(toFloat(s.`执行年龄`)) <= max_age
     RETURN
         g,
-        s,
-        i
+        CASE
+            WHEN entity.id IS NOT NULL THEN toString(entity.id)
+            ELSE toString(entity.name)
+        END AS support_source
 
     UNION ALL
 
-    WITH unknowns, gender, education, min_age, max_age
     UNWIND unknowns AS entity
     MATCH (entity)--(s:TaskInstanceSet)--(candidate_p:Patient)
     MATCH (s)--(i:TaskInstance)--(g:Game)
     WHERE
         candidate_p.`性别` = gender AND
         i.`任务类型` = "专属" AND
+        (entity.id IS NOT NULL OR entity.name IS NOT NULL) AND
         s.`执行学历` = education AND
         s.`执行年龄` IS NOT NULL AND
         toInteger(toFloat(s.`执行年龄`)) >= min_age AND
         toInteger(toFloat(s.`执行年龄`)) <= max_age
     RETURN
         g,
-        s,
-        i
+        CASE
+            WHEN entity.id IS NOT NULL THEN toString(entity.id)
+            ELSE toString(entity.name)
+        END AS support_source
 }
 
 RETURN
@@ -147,7 +153,8 @@ RETURN
     age AS profile_age,
     gender AS profile_gender,
     education AS profile_education,
-    count(*) AS support_count
+    collect(DISTINCT support_source) AS support_sources,
+    count(DISTINCT support_source) AS support_count
 
 ORDER BY support_count DESC, toString(g.id) ASC
 """.strip()

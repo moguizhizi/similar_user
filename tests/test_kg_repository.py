@@ -56,7 +56,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
-    PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+    PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -416,7 +416,7 @@ class KgRepositoryTest(unittest.TestCase):
             },
         )
 
-    def test_get_patient_profile_education_age_exclusive_task_games(self) -> None:
+    def test_get_patient_profile_gender_education_age_exclusive_task_games(self) -> None:
         mock_client = Mock()
         mock_client.run_query.return_value = [
             {
@@ -424,12 +424,13 @@ class KgRepositoryTest(unittest.TestCase):
                 "profile_age": 68,
                 "profile_gender": "男",
                 "profile_education": "本科",
-                "support_count": 5,
+                "support_sources": ["AU_DIS_0013", "AU_SYM_0007", "AU_DIS_0020"],
+                "support_count": 3,
             }
         ]
         repository = KgRepository(client=mock_client)
 
-        result = repository.get_patient_profile_education_age_exclusive_task_games(
+        result = repository.get_patient_profile_gender_education_age_exclusive_task_games(
             " 20104662 ",
             " 2024-01-31 ",
             5,
@@ -443,12 +444,17 @@ class KgRepositoryTest(unittest.TestCase):
                     "profile_age": 68,
                     "profile_gender": "男",
                     "profile_education": "本科",
-                    "support_count": 5,
+                    "support_sources": [
+                        "AU_DIS_0013",
+                        "AU_SYM_0007",
+                        "AU_DIS_0020",
+                    ],
+                    "support_count": 3,
                 }
             ],
         )
         mock_client.run_query.assert_called_once_with(
-            query=PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+            query=PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
             parameters={
                 "patient_id": "20104662",
                 "base_date": "2024-01-31",
@@ -456,7 +462,7 @@ class KgRepositoryTest(unittest.TestCase):
             },
         )
 
-    def test_get_patient_profile_education_age_exclusive_task_games_validates_age_window(
+    def test_get_patient_profile_gender_education_age_exclusive_task_games_validates_age_window(
         self,
     ) -> None:
         repository = KgRepository(client=Mock())
@@ -465,7 +471,7 @@ class KgRepositoryTest(unittest.TestCase):
             ValueError,
             "age_window must be a non-negative integer.",
         ):
-            repository.get_patient_profile_education_age_exclusive_task_games(
+            repository.get_patient_profile_gender_education_age_exclusive_task_games(
                 "20104662",
                 "2024-01-31",
                 -1,
@@ -475,7 +481,7 @@ class KgRepositoryTest(unittest.TestCase):
             ValueError,
             "age_window must be a non-negative integer.",
         ):
-            repository.get_patient_profile_education_age_exclusive_task_games(
+            repository.get_patient_profile_gender_education_age_exclusive_task_games(
                 "20104662",
                 "2024-01-31",
                 "5",  # type: ignore[arg-type]
@@ -2251,12 +2257,12 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
         self.assertEqual(settings.candidate_ranking.total_score_match_top_k, 1)
         self.assertEqual(settings.candidate_ranking.disease_course_window_days, 14)
-        self.assertEqual(
-            settings.training_task_prediction.candidate_task_window_days,
-            14,
-        )
         self.assertFalse(
             settings.training_task_prediction.prompt_candidate_compression_enabled
+        )
+        self.assertEqual(
+            settings.training_task_prediction.prompt_template_name,
+            "TASK_PREDICTION_PROMPT_TEMPLATE_V2",
         )
         self.assertFalse(
             settings.candidate_ranking.scoring.common_game_score_similarity

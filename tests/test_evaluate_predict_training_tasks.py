@@ -94,6 +94,21 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                     "actual_task_count": 2,
                     "matched_task_count": 2,
                     "similar_user_game_counts_task_count": 10,
+                    "candidate_training_tasks_count": 4,
+                    "coverage_diagnostics": {
+                        "similar_user_game_counts": {
+                            "predicted_missing_count": 1,
+                            "predicted_total_count": 3,
+                            "actual_missing_count": 0,
+                            "actual_total_count": 2,
+                        },
+                        "candidate_training_tasks": {
+                            "predicted_missing_count": 0,
+                            "predicted_total_count": 3,
+                            "actual_missing_count": 1,
+                            "actual_total_count": 2,
+                        },
+                    },
                     "elapsed_seconds": 1.0,
                 },
                 {
@@ -106,6 +121,21 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                     "actual_task_count": 2,
                     "matched_task_count": 0,
                     "similar_user_game_counts_task_count": 20,
+                    "candidate_training_tasks_count": 6,
+                    "coverage_diagnostics": {
+                        "similar_user_game_counts": {
+                            "predicted_missing_count": 1,
+                            "predicted_total_count": 1,
+                            "actual_missing_count": 2,
+                            "actual_total_count": 2,
+                        },
+                        "candidate_training_tasks": {
+                            "predicted_missing_count": 0,
+                            "predicted_total_count": 1,
+                            "actual_missing_count": 1,
+                            "actual_total_count": 2,
+                        },
+                    },
                     "elapsed_seconds": 3.0,
                 },
                 {
@@ -138,6 +168,13 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(summary["avg_similar_user_game_counts_task_count"], 15.0)
         self.assertEqual(summary["min_similar_user_game_counts_task_count"], 10)
         self.assertEqual(summary["max_similar_user_game_counts_task_count"], 20)
+        self.assertEqual(summary["avg_candidate_training_tasks_count"], 5.0)
+        self.assertEqual(summary["min_candidate_training_tasks_count"], 4)
+        self.assertEqual(summary["max_candidate_training_tasks_count"], 6)
+        self.assertEqual(summary["similar_user_game_counts_predicted_missing_rate"], 0.5)
+        self.assertEqual(summary["similar_user_game_counts_actual_missing_rate"], 0.5)
+        self.assertEqual(summary["candidate_training_tasks_predicted_missing_rate"], 0.0)
+        self.assertEqual(summary["candidate_training_tasks_actual_missing_rate"], 0.5)
         self.assertEqual(summary["avg_elapsed_seconds"], 2.5)
         self.assertEqual(summary["p95_elapsed_seconds"], 4.0)
 
@@ -179,6 +216,21 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                         },
                     ],
                     "similar_user_game_counts_task_count": 10,
+                    "candidate_training_tasks_count": 4,
+                    "coverage_diagnostics": {
+                        "similar_user_game_counts": {
+                            "predicted_missing_count": 0,
+                            "predicted_total_count": 2,
+                            "actual_missing_count": 0,
+                            "actual_total_count": 2,
+                        },
+                        "candidate_training_tasks": {
+                            "predicted_missing_count": 0,
+                            "predicted_total_count": 2,
+                            "actual_missing_count": 1,
+                            "actual_total_count": 2,
+                        },
+                    },
                     "elapsed_seconds": 1.0,
                 },
                 {
@@ -206,6 +258,21 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                         },
                     ],
                     "similar_user_game_counts_task_count": 20,
+                    "candidate_training_tasks_count": 6,
+                    "coverage_diagnostics": {
+                        "similar_user_game_counts": {
+                            "predicted_missing_count": 0,
+                            "predicted_total_count": 1,
+                            "actual_missing_count": 1,
+                            "actual_total_count": 1,
+                        },
+                        "candidate_training_tasks": {
+                            "predicted_missing_count": 0,
+                            "predicted_total_count": 1,
+                            "actual_missing_count": 1,
+                            "actual_total_count": 1,
+                        },
+                    },
                     "elapsed_seconds": 2.0,
                 },
                 {"patient_id": "42", "status": "failed"},
@@ -238,8 +305,38 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             {"predicted_task_count": 0, "actual_task_count": 1},
         )
         self.assertEqual(
+            analysis["coverage_diagnostics"]["similar_user_game_counts"],
+            {
+                "predicted_missing_count": 0,
+                "predicted_total_count": 3,
+                "predicted_missing_rate": 0.0,
+                "actual_missing_count": 1,
+                "actual_total_count": 3,
+                "actual_missing_rate": 0.3333,
+            },
+        )
+        self.assertEqual(
+            analysis["coverage_diagnostics"]["candidate_training_tasks"],
+            {
+                "predicted_missing_count": 0,
+                "predicted_total_count": 3,
+                "predicted_missing_rate": 0.0,
+                "actual_missing_count": 2,
+                "actual_total_count": 3,
+                "actual_missing_rate": 0.6667,
+            },
+        )
+        self.assertEqual(
             analysis["similar_user_game_counts_task_count_stats"]["mean"],
             15.0,
+        )
+        self.assertEqual(
+            analysis["candidate_training_tasks_count_stats"]["mean"],
+            5.0,
+        )
+        self.assertEqual(
+            analysis["per_patient"][0]["candidate_training_tasks_count"],
+            4,
         )
         self.assertEqual(
             analysis["top_matched_games"],
@@ -255,7 +352,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         mock_load_query_settings.return_value = Mock(
             candidate_ranking=Mock(disease_course_window_days=180),
             score_pattern_paths=Mock(top_k=50),
-            training_task_prediction=Mock(candidate_task_window_days=30),
+            training_task_prediction=Mock(
+                prompt_candidate_compression_enabled=True,
+                prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
+            ),
         )
 
         config = evaluate_predict_training_tasks.build_experiment_config(
@@ -271,14 +371,14 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
 
         self.assertEqual(config["disease_course_window_days"], 180)
         self.assertEqual(config["scored_path_top_k"], 50)
-        self.assertEqual(config["fallback_candidate_task_window_days"], 30)
-        self.assertEqual(config["effective_candidate_task_window_days"], 180)
+        self.assertNotIn("fallback_candidate_task_window_days", config)
+        self.assertNotIn("effective_candidate_task_window_days", config)
         self.assertEqual(config["base_date"], "2022-05-22")
         self.assertEqual(config["task_top_k"], 7)
         self.assertFalse(config["use_llm"])
         self.assertEqual(
             config["prompt_template"],
-            evaluate_predict_training_tasks.CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+            "TASK_PREDICTION_PROMPT_TEMPLATE_V1",
         )
         mock_load_query_settings.assert_called_once_with("config/settings.yaml")
 
@@ -319,7 +419,11 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 "predicted_training_tasks": [
                     {"game_id": "1"},
                     {"game_id": "2"},
-                ]
+                ],
+                "candidate_training_tasks": [
+                    {"game_id": "1"},
+                    {"game_id": "4"},
+                ],
             }
         }
         mock_write_prompt.return_value = evaluate_predict_training_tasks.Path(
@@ -346,6 +450,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
 
         self.assertEqual(detail["status"], "success_evaluated")
         self.assertEqual(detail["predicted_game_ids"], ["1", "2"])
+        self.assertEqual(detail["candidate_training_tasks_count"], 2)
         self.assertEqual(
             detail["predicted_game_similar_user_counts"],
             [
@@ -367,6 +472,27 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         )
         self.assertEqual(detail["actual_game_ids"], ["2", "3"])
         self.assertEqual(detail["similar_user_game_counts_task_count"], 2)
+        self.assertEqual(
+            detail["coverage_diagnostics"],
+            {
+                "similar_user_game_counts": {
+                    "predicted_missing_count": 1,
+                    "predicted_total_count": 2,
+                    "predicted_missing_rate": 0.5,
+                    "actual_missing_count": 1,
+                    "actual_total_count": 2,
+                    "actual_missing_rate": 0.5,
+                },
+                "candidate_training_tasks": {
+                    "predicted_missing_count": 1,
+                    "predicted_total_count": 2,
+                    "predicted_missing_rate": 0.5,
+                    "actual_missing_count": 2,
+                    "actual_total_count": 2,
+                    "actual_missing_rate": 1.0,
+                },
+            },
+        )
         self.assertEqual(
             detail["actual_game_similar_user_counts"],
             [

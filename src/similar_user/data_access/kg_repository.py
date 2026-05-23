@@ -696,7 +696,7 @@ class KgRepository:
             },
         )
 
-    def get_patient_profile_education_age_exclusive_task_games(
+    def get_patient_profile_gender_education_age_exclusive_task_games(
         self,
         patient_id: str,
         base_date: str,
@@ -715,7 +715,7 @@ class KgRepository:
             raise ValueError("age_window must be a non-negative integer.")
 
         spec = get_graph_query_spec(
-            "patient_profile_education_age_exclusive_task_game"
+            "patient_profile_gender_education_age_exclusive_task_game"
         )
         return self.client.run_query(
             query=spec.query,
