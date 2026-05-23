@@ -28,7 +28,7 @@ from .cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
-    PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+    PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
@@ -439,7 +439,7 @@ PATIENT_GAME_COLLECTION_SPECS = (
         query=PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     ),
     _spec(
-        name="patient_profile_education_age_exclusive_task_game",
+        name="patient_profile_gender_education_age_exclusive_task_game",
         category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
         description="按患者最近画像实体、性别、执行学历和执行年龄范围查询专属任务相关游戏",
         source_label="Patient",
@@ -454,10 +454,11 @@ PATIENT_GAME_COLLECTION_SPECS = (
             "profile_age",
             "profile_gender",
             "profile_education",
+            "support_sources",
             "support_count",
         ),
         group_field="g",
-        query=PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+        query=PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     ),
 )
 

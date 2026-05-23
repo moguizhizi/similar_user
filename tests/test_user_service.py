@@ -90,49 +90,41 @@ class UserServiceTest(unittest.TestCase):
         self.assertEqual(result, [{"g": {"id": "42", "name": "打怪物"}}])
         mock_repository.get_distinct_training_games.assert_called_once_with()
 
-    def test_get_patient_profile_education_age_exclusive_task_games_delegates_to_repository(
+    def test_get_patient_profile_gender_education_age_exclusive_task_games_delegates_to_repository(
         self,
     ) -> None:
         mock_repository = Mock()
-        mock_repository.get_patient_profile_education_age_exclusive_task_games.return_value = [
+        mock_repository.get_patient_profile_gender_education_age_exclusive_task_games.return_value = [
             {"g": {"id": "42"}, "support_count": 5}
         ]
         service = UserService(kg_repository=mock_repository)
 
-        result = service.get_patient_profile_education_age_exclusive_task_games(
+        result = service.get_patient_profile_gender_education_age_exclusive_task_games(
             "20104662",
             "2024-01-31",
             5,
         )
 
         self.assertEqual(result, [{"g": {"id": "42"}, "support_count": 5}])
-        mock_repository.get_patient_profile_education_age_exclusive_task_games.assert_called_once_with(
+        mock_repository.get_patient_profile_gender_education_age_exclusive_task_games.assert_called_once_with(
             "20104662",
             "2024-01-31",
             5,
         )
 
-    def test_get_patient_profile_candidate_training_games_expands_profile_entities(
+    def test_get_patient_profile_candidate_training_games_uses_profile_filters(
         self,
     ) -> None:
         mock_repository = Mock()
-        mock_repository.get_patient_profile_entities_by_effective_date.return_value = [
+        mock_repository.get_patient_profile_gender_education_age_exclusive_task_games.return_value = [
             {
-                "effective_date": "2022-01-13",
-                "diseases": [{"id": "AU_DIS_0013"}],
-                "symptoms": [{"id": "AU_SYM_0007"}],
-                "unknowns": [{"id": "AU_UNKNOWN_0005"}],
+                "g": {"id": "1", "name": "画像任务"},
+                "profile_age": 68,
+                "profile_gender": "男",
+                "profile_education": "本科",
+                "support_sources": ["AU_DIS_0013"],
+                "support_count": 1,
             }
-        ]
-        mock_repository.get_disease_taskset_exclusive_task_game_sampled_per_game.return_value = [
-            {"row": {"g": {"id": "1", "name": "疾病任务"}}}
-        ]
-        mock_repository.get_symptom_taskset_exclusive_task_game_sampled_per_game.return_value = [
-            {"row": {"g": {"id": "2", "name": "症状任务"}}}
-        ]
-        mock_repository.get_unknown_taskset_exclusive_task_game_sampled_per_game.return_value = [
-            {"row": {"g": {"id": "1", "name": "疾病任务"}}},
-            {"row": {"g": {"id": "3", "name": "未知任务"}}},
         ]
         service = UserService(kg_repository=mock_repository)
 
@@ -144,23 +136,20 @@ class UserServiceTest(unittest.TestCase):
         self.assertEqual(
             result,
             [
-                {"g": {"id": "1", "name": "疾病任务"}},
-                {"g": {"id": "2", "name": "症状任务"}},
-                {"g": {"id": "3", "name": "未知任务"}},
+                {
+                    "g": {"id": "1", "name": "画像任务"},
+                    "profile_age": 68,
+                    "profile_gender": "男",
+                    "profile_education": "本科",
+                    "support_sources": ["AU_DIS_0013"],
+                    "support_count": 1,
+                }
             ],
         )
-        mock_repository.get_patient_profile_entities_by_effective_date.assert_called_once_with(
+        mock_repository.get_patient_profile_gender_education_age_exclusive_task_games.assert_called_once_with(
             "30010096",
             "2022-01-13",
-        )
-        mock_repository.get_disease_taskset_exclusive_task_game_sampled_per_game.assert_called_once_with(
-            "AU_DIS_0013",
-        )
-        mock_repository.get_symptom_taskset_exclusive_task_game_sampled_per_game.assert_called_once_with(
-            "AU_SYM_0007",
-        )
-        mock_repository.get_unknown_taskset_exclusive_task_game_sampled_per_game.assert_called_once_with(
-            "AU_UNKNOWN_0005",
+            0,
         )
 
     def test_get_patient_training_date_games_by_start_date_delegates_to_repository(

@@ -252,6 +252,14 @@ def evaluate_patient(
         similar_user_game_counts_task_count = count_similar_user_game_count_tasks(
             prediction_result
         )
+        candidate_training_tasks_count = count_candidate_training_tasks(
+            prediction_result
+        )
+        coverage_diagnostics = build_coverage_diagnostics(
+            predicted_game_ids,
+            actual_game_ids,
+            prediction_result,
+        )
     except EmptyPathResultsError as exc:
         return build_not_evaluable_detail(
             patient_id=patient_id,
@@ -303,6 +311,8 @@ def evaluate_patient(
         "actual_game_ids": actual_game_ids,
         "actual_game_similar_user_counts": actual_game_similar_user_counts,
         "similar_user_game_counts_task_count": similar_user_game_counts_task_count,
+        "candidate_training_tasks_count": candidate_training_tasks_count,
+        "coverage_diagnostics": coverage_diagnostics,
         "matched_game_ids": metrics["matched_game_ids"],
         "task_hit": metrics["task_hit"],
         "precision": metrics["precision"],
@@ -379,9 +389,7 @@ def build_actual_game_similar_user_counts(
 
 def count_similar_user_game_count_tasks(result: dict[str, Any]) -> int:
     """Return the number of task rows in prompt similar-user aggregate counts."""
-    prediction_result = result.get("training_task_prediction")
-    if isinstance(prediction_result, dict):
-        result = prediction_result
+    result = unwrap_training_task_prediction(result)
     raw_counts = result.get("similar_user_game_counts")
     if not isinstance(raw_counts, list):
         return 0
@@ -392,14 +400,18 @@ def count_similar_user_game_count_tasks(result: dict[str, Any]) -> int:
     )
 
 
+def count_candidate_training_tasks(result: dict[str, Any]) -> int:
+    """Return the number of unique tasks in the prompt candidate pool."""
+    result = unwrap_training_task_prediction(result)
+    return len(extract_game_ids_from_rows(result.get("candidate_training_tasks"), "game_id"))
+
+
 def build_game_similar_user_counts(
     game_ids: list[str],
     result: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Map game IDs to prompt similar-user aggregate counts."""
-    prediction_result = result.get("training_task_prediction")
-    if isinstance(prediction_result, dict):
-        result = prediction_result
+    result = unwrap_training_task_prediction(result)
     raw_counts = result.get("similar_user_game_counts")
     if not isinstance(raw_counts, list):
         raw_counts = []
@@ -439,6 +451,85 @@ def build_game_similar_user_counts(
             }
         )
     return mappings
+
+
+def unwrap_training_task_prediction(result: dict[str, Any]) -> dict[str, Any]:
+    """Return the nested training-task prediction payload when present."""
+    prediction_result = result.get("training_task_prediction")
+    return prediction_result if isinstance(prediction_result, dict) else result
+
+
+def build_coverage_diagnostics(
+    predicted_game_ids: list[str],
+    actual_game_ids: list[str],
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    """Build per-patient coverage diagnostics for prompt evidence and candidates."""
+    prediction_result = unwrap_training_task_prediction(result)
+    similar_user_game_ids = extract_game_ids_from_rows(
+        prediction_result.get("similar_user_game_counts"),
+        "game_id",
+    )
+    candidate_training_task_ids = extract_game_ids_from_rows(
+        prediction_result.get("candidate_training_tasks"),
+        "game_id",
+    )
+    return {
+        "similar_user_game_counts": build_missing_coverage_section(
+            predicted_game_ids,
+            actual_game_ids,
+            similar_user_game_ids,
+        ),
+        "candidate_training_tasks": build_missing_coverage_section(
+            predicted_game_ids,
+            actual_game_ids,
+            candidate_training_task_ids,
+        ),
+    }
+
+
+def extract_game_ids_from_rows(raw_rows: object, field_name: str) -> set[str]:
+    """Extract normalized game IDs from a list of dictionaries."""
+    if not isinstance(raw_rows, list):
+        return set()
+    game_ids: set[str] = set()
+    for raw_row in raw_rows:
+        if not isinstance(raw_row, dict):
+            continue
+        game_id = normalize_text(raw_row.get(field_name))
+        if game_id is not None:
+            game_ids.add(game_id)
+    return game_ids
+
+
+def build_missing_coverage_section(
+    predicted_game_ids: list[str],
+    actual_game_ids: list[str],
+    available_game_ids: set[str],
+) -> dict[str, Any]:
+    """Build missing counts/rates against one evidence or candidate game-id set."""
+    predicted_ids = dedupe_texts(predicted_game_ids)
+    actual_ids = dedupe_texts(actual_game_ids)
+    predicted_missing_count = sum(
+        1 for game_id in predicted_ids if game_id not in available_game_ids
+    )
+    actual_missing_count = sum(
+        1 for game_id in actual_ids if game_id not in available_game_ids
+    )
+    return {
+        "predicted_missing_count": predicted_missing_count,
+        "predicted_total_count": len(predicted_ids),
+        "predicted_missing_rate": round(
+            safe_divide(predicted_missing_count, len(predicted_ids)),
+            4,
+        ),
+        "actual_missing_count": actual_missing_count,
+        "actual_total_count": len(actual_ids),
+        "actual_missing_rate": round(
+            safe_divide(actual_missing_count, len(actual_ids)),
+            4,
+        ),
+    }
 
 
 def get_actual_game_ids_on_base_date(
@@ -517,6 +608,12 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         for detail in evaluated_details
         if isinstance(detail.get("similar_user_game_counts_task_count"), int | float)
     ]
+    candidate_training_tasks_counts = [
+        int(detail["candidate_training_tasks_count"])
+        for detail in evaluated_details
+        if isinstance(detail.get("candidate_training_tasks_count"), int | float)
+    ]
+    coverage_diagnostics = aggregate_coverage_diagnostics(evaluated_details)
 
     return {
         "total_count": total_count,
@@ -561,6 +658,30 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
             similar_user_game_counts_task_counts,
             default=0,
         ),
+        "avg_candidate_training_tasks_count": round(
+            average_numbers([float(value) for value in candidate_training_tasks_counts]),
+            4,
+        ),
+        "min_candidate_training_tasks_count": min(
+            candidate_training_tasks_counts,
+            default=0,
+        ),
+        "max_candidate_training_tasks_count": max(
+            candidate_training_tasks_counts,
+            default=0,
+        ),
+        "similar_user_game_counts_predicted_missing_rate": coverage_diagnostics[
+            "similar_user_game_counts"
+        ]["predicted_missing_rate"],
+        "similar_user_game_counts_actual_missing_rate": coverage_diagnostics[
+            "similar_user_game_counts"
+        ]["actual_missing_rate"],
+        "candidate_training_tasks_predicted_missing_rate": coverage_diagnostics[
+            "candidate_training_tasks"
+        ]["predicted_missing_rate"],
+        "candidate_training_tasks_actual_missing_rate": coverage_diagnostics[
+            "candidate_training_tasks"
+        ]["actual_missing_rate"],
         "avg_elapsed_seconds": round(average_numbers(elapsed_seconds), 4),
         "p95_elapsed_seconds": round(percentile(elapsed_seconds, 0.95), 4),
     }
@@ -638,6 +759,9 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
                 "similar_user_game_counts_task_count": detail.get(
                     "similar_user_game_counts_task_count"
                 ),
+                "candidate_training_tasks_count": detail.get(
+                    "candidate_training_tasks_count"
+                ),
                 "elapsed_seconds": detail.get("elapsed_seconds"),
             }
         )
@@ -647,6 +771,12 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
         for detail in evaluated_details
         if isinstance(detail.get("similar_user_game_counts_task_count"), int | float)
     ]
+    candidate_training_tasks_counts = [
+        int(detail["candidate_training_tasks_count"])
+        for detail in evaluated_details
+        if isinstance(detail.get("candidate_training_tasks_count"), int | float)
+    ]
+    coverage_diagnostics = aggregate_coverage_diagnostics(evaluated_details)
 
     return {
         "evaluated_count": len(evaluated_details),
@@ -666,8 +796,12 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
             "predicted_task_count": predicted_missing_count,
             "actual_task_count": actual_missing_count,
         },
+        "coverage_diagnostics": coverage_diagnostics,
         "similar_user_game_counts_task_count_stats": build_number_stats(
             similar_user_game_counts_task_counts
+        ),
+        "candidate_training_tasks_count_stats": build_number_stats(
+            candidate_training_tasks_counts
         ),
         "top_predicted_games": _counter_to_game_rows(predicted_games),
         "top_actual_games": _counter_to_game_rows(actual_games),
@@ -698,6 +832,58 @@ def build_number_stats(values: list[int | float]) -> dict[str, Any]:
         "mean": round(average_numbers(numeric_values), 4),
         "p75": _clean_number(percentile(numeric_values, 0.75)),
         "max": _clean_number(max(numeric_values)),
+    }
+
+
+def aggregate_coverage_diagnostics(
+    evaluated_details: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Aggregate per-patient coverage diagnostics across evaluated details."""
+    return {
+        "similar_user_game_counts": aggregate_coverage_section(
+            evaluated_details,
+            "similar_user_game_counts",
+        ),
+        "candidate_training_tasks": aggregate_coverage_section(
+            evaluated_details,
+            "candidate_training_tasks",
+        ),
+    }
+
+
+def aggregate_coverage_section(
+    evaluated_details: list[dict[str, Any]],
+    section_name: str,
+) -> dict[str, Any]:
+    """Aggregate one coverage section from details."""
+    predicted_missing_count = 0
+    predicted_total_count = 0
+    actual_missing_count = 0
+    actual_total_count = 0
+    for detail in evaluated_details:
+        coverage_diagnostics = detail.get("coverage_diagnostics")
+        if not isinstance(coverage_diagnostics, dict):
+            continue
+        section = coverage_diagnostics.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        predicted_missing_count += int(section.get("predicted_missing_count") or 0)
+        predicted_total_count += int(section.get("predicted_total_count") or 0)
+        actual_missing_count += int(section.get("actual_missing_count") or 0)
+        actual_total_count += int(section.get("actual_total_count") or 0)
+    return {
+        "predicted_missing_count": predicted_missing_count,
+        "predicted_total_count": predicted_total_count,
+        "predicted_missing_rate": round(
+            safe_divide(predicted_missing_count, predicted_total_count),
+            4,
+        ),
+        "actual_missing_count": actual_missing_count,
+        "actual_total_count": actual_total_count,
+        "actual_missing_rate": round(
+            safe_divide(actual_missing_count, actual_total_count),
+            4,
+        ),
     }
 
 
