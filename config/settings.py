@@ -94,6 +94,7 @@ class TrainingTaskPredictionSettings:
     """Configuration for predicting training tasks from similar-user histories."""
 
     prompt_candidate_compression_enabled: bool = True
+    prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
 
 
 @dataclass(frozen=True)
@@ -307,6 +308,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction prompt_candidate_compression_enabled must be a boolean."
         )
+    prompt_template_name = training_task_prediction_data.get(
+        "prompt_template_name",
+        "TASK_PREDICTION_PROMPT_TEMPLATE_V2",
+    )
+    if not isinstance(prompt_template_name, str) or not prompt_template_name.strip():
+        raise ValueError(
+            "training_task_prediction prompt_template_name must be a non-empty string."
+        )
 
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
@@ -327,6 +336,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         ),
         training_task_prediction=TrainingTaskPredictionSettings(
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
+            prompt_template_name=prompt_template_name.strip(),
         ),
     )
 

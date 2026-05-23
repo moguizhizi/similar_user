@@ -1013,6 +1013,13 @@ def build_experiment_config(
         query_settings.candidate_ranking.disease_course_window_days
     )
     scored_path_top_k = query_settings.score_pattern_paths.top_k
+    prompt_template_name = getattr(
+        query_settings.training_task_prediction,
+        "prompt_template_name",
+        CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+    )
+    if not isinstance(prompt_template_name, str) or not prompt_template_name.strip():
+        prompt_template_name = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
     return {
         "base_date": base_date,
         "window_days": window_days,
@@ -1022,7 +1029,7 @@ def build_experiment_config(
         "query_family": query_family,
         "task_top_k": task_top_k,
         "use_llm": use_llm,
-        "prompt_template": CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+        "prompt_template": prompt_template_name,
         "scored_path_top_k": scored_path_top_k,
         "disease_course_window_days": disease_course_window_days,
     }

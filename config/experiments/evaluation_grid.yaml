@@ -13,6 +13,7 @@ baseline_overrides:
   query.candidate_ranking.total_score_match_top_k: 1
   query.score_pattern_paths.top_k: 150
   query.training_task_prediction.prompt_candidate_compression_enabled: false
+  query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
 
 experiments:
   - name: baseline_best
@@ -29,3 +30,7 @@ experiments:
   - name: prompt_compression_on
     overrides:
       query.training_task_prediction.prompt_candidate_compression_enabled: true
+
+  - name: prompt_template_v1
+    overrides:
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V1"

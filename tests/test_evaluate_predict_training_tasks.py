@@ -352,7 +352,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         mock_load_query_settings.return_value = Mock(
             candidate_ranking=Mock(disease_course_window_days=180),
             score_pattern_paths=Mock(top_k=50),
-            training_task_prediction=Mock(prompt_candidate_compression_enabled=True),
+            training_task_prediction=Mock(
+                prompt_candidate_compression_enabled=True,
+                prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
+            ),
         )
 
         config = evaluate_predict_training_tasks.build_experiment_config(
@@ -375,7 +378,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertFalse(config["use_llm"])
         self.assertEqual(
             config["prompt_template"],
-            evaluate_predict_training_tasks.CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+            "TASK_PREDICTION_PROMPT_TEMPLATE_V1",
         )
         mock_load_query_settings.assert_called_once_with("config/settings.yaml")
 

@@ -102,7 +102,10 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
     ) -> None:
         mock_load_query_settings.return_value = Mock(
             candidate_ranking=Mock(disease_course_window_days=365),
-            training_task_prediction=Mock(prompt_candidate_compression_enabled=True),
+            training_task_prediction=Mock(
+                prompt_candidate_compression_enabled=True,
+                prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
+            ),
         )
         mock_client_context = Mock()
         mock_client_context.__enter__ = Mock(return_value=Mock())
@@ -123,6 +126,11 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
 
         self.assertEqual(result, {"patient_id": "40"})
         mock_load_query_settings.assert_called_once_with("config/custom.yaml")
+        mock_service_cls.assert_called_once()
+        self.assertEqual(
+            mock_service_cls.call_args.kwargs["prompt_template_name"],
+            "TASK_PREDICTION_PROMPT_TEMPLATE_V1",
+        )
         mock_service.predict_from_pipeline_result.assert_called_once_with(
             {"patient_id": "40", "candidate_result": {"candidates": []}},
             base_date="2022-05-22",

@@ -37,6 +37,7 @@ from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.services.llm_client import LlmClient
 from similar_user.services.task_prediction import (
+    CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
     DEFAULT_TASK_TOP_K,
     TrainingTaskPredictionService,
 )
@@ -205,6 +206,17 @@ def run_training_task_prediction(
         if isinstance(raw_prompt_candidate_compression_enabled, bool)
         else True
     )
+    raw_prompt_template_name = getattr(
+        query_settings.training_task_prediction,
+        "prompt_template_name",
+        CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+    )
+    prompt_template_name = (
+        raw_prompt_template_name.strip()
+        if isinstance(raw_prompt_template_name, str)
+        and raw_prompt_template_name.strip()
+        else CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
+    )
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
             kg_repository=KgRepository(
@@ -217,6 +229,7 @@ def run_training_task_prediction(
             user_service=user_service,
             llm_client=llm_client,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
+            prompt_template_name=prompt_template_name,
         )
         return service.predict_from_pipeline_result(
             pipeline_result,

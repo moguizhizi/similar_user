@@ -7,11 +7,15 @@ import unittest
 from unittest.mock import Mock
 
 from src.similar_user.services.task_prediction import (
+    CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
     SimilarUserCandidate,
+    TASK_PREDICTION_PROMPT_TEMPLATE_V1,
+    TASK_PREDICTION_PROMPT_TEMPLATE_V2,
     TrainingTaskPredictionService,
     build_candidate_task_window,
     build_candidate_training_tasks,
     build_candidate_training_tasks_from_distinct_games,
+    build_task_prediction_prompt,
     build_rule_based_predictions,
     build_similar_user_game_counts,
     build_similar_user_task_evidence,
@@ -47,6 +51,30 @@ class TaskPredictionTest(unittest.TestCase):
         result = parse_json_object_from_text(text)
 
         self.assertEqual(result, payload)
+
+    def test_build_task_prediction_prompt_uses_named_template(self) -> None:
+        prompt = build_task_prediction_prompt(
+            patient_id="40",
+            similar_user_game_counts=[],
+            similar_user_task_evidence=[],
+            candidate_training_tasks=[],
+            task_top_k=7,
+            prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
+        )
+
+        self.assertTrue(prompt.startswith(TASK_PREDICTION_PROMPT_TEMPLATE_V1))
+        self.assertFalse(prompt.startswith(TASK_PREDICTION_PROMPT_TEMPLATE_V2))
+
+    def test_build_task_prediction_prompt_rejects_unknown_template(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown prompt_template_name"):
+            build_task_prediction_prompt(
+                patient_id="40",
+                similar_user_game_counts=[],
+                similar_user_task_evidence=[],
+                candidate_training_tasks=[],
+                task_top_k=7,
+                prompt_template_name="UNKNOWN_TEMPLATE",
+            )
 
     def test_extract_similar_user_candidates_reads_scores_summary(self) -> None:
         result = extract_similar_user_candidates(
@@ -603,6 +631,10 @@ class TaskPredictionTest(unittest.TestCase):
         )
 
         self.assertEqual(result["prompt_candidate_selection"]["enabled"], False)
+        self.assertEqual(
+            result["prompt_template"],
+            CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+        )
         self.assertEqual(
             result["candidate_training_tasks"],
             [

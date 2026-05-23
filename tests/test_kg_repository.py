@@ -2260,6 +2260,10 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertFalse(
             settings.training_task_prediction.prompt_candidate_compression_enabled
         )
+        self.assertEqual(
+            settings.training_task_prediction.prompt_template_name,
+            "TASK_PREDICTION_PROMPT_TEMPLATE_V2",
+        )
         self.assertFalse(
             settings.candidate_ranking.scoring.common_game_score_similarity
         )
