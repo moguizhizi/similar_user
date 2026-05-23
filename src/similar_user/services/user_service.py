@@ -53,6 +53,51 @@ class UserService:
             base_date,
         )
 
+    def get_disease_education_age_exclusive_task_games(
+        self,
+        disease_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching disease, education, and age range."""
+        return self.kg_repository.get_disease_education_age_exclusive_task_games(
+            disease_id,
+            education,
+            min_age,
+            max_age,
+        )
+
+    def get_symptom_education_age_exclusive_task_games(
+        self,
+        symptom_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching symptom, education, and age range."""
+        return self.kg_repository.get_symptom_education_age_exclusive_task_games(
+            symptom_id,
+            education,
+            min_age,
+            max_age,
+        )
+
+    def get_unknown_education_age_exclusive_task_games(
+        self,
+        unknown_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching unknown, education, and age range."""
+        return self.kg_repository.get_unknown_education_age_exclusive_task_games(
+            unknown_id,
+            education,
+            min_age,
+            max_age,
+        )
+
     def get_patient_profile_candidate_training_games(
         self,
         patient_id: str,

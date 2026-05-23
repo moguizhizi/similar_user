@@ -24,6 +24,8 @@ query:
     max_limit_source: "total_paths"
   pattern_path_storage:
     output_dir: "data/pattern_paths"
+  score_pattern_paths:
+    top_k: 50
   candidate_ranking:
     patterns:
       - "patient_game_patient"
@@ -32,10 +34,10 @@ query:
       - "patient_unknown_patient"
     candidate_top_k: 10
     total_score_match_top_k: 1
-    disease_course_window_days: 365
+    disease_course_window_days: 14
     scoring:
-      common_game_score_similarity: true
-      game_similarity_with_diversity_score: true
+      common_game_score_similarity: false
+      game_similarity_with_diversity_score: false
       disease_course_secondary_ability: true
       set_same:
         disease: false
@@ -43,6 +45,7 @@ query:
         unknown: false
   training_task_prediction:
     candidate_task_window_days: 14
+    prompt_candidate_compression_enabled: false
 
 similarity:
   top_k: 20

@@ -667,6 +667,8 @@ class PathScoringTest(unittest.TestCase):
                         "  after_ratio: 1",
                         "pattern_path_storage:",
                         f'  output_dir: "{output_dir}"',
+                        "score_pattern_paths:",
+                        "  top_k: 1",
                     ]
                 ),
                 encoding="utf-8",
@@ -735,6 +737,8 @@ class PathScoringTest(unittest.TestCase):
                         "  after_ratio: 1",
                         "pattern_path_storage:",
                         f'  output_dir: "{output_dir}"',
+                        "score_pattern_paths:",
+                        "  top_k: 1",
                     ]
                 ),
                 encoding="utf-8",
@@ -789,7 +793,6 @@ class PathScoringTest(unittest.TestCase):
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
-                top_k=1,
             )
 
         self.assertEqual(scored["path_count"], 2)
@@ -1165,7 +1168,6 @@ class PathScoringTest(unittest.TestCase):
             results = score_configured_pattern_paths(
                 "30010096",
                 config_path=config_path,
-                top_k=50,
             )
 
         self.assertEqual(
@@ -1181,14 +1183,12 @@ class PathScoringTest(unittest.TestCase):
             pattern="patient_game_patient",
             config_path=config_path,
             path_index=None,
-            top_k=50,
         )
         mock_score_paths.assert_any_call(
             "30010096",
             pattern="patient_disease_patient",
             config_path=config_path,
             path_index=None,
-            top_k=50,
         )
 
     def test_score_configured_pattern_paths_rejects_direct_patterns(self) -> None:
@@ -1231,7 +1231,6 @@ class PathScoringTest(unittest.TestCase):
         actual = score_and_save_configured_pattern_paths(
             "30010096",
             config_path="config/settings.yaml",
-            top_k=50,
             output_dir="data/scored_pattern_paths",
         )
 
@@ -1240,7 +1239,6 @@ class PathScoringTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             path_index=None,
-            top_k=50,
         )
         mock_save_results.assert_called_once_with(
             results,
@@ -1314,7 +1312,6 @@ class PathScoringTest(unittest.TestCase):
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config=str(config_path),
                 path_index=None,
-                top_k=None,
                 age=None,
                 education=None,
                 scored_paths_dir=str(Path(temp_dir) / "scored_pattern_paths"),
@@ -1405,7 +1402,6 @@ class PathScoringTest(unittest.TestCase):
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config=str(config_path),
                 path_index=0,
-                top_k=None,
                 age=None,
                 education=None,
                 scored_paths_dir=str(Path(temp_dir) / "scored_pattern_paths"),
@@ -1448,7 +1444,6 @@ class PathScoringTest(unittest.TestCase):
             patterns_from_config=True,
             config="config/settings.yaml",
             path_index=None,
-            top_k=50,
             age=None,
             education=None,
             scored_paths_dir="data/scored_pattern_paths",
@@ -1472,7 +1467,6 @@ class PathScoringTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             path_index=None,
-            top_k=50,
         )
         self.assertEqual(mock_save_scored.call_count, 2)
         mock_save_scored.assert_any_call(
@@ -1499,7 +1493,6 @@ class PathScoringTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="missing.yaml",
             path_index=None,
-            top_k=None,
             age=None,
             education=None,
             scored_paths_dir="data/scored_pattern_paths",

@@ -829,6 +829,7 @@ def build_experiment_config(
     fallback_candidate_task_window_days = (
         query_settings.training_task_prediction.candidate_task_window_days
     )
+    scored_path_top_k = query_settings.score_pattern_paths.top_k
     return {
         "base_date": base_date,
         "window_days": window_days,
@@ -839,6 +840,7 @@ def build_experiment_config(
         "task_top_k": task_top_k,
         "use_llm": use_llm,
         "prompt_template": CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+        "scored_path_top_k": scored_path_top_k,
         "disease_course_window_days": disease_course_window_days,
         "fallback_candidate_task_window_days": fallback_candidate_task_window_days,
         "effective_candidate_task_window_days": (

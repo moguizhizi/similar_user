@@ -75,10 +75,13 @@
 |---|---|---|---|---|
 | 从疾病扩展到相关游戏，每个游戏随机保留一条路径 | `DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `disease_id` | `row` |
 | 从疾病扩展到专属任务相关游戏，每个游戏随机保留一条路径 | `DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `disease_id` | `row` |
+| 按疾病、执行学历和执行年龄范围查询专属任务相关游戏 | `DISEASE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | `entity_expansions.py` | `disease_id`, `education`, `min_age`, `max_age` | `g`, `support_count`, `taskset_count`, `task_instance_count` |
 | 从症状扩展到相关游戏，每个游戏随机保留一条路径 | `SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `symptom_id` | `row` |
 | 从症状扩展到专属任务相关游戏，每个游戏随机保留一条路径 | `SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `symptom_id` | `row` |
+| 按症状、执行学历和执行年龄范围查询专属任务相关游戏 | `SYMPTOM_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | `entity_expansions.py` | `symptom_id`, `education`, `min_age`, `max_age` | `g`, `support_count`, `taskset_count`, `task_instance_count` |
 | 从未知节点扩展到相关游戏，每个游戏随机保留一条路径 | `UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `unknown_id` | `row` |
 | 从未知节点扩展到专属任务相关游戏，每个游戏随机保留一条路径 | `UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `unknown_id` | `row` |
+| 按未知节点、执行学历和执行年龄范围查询专属任务相关游戏 | `UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | `entity_expansions.py` | `unknown_id`, `education`, `min_age`, `max_age` | `g`, `support_count`, `taskset_count`, `task_instance_count` |
 
 ### 固定模式 path 检索
 

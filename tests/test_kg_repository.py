@@ -9,18 +9,21 @@ from unittest.mock import Mock, patch
 
 from config.settings import QueryLimitBandSettings, load_query_settings
 from src.similar_user.data_access.cypher_queries import (
+    DISEASE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+    SYMPTOM_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     SYMPTOM_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
+    UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
@@ -270,6 +273,123 @@ class KgRepositoryTest(unittest.TestCase):
         mock_client.run_query.assert_any_call(
             query=UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
             parameters={"unknown_id": "AU_UNKNOWN_0005"},
+        )
+
+    def test_get_disease_education_age_exclusive_task_games(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "g": {"id": "42", "name": "任务A"},
+                "support_count": 3,
+                "taskset_count": 2,
+                "task_instance_count": 3,
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_disease_education_age_exclusive_task_games(
+            " AU_DIS_0013 ",
+            " 本科 ",
+            60,
+            70,
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "g": {"id": "42", "name": "任务A"},
+                    "support_count": 3,
+                    "taskset_count": 2,
+                    "task_instance_count": 3,
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=DISEASE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+            parameters={
+                "disease_id": "AU_DIS_0013",
+                "education": "本科",
+                "min_age": 60,
+                "max_age": 70,
+            },
+        )
+
+    def test_get_disease_education_age_exclusive_task_games_validates_age_range(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "min_age and max_age must be integers.",
+        ):
+            repository.get_disease_education_age_exclusive_task_games(
+                "AU_DIS_0013",
+                "本科",
+                "60",  # type: ignore[arg-type]
+                70,
+            )
+
+        with self.assertRaisesRegex(ValueError, "min_age must be non-negative"):
+            repository.get_disease_education_age_exclusive_task_games(
+                "AU_DIS_0013",
+                "本科",
+                -1,
+                70,
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "max_age must be greater than or equal to min_age",
+        ):
+            repository.get_disease_education_age_exclusive_task_games(
+                "AU_DIS_0013",
+                "本科",
+                70,
+                60,
+            )
+
+    def test_get_symptom_and_unknown_education_age_exclusive_task_games(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.side_effect = [
+            [{"g": {"id": "84"}, "support_count": 2}],
+            [{"g": {"id": "12"}, "support_count": 1}],
+        ]
+        repository = KgRepository(client=mock_client)
+
+        symptom_result = repository.get_symptom_education_age_exclusive_task_games(
+            " AU_SYM_0007 ",
+            " 本科 ",
+            60,
+            70,
+        )
+        unknown_result = repository.get_unknown_education_age_exclusive_task_games(
+            " AU_UNKNOWN_0005 ",
+            " 本科 ",
+            60,
+            70,
+        )
+
+        self.assertEqual(symptom_result, [{"g": {"id": "84"}, "support_count": 2}])
+        self.assertEqual(unknown_result, [{"g": {"id": "12"}, "support_count": 1}])
+        mock_client.run_query.assert_any_call(
+            query=SYMPTOM_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+            parameters={
+                "symptom_id": "AU_SYM_0007",
+                "education": "本科",
+                "min_age": 60,
+                "max_age": 70,
+            },
+        )
+        mock_client.run_query.assert_any_call(
+            query=UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+            parameters={
+                "unknown_id": "AU_UNKNOWN_0005",
+                "education": "本科",
+                "min_age": 60,
+                "max_age": 70,
+            },
         )
 
     def test_get_unknown_taskset_task_game_sampled_per_game(self) -> None:
@@ -2038,20 +2158,21 @@ class KgRepositoryTest(unittest.TestCase):
             ),
         )
         self.assertEqual(settings.pattern_path_storage.output_dir, "data/pattern_paths")
+        self.assertEqual(settings.score_pattern_paths.top_k, 50)
         self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
         self.assertEqual(settings.candidate_ranking.total_score_match_top_k, 1)
-        self.assertEqual(settings.candidate_ranking.disease_course_window_days, 365)
+        self.assertEqual(settings.candidate_ranking.disease_course_window_days, 14)
         self.assertEqual(
             settings.training_task_prediction.candidate_task_window_days,
             14,
         )
-        self.assertTrue(
+        self.assertFalse(
             settings.training_task_prediction.prompt_candidate_compression_enabled
         )
-        self.assertTrue(
+        self.assertFalse(
             settings.candidate_ranking.scoring.common_game_score_similarity
         )
-        self.assertTrue(
+        self.assertFalse(
             settings.candidate_ranking.scoring.game_similarity_with_diversity_score
         )
         self.assertTrue(

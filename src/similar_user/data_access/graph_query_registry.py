@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .cypher_queries import (
+    DISEASE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISTINCT_TRAINING_GAMES_QUERY,
@@ -41,6 +42,7 @@ from .cypher_queries import (
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
     SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
+    SYMPTOM_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -55,6 +57,7 @@ from .cypher_queries import (
     PATIENT_UNKNOWN_SET_COMPARISON_BY_START_DATE_QUERY,
     SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+    UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
@@ -144,6 +147,21 @@ DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     query=DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
 
+DISEASE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_SPEC = _spec(
+    name="disease_education_age_exclusive_task_game",
+    category=GraphQueryCategory.ENTITY_EXPANSION,
+    description="按疾病、执行学历和执行年龄范围查询专属任务相关游戏",
+    source_label="Disease",
+    source_parameters=("disease_id", "education", "min_age", "max_age"),
+    path_shape=(
+        "(d:Disease)--(s:TaskInstanceSet)--"
+        "(i:TaskInstance {任务类型: '专属'})--(g:Game)"
+    ),
+    row_fields=("g", "support_count", "taskset_count", "task_instance_count"),
+    group_field="g",
+    query=DISEASE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+)
+
 SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     name="symptom_taskset_task_game_sampled_per_game",
     category=GraphQueryCategory.ENTITY_EXPANSION,
@@ -171,6 +189,21 @@ SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     query=SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
 )
 
+SYMPTOM_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_SPEC = _spec(
+    name="symptom_education_age_exclusive_task_game",
+    category=GraphQueryCategory.ENTITY_EXPANSION,
+    description="按症状、执行学历和执行年龄范围查询专属任务相关游戏",
+    source_label="Symptom",
+    source_parameters=("symptom_id", "education", "min_age", "max_age"),
+    path_shape=(
+        "(sym:Symptom)--(s:TaskInstanceSet)--"
+        "(i:TaskInstance {任务类型: '专属'})--(g:Game)"
+    ),
+    row_fields=("g", "support_count", "taskset_count", "task_instance_count"),
+    group_field="g",
+    query=SYMPTOM_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+)
+
 UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     name="unknown_taskset_task_game_sampled_per_game",
     category=GraphQueryCategory.ENTITY_EXPANSION,
@@ -196,6 +229,21 @@ UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC = _spec(
     row_fields=("un", "s", "i", "g"),
     group_field="g",
     query=UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
+)
+
+UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_SPEC = _spec(
+    name="unknown_education_age_exclusive_task_game",
+    category=GraphQueryCategory.ENTITY_EXPANSION,
+    description="按未知节点、执行学历和执行年龄范围查询专属任务相关游戏",
+    source_label="Unknown",
+    source_parameters=("unknown_id", "education", "min_age", "max_age"),
+    path_shape=(
+        "(un:Unknown)--(s:TaskInstanceSet)--"
+        "(i:TaskInstance {任务类型: '专属'})--(g:Game)"
+    ),
+    row_fields=("g", "support_count", "taskset_count", "task_instance_count"),
+    group_field="g",
+    query=UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
 )
 
 PATIENT_IDENTITY_SPECS = (
@@ -710,10 +758,13 @@ PATIENT_SCORE_COMPARISON_SPECS = (
 GRAPH_QUERY_SPEC_LIST = (
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC,
     DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC,
+    DISEASE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_SPEC,
     SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC,
     SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC,
+    SYMPTOM_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_SPEC,
     UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_SPEC,
     UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_SPEC,
+    UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_SPEC,
     *PATIENT_IDENTITY_SPECS,
     *PATIENT_TRAINING_HISTORY_SPECS,
     *PATIENT_GAME_COLLECTION_SPECS,

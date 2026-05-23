@@ -4,18 +4,18 @@
 
 1. `scripts/build_pattern_paths.py` 或 pipeline 先从 Neo4j 生成并保存某个患者的 paths。
 2. 本脚本从本地 JSON 存储读取这些 paths，用对应 pattern 的 scorer 给每条 path 打分。
-3. 下游 `scripts/build_similar_user_candidates.py` 会读取这里的评分结果，按 top-k path
+3. 下游 `scripts/build_similar_user_candidates.py` 会读取这里的评分结果，按配置保留的 path
    去重候选用户，再计算 candidate_score。
 
 它不会重新查 Neo4j 生成 path，也不会直接推荐 task；它只负责“给已保存 path 排序/筛选”。
 
 常用执行方式：
 
-    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --top-k 50
+    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient
 
 批量评分配置中的 patient 起点模式：
 
-    python scripts/score_pattern_paths.py --source-id 30010096 --patterns-from-config --top-k 50
+    python scripts/score_pattern_paths.py --source-id 30010096 --patterns-from-config
 
 调试单条 path，不保存评分文件：
 
@@ -103,12 +103,6 @@ def parse_args() -> argparse.Namespace:
         help="Only score one path at the given zero-based index.",
     )
     parser.add_argument(
-        "--top-k",
-        type=int,
-        default=None,
-        help="Return the top-k scored paths ordered by total_score descending.",
-    )
-    parser.add_argument(
         "--age",
         default=None,
         help=(
@@ -144,10 +138,10 @@ def score_pattern_paths(
     pattern: str = DEFAULT_PATTERN,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
-    top_k: int | None = None,
 ) -> dict[str, object]:
     """Load a saved pattern result and score its domain paths."""
     started_at = time.perf_counter()
+    top_k = load_query_settings(config_path).score_pattern_paths.top_k
     LOGGER.debug(
         "Scoring pattern paths: source_id=%s, pattern=%s, path_index=%s, top_k=%s, config_path=%s",
         source_id,
@@ -159,9 +153,6 @@ def score_pattern_paths(
     stored_result = PatternResultStore(config_path).load(pattern, source_id)
     scorer = get_path_scorer(stored_result.pattern)
     domain_paths = stored_result.to_domain_paths()
-
-    if top_k is not None and top_k <= 0:
-        raise ValueError(f"top_k must be greater than 0, got {top_k}.")
 
     if path_index is not None:
         if path_index < 0 or path_index >= len(domain_paths):
@@ -243,11 +234,12 @@ def score_configured_pattern_paths(
     *,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
-    top_k: int | None = None,
 ) -> list[dict[str, object]]:
     """Score all configured patient-source pattern paths for one source patient."""
     started_at = time.perf_counter()
-    ranking_settings = load_query_settings(config_path).candidate_ranking
+    query_settings = load_query_settings(config_path)
+    ranking_settings = query_settings.candidate_ranking
+    top_k = query_settings.score_pattern_paths.top_k
     selected_patterns = tuple(ranking_settings.patterns)
     _validate_patient_source_patterns(selected_patterns)
     LOGGER.info(
@@ -264,7 +256,6 @@ def score_configured_pattern_paths(
             pattern=pattern,
             config_path=config_path,
             path_index=path_index,
-            top_k=top_k,
         )
         for pattern in selected_patterns
     ]
@@ -284,7 +275,6 @@ def score_and_save_configured_pattern_paths(
     *,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
-    top_k: int | None = None,
     output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
 ) -> list[dict[str, object]]:
     """Score configured patient-source pattern paths and persist each result."""
@@ -292,7 +282,6 @@ def score_and_save_configured_pattern_paths(
         source_id,
         config_path=config_path,
         path_index=path_index,
-        top_k=top_k,
     )
     save_scored_pattern_results(results, output_dir=output_dir)
     return results
@@ -528,7 +517,6 @@ def main() -> int:
                 args.source_id,
                 config_path=args.config,
                 path_index=args.path_index,
-                top_k=args.top_k,
             )
         else:
             result = score_pattern_paths(
@@ -536,7 +524,6 @@ def main() -> int:
                 pattern=args.pattern,
                 config_path=args.config,
                 path_index=args.path_index,
-                top_k=args.top_k,
             )
         if args.path_index is None:
             save_scored_pattern_results(
