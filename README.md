@@ -145,6 +145,12 @@ python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --windo
 
 # 小样本冒烟：限制评估前 N 个用户，并跳过 LLM 调用
 python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --window-days 14 --limit 10 --dry-run
+
+# 调参实验：按实验 YAML 批量运行，并按 stage 隔离输出目录
+python scripts/run_evaluation_grid.py --experiment-config config/experiments/evaluation_grid.yaml
+python scripts/run_evaluation_grid.py --experiment-config config/experiments/evaluation_grid.yaml --dry-run
+python scripts/run_evaluation_grid.py --experiment-config config/experiments/evaluation_grid.yaml --force
+python scripts/run_evaluation_grid.py --experiment-config config/experiments/evaluation_grid.yaml --write-promoted-baseline
 ```
 
 `run_similar_user_pipeline.py` 默认会先重新生成并保存固定模式 path，再读取保存结果打分并生成候选用户。如果已经有可用的离线路径结果，可以使用 `--skip-path-build` 跳过 path 检索。脚本默认使用 `--output-level ids`，候选用户仅以 `candidate_ids` 列出全部 `patient_id`；使用 `--output-level scores` 时输出 `patient_id` 和 `candidate_score`；使用 `--output-level full` 时输出完整 `candidate_result` 和候选明细。
@@ -231,6 +237,103 @@ query:
 ```bash
 grep '"status": "failed"' data/evaluation/predict_training_tasks_details.jsonl | head -n 5
 ```
+
+### 评估调参实验
+
+`scripts/run_evaluation_grid.py` 用于按实验 YAML 批量运行训练任务预测评估。推荐一个阶段一份 YAML，避免 10 用户粗筛、100 用户复验和多日期验证互相覆盖：
+
+```text
+config/experiments/evaluation_grid_coarse_10_users.yaml
+config/experiments/evaluation_grid_validate_100_users.yaml
+config/experiments/evaluation_grid_multi_date.yaml
+```
+
+每份实验 YAML 通过 `stage` 隔离输出目录。例如：
+
+```yaml
+stage: "coarse_10_users"
+
+base:
+  base_date: "2023-10-15"
+  window_days: 14
+  task_top_k: 7
+  use_llm: true
+  skip_path_build: true
+  limit: 10
+
+baseline_overrides:
+  query.candidate_ranking.disease_course_window_days: 14
+  query.candidate_ranking.total_score_match_top_k: 1
+
+experiments:
+  - name: baseline_best
+    overrides: {}
+
+  - name: prompt_template_v1
+    overrides:
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V1"
+```
+
+实际参数合并规则：
+
+```text
+settings.yaml + baseline_overrides + 当前 experiment.overrides
+```
+
+如果 `experiment.overrides` 和 `baseline_overrides` 有相同参数，以 `experiment.overrides` 为准。
+
+执行 10 用户粗筛：
+
+```bash
+python scripts/run_evaluation_grid.py \
+  --experiment-config config/experiments/evaluation_grid_coarse_10_users.yaml
+```
+
+执行 100 用户复验时，复制一份新 YAML，修改 `stage` 和 `base.limit`：
+
+```yaml
+stage: "validate_100_users"
+
+base:
+  limit: 100
+```
+
+然后执行：
+
+```bash
+python scripts/run_evaluation_grid.py \
+  --experiment-config config/experiments/evaluation_grid_validate_100_users.yaml
+```
+
+输出目录会按 `stage` 自动分开：
+
+```text
+data/evaluation_grid/coarse-10-users/
+data/evaluation_grid/validate-100-users/
+```
+
+每个 stage 目录下会生成：
+
+```text
+generated_configs/   # 每组实验生成的临时 settings YAML
+runs/                # 每组实验的评估输出
+logs/                # 每组实验日志
+leaderboard.csv      # 按指标排序的排行榜
+leaderboard.json
+grid_summary.json
+```
+
+如果某组实验目录下已经存在 `predict_training_tasks_summary.json`，默认会跳过；需要强制重跑时加 `--force`。
+
+回写推荐基准参数时使用：
+
+```bash
+python scripts/run_evaluation_grid.py \
+  --experiment-config config/experiments/evaluation_grid_coarse_10_users.yaml \
+  --write-promoted-baseline
+```
+
+该命令会把 leaderboard 第一名写入当前 `--experiment-config` 指定的 YAML 文件的 `promoted_baseline_overrides`，但不会修改正在生效的 `baseline_overrides`。如果文件中已经存在 `promoted_baseline_overrides`，旧块会被注释保留，新块写在后面。确认后可人工将 `promoted_baseline_overrides.overrides` 提升到 `baseline_overrides`。
 
 ## 特定模式路径主流程
 
