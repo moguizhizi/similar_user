@@ -1,7 +1,8 @@
-"""Run training-task evaluation over YAML-defined experiment overrides.
+"""Run training-task evaluation over YAML-defined staged experiment overrides.
 
-实验配置文件只描述每组实验要覆盖哪些 YAML 参数；本脚本会基于默认
-settings.yaml 为每组参数生成一份临时配置，并调用 evaluate_predict_training_tasks.py。
+实验配置文件只描述本阶段基准参数和每组实验要覆盖哪些 YAML 参数；
+本脚本会基于默认 settings.yaml 为每组参数生成一份临时配置，并调用
+evaluate_predict_training_tasks.py。
 """
 
 from __future__ import annotations
@@ -76,7 +77,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--experiment-config",
         default=str(DEFAULT_EXPERIMENT_CONFIG_PATH),
-        help="YAML file containing base options and grid overrides.",
+        help="YAML file containing stage, base options, and experiment overrides.",
     )
     parser.add_argument(
         "--settings",
@@ -129,6 +130,21 @@ def load_experiment_config(path: str | Path) -> dict[str, Any]:
     return data
 
 
+def get_stage_name(experiment_config: dict[str, Any]) -> str:
+    """Return the experiment stage name used to isolate outputs."""
+    raw_stage = experiment_config.get("stage")
+    if raw_stage is None:
+        raise ValueError("experiment config must define a non-empty stage.")
+    if not isinstance(raw_stage, str) or not raw_stage.strip():
+        raise ValueError("experiment stage must be a non-empty string.")
+    return raw_stage.strip()
+
+
+def build_stage_output_root(output_root: str | Path, stage: str) -> Path:
+    """Return the stage-specific output root."""
+    return Path(output_root) / _slug_part(stage)
+
+
 def build_grid_overrides(grid: dict[str, Any]) -> list[dict[str, Any]]:
     """Expand a mapping of dot-path parameters into cartesian-product overrides."""
     if not grid:
@@ -171,19 +187,39 @@ def build_experiment_override_specs(
     experiment_config: dict[str, Any],
 ) -> list[tuple[str | None, dict[str, Any]]]:
     """Build override specs from explicit experiments or legacy grid."""
+    baseline_overrides = get_baseline_overrides(experiment_config)
     experiments = experiment_config.get("experiments")
     if experiments is not None:
         if not isinstance(experiments, list) or not experiments:
             raise ValueError("experiments must be a non-empty list when provided.")
         return [
-            (name, overrides)
+            (name, merge_overrides(baseline_overrides, overrides))
             for name, overrides in build_named_experiment_overrides(experiments)
         ]
 
     grid = experiment_config.get("grid") or {}
     if not isinstance(grid, dict):
         raise ValueError("experiment grid section must be a mapping.")
-    return [(None, overrides) for overrides in build_grid_overrides(grid)]
+    return [
+        (None, merge_overrides(baseline_overrides, overrides))
+        for overrides in build_grid_overrides(grid)
+    ]
+
+
+def get_baseline_overrides(experiment_config: dict[str, Any]) -> dict[str, Any]:
+    """Return shared baseline overrides inherited by every experiment."""
+    baseline_overrides = experiment_config.get("baseline_overrides") or {}
+    if not isinstance(baseline_overrides, dict):
+        raise ValueError("baseline_overrides must be a mapping when provided.")
+    return dict(baseline_overrides)
+
+
+def merge_overrides(
+    base_overrides: dict[str, Any],
+    experiment_overrides: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge shared and per-experiment overrides, with experiment values winning."""
+    return {**base_overrides, **experiment_overrides}
 
 
 def apply_dot_path_override(
@@ -562,14 +598,15 @@ def _slug_part(value: Any) -> str:
 def main() -> int:
     """Run the evaluation grid workflow."""
     args = parse_args()
-    output_root = Path(args.output_root)
-    generated_config_dir = (
-        Path(args.generated_config_dir)
-        if args.generated_config_dir is not None
-        else output_root / "generated_configs"
-    )
     try:
         experiment_config = load_experiment_config(args.experiment_config)
+        stage = get_stage_name(experiment_config)
+        output_root = build_stage_output_root(args.output_root, stage)
+        generated_config_dir = (
+            Path(args.generated_config_dir)
+            if args.generated_config_dir is not None
+            else output_root / "generated_configs"
+        )
         runs = build_grid_runs(
             experiment_config=experiment_config,
             settings_path=args.settings,
@@ -583,6 +620,7 @@ def main() -> int:
             force=args.force,
             keep_going=not args.stop_on_failure,
         )
+        result["stage"] = stage
         leaderboard = build_leaderboard(runs, rank_by=args.rank_by)
         leaderboard_json_path, leaderboard_csv_path = write_leaderboard_outputs(
             leaderboard,

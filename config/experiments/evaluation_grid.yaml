@@ -1,3 +1,5 @@
+stage: "coarse_10_users"
+
 base:
   base_date: "2023-10-15"
   window_days: 14
@@ -6,31 +8,24 @@ base:
   skip_path_build: true
   limit: 10
 
+baseline_overrides:
+  query.candidate_ranking.disease_course_window_days: 14
+  query.candidate_ranking.total_score_match_top_k: 1
+  query.score_pattern_paths.top_k: 150
+  query.training_task_prediction.prompt_candidate_compression_enabled: false
+
 experiments:
-  - name: baseline
-    overrides:
-      query.candidate_ranking.disease_course_window_days: 14
-      query.candidate_ranking.total_score_match_top_k: 1
-      query.score_pattern_paths.top_k: 150
-      query.training_task_prediction.prompt_candidate_compression_enabled: false
+  - name: baseline_best
+    overrides: {}
 
   - name: wider_disease_course_window
     overrides:
       query.candidate_ranking.disease_course_window_days: 30
-      query.candidate_ranking.total_score_match_top_k: 3
-      query.score_pattern_paths.top_k: 50
-      query.training_task_prediction.prompt_candidate_compression_enabled: false
 
   - name: more_path_candidates
     overrides:
-      query.candidate_ranking.disease_course_window_days: 14
       query.candidate_ranking.total_score_match_top_k: 10
-      query.score_pattern_paths.top_k: 50
-      query.training_task_prediction.prompt_candidate_compression_enabled: false
 
   - name: prompt_compression_on
     overrides:
-      query.candidate_ranking.disease_course_window_days: 14
-      query.candidate_ranking.total_score_match_top_k: 3
-      query.score_pattern_paths.top_k: 50
       query.training_task_prediction.prompt_candidate_compression_enabled: true

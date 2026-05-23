@@ -44,6 +44,10 @@ class RunEvaluationGridTest(unittest.TestCase):
     def test_build_experiment_override_specs_prefers_named_experiments(self) -> None:
         specs = run_evaluation_grid.build_experiment_override_specs(
             {
+                "baseline_overrides": {
+                    "query.score_pattern_paths.top_k": 50,
+                    "query.candidate_ranking.total_score_match_top_k": 3,
+                },
                 "experiments": [
                     {
                         "name": "baseline",
@@ -69,13 +73,37 @@ class RunEvaluationGridTest(unittest.TestCase):
             [
                 (
                     "baseline",
-                    {"query.candidate_ranking.disease_course_window_days": 14},
+                    {
+                        "query.score_pattern_paths.top_k": 50,
+                        "query.candidate_ranking.total_score_match_top_k": 3,
+                        "query.candidate_ranking.disease_course_window_days": 14,
+                    },
                 ),
                 (
                     "more_path_candidates",
-                    {"query.candidate_ranking.total_score_match_top_k": 10},
+                    {
+                        "query.score_pattern_paths.top_k": 50,
+                        "query.candidate_ranking.total_score_match_top_k": 10,
+                    },
                 ),
             ],
+        )
+
+    def test_get_stage_name_requires_stage(self) -> None:
+        self.assertEqual(
+            run_evaluation_grid.get_stage_name({"stage": "coarse_10_users"}),
+            "coarse_10_users",
+        )
+        with self.assertRaisesRegex(ValueError, "stage"):
+            run_evaluation_grid.get_stage_name({})
+
+    def test_build_stage_output_root_uses_stage_subdirectory(self) -> None:
+        self.assertEqual(
+            run_evaluation_grid.build_stage_output_root(
+                "data/evaluation_grid",
+                "coarse 10 users",
+            ),
+            Path("data/evaluation_grid/coarse-10-users"),
         )
 
     def test_build_experiment_override_specs_falls_back_to_grid(self) -> None:
@@ -92,6 +120,34 @@ class RunEvaluationGridTest(unittest.TestCase):
             [
                 (None, {"query.score_pattern_paths.top_k": 30}),
                 (None, {"query.score_pattern_paths.top_k": 50}),
+            ],
+        )
+
+    def test_build_experiment_override_specs_merges_baseline_overrides_with_grid(
+        self,
+    ) -> None:
+        specs = run_evaluation_grid.build_experiment_override_specs(
+            {
+                "baseline_overrides": {
+                    "query.candidate_ranking.disease_course_window_days": 14,
+                    "query.score_pattern_paths.top_k": 50,
+                },
+                "grid": {
+                    "query.score_pattern_paths.top_k": [80],
+                },
+            }
+        )
+
+        self.assertEqual(
+            specs,
+            [
+                (
+                    None,
+                    {
+                        "query.candidate_ranking.disease_course_window_days": 14,
+                        "query.score_pattern_paths.top_k": 80,
+                    },
+                )
             ],
         )
 
