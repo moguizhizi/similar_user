@@ -26,6 +26,132 @@ RETURN
     collect(DISTINCT un) AS unknowns
 """.strip()
 
+PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(profile_s:TaskInstanceSet)
+
+WHERE
+    p.`性别` IS NOT NULL AND
+    profile_s.`训练日期` IS NOT NULL AND
+    date(profile_s.`训练日期`) <= date($base_date)
+
+WITH
+    p,
+    max(date(profile_s.`训练日期`)) AS effective_date
+
+MATCH (p)
+--(profile_s:TaskInstanceSet)
+
+WHERE
+    date(profile_s.`训练日期`) = effective_date AND
+    profile_s.`执行学历` IS NOT NULL AND
+    profile_s.`执行年龄` IS NOT NULL
+
+WITH
+    effective_date,
+    profile_s,
+    p.`性别` AS gender,
+    profile_s.`执行学历` AS education,
+    toInteger(toFloat(profile_s.`执行年龄`)) AS age
+
+OPTIONAL MATCH (profile_s)--(dis:Disease)
+WITH
+    effective_date,
+    profile_s,
+    gender,
+    education,
+    age,
+    [x IN collect(DISTINCT dis) WHERE x IS NOT NULL] AS diseases
+
+OPTIONAL MATCH (profile_s)--(sym:Symptom)
+WITH
+    effective_date,
+    profile_s,
+    gender,
+    education,
+    age,
+    diseases,
+    [x IN collect(DISTINCT sym) WHERE x IS NOT NULL] AS symptoms
+
+OPTIONAL MATCH (profile_s)--(un:Unknown)
+WITH
+    effective_date,
+    gender,
+    education,
+    age,
+    CASE
+        WHEN age - $age_window < 0 THEN 0
+        ELSE age - $age_window
+    END AS min_age,
+    age + $age_window AS max_age,
+    diseases,
+    symptoms,
+    [x IN collect(DISTINCT un) WHERE x IS NOT NULL] AS unknowns
+
+CALL {
+    WITH diseases, gender, education, min_age, max_age
+    UNWIND diseases AS entity
+    MATCH (entity)--(s:TaskInstanceSet)--(candidate_p:Patient)
+    MATCH (s)--(i:TaskInstance)--(g:Game)
+    WHERE
+        candidate_p.`性别` = gender AND
+        i.`任务类型` = "专属" AND
+        s.`执行学历` = education AND
+        s.`执行年龄` IS NOT NULL AND
+        toInteger(toFloat(s.`执行年龄`)) >= min_age AND
+        toInteger(toFloat(s.`执行年龄`)) <= max_age
+    RETURN
+        g,
+        s,
+        i
+
+    UNION ALL
+
+    WITH symptoms, gender, education, min_age, max_age
+    UNWIND symptoms AS entity
+    MATCH (entity)--(s:TaskInstanceSet)--(candidate_p:Patient)
+    MATCH (s)--(i:TaskInstance)--(g:Game)
+    WHERE
+        candidate_p.`性别` = gender AND
+        i.`任务类型` = "专属" AND
+        s.`执行学历` = education AND
+        s.`执行年龄` IS NOT NULL AND
+        toInteger(toFloat(s.`执行年龄`)) >= min_age AND
+        toInteger(toFloat(s.`执行年龄`)) <= max_age
+    RETURN
+        g,
+        s,
+        i
+
+    UNION ALL
+
+    WITH unknowns, gender, education, min_age, max_age
+    UNWIND unknowns AS entity
+    MATCH (entity)--(s:TaskInstanceSet)--(candidate_p:Patient)
+    MATCH (s)--(i:TaskInstance)--(g:Game)
+    WHERE
+        candidate_p.`性别` = gender AND
+        i.`任务类型` = "专属" AND
+        s.`执行学历` = education AND
+        s.`执行年龄` IS NOT NULL AND
+        toInteger(toFloat(s.`执行年龄`)) >= min_age AND
+        toInteger(toFloat(s.`执行年龄`)) <= max_age
+    RETURN
+        g,
+        s,
+        i
+}
+
+RETURN
+    g,
+    age AS profile_age,
+    gender AS profile_gender,
+    education AS profile_education,
+    count(*) AS support_count
+
+ORDER BY support_count DESC, toString(g.id) ASC
+""".strip()
+
 PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY = """
 MATCH (p:Patient {id: $patient_id})
 --(s1:TaskInstanceSet)

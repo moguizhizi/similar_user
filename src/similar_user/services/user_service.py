@@ -30,9 +30,16 @@ class UserService:
         """Return all patient IDs in the graph."""
         return self.kg_repository.get_patient_ids()
 
-    def get_patient_ids_with_training_on_date(self, base_date: str) -> list[str]:
+    def get_patient_ids_with_training_on_date(
+        self,
+        base_date: str,
+        limit: int | None = None,
+    ) -> list[str]:
         """Return patient IDs with training records on base_date."""
-        return self.kg_repository.get_patient_ids_with_training_on_date(base_date)
+        return self.kg_repository.get_patient_ids_with_training_on_date(
+            base_date,
+            limit,
+        )
 
     def get_source_patient_ids_with_secondary_ability_scores(self) -> list[str]:
         """Return source patient IDs with secondary ability training records."""
@@ -51,6 +58,64 @@ class UserService:
         return self.kg_repository.get_patient_profile_entities_by_effective_date(
             patient_id,
             base_date,
+        )
+
+    def get_patient_profile_education_age_exclusive_task_games(
+        self,
+        patient_id: str,
+        base_date: str,
+        age_window: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching patient profile and age window."""
+        return self.kg_repository.get_patient_profile_education_age_exclusive_task_games(
+            patient_id,
+            base_date,
+            age_window,
+        )
+
+    def get_disease_education_age_exclusive_task_games(
+        self,
+        disease_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching disease, education, and age range."""
+        return self.kg_repository.get_disease_education_age_exclusive_task_games(
+            disease_id,
+            education,
+            min_age,
+            max_age,
+        )
+
+    def get_symptom_education_age_exclusive_task_games(
+        self,
+        symptom_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching symptom, education, and age range."""
+        return self.kg_repository.get_symptom_education_age_exclusive_task_games(
+            symptom_id,
+            education,
+            min_age,
+            max_age,
+        )
+
+    def get_unknown_education_age_exclusive_task_games(
+        self,
+        unknown_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching unknown, education, and age range."""
+        return self.kg_repository.get_unknown_education_age_exclusive_task_games(
+            unknown_id,
+            education,
+            min_age,
+            max_age,
         )
 
     def get_patient_profile_candidate_training_games(

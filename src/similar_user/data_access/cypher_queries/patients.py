@@ -16,6 +16,18 @@ RETURN DISTINCT p.id AS patient_id
 ORDER BY patient_id
 """.strip()
 
+PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY = """
+MATCH (p:Patient)
+--(s:TaskInstanceSet)
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) = date($base_date)
+WITH DISTINCT p.id AS patient_id
+ORDER BY patient_id
+LIMIT $limit
+RETURN patient_id
+""".strip()
+
 SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY = """
 MATCH (p:Patient)
 --(s:TaskInstanceSet)

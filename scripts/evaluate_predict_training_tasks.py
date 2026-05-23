@@ -19,6 +19,7 @@ import json
 import math
 import sys
 import time
+from collections import Counter
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,7 @@ from similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
 )
 from similar_user.services.task_prediction import (
+    CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
     DEFAULT_TASK_TOP_K,
     build_game_counts_from_history,
     parse_date_value,
@@ -48,6 +50,11 @@ from scripts.predict_training_tasks import (
     DEFAULT_PROMPT_OUTPUT_DIR,
     run_end_to_end_training_task_prediction,
     write_prompt_to_file,
+)
+from scripts.export_patient_ids_with_training_on_date import (
+    DEFAULT_OUTPUT_DIR as DEFAULT_PATIENT_IDS_OUTPUT_DIR,
+    build_patient_ids_output_path,
+    export_patient_ids_with_training_on_date,
 )
 from scripts.run_similar_user_pipeline import EmptyPathResultsError
 from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
@@ -63,16 +70,16 @@ def parse_args() -> argparse.Namespace:
         description="Evaluate same-day training-task prediction metrics."
     )
     parser.add_argument(
-        "patient_ids_file",
-        nargs="?",
-        help=(
-            "Optional text file with one patient_id per line; blank lines and # comments "
-            "are ignored. If omitted, all Patient IDs are read from Neo4j."
-        ),
-    )
-    parser.add_argument(
         "--patient-id",
         help="Evaluate only this patient_id instead of a file or the full patient list.",
+    )
+    parser.add_argument(
+        "--patient-list-dir",
+        default=str(DEFAULT_PATIENT_IDS_OUTPUT_DIR),
+        help=(
+            "Base directory for patient ID files generated from base_date when "
+            "--patient-id is omitted."
+        ),
     )
     parser.add_argument(
         "--base-date",
@@ -138,6 +145,11 @@ def parse_args() -> argparse.Namespace:
         help="Per-patient detail JSONL filename under output-dir.",
     )
     parser.add_argument(
+        "--analysis-file",
+        default="predict_training_tasks_analysis.json",
+        help="Analysis JSON filename under output-dir.",
+    )
+    parser.add_argument(
         "--no-save-prompt",
         action="store_true",
         help="Do not save generated LLM prompts during evaluation.",
@@ -153,14 +165,6 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Evaluate at most this many patient IDs after loading them.",
     )
-    parser.add_argument(
-        "--active-on-base-date",
-        action="store_true",
-        help=(
-            "When patient_ids_file is omitted, evaluate only patients with "
-            "training records on base_date."
-        ),
-    )
     return parser.parse_args()
 
 
@@ -173,6 +177,18 @@ def read_patient_ids(path: str | Path) -> list[str]:
             continue
         patient_ids.append(value)
     return patient_ids
+
+
+def build_patient_ids_file_from_base_date(
+    *,
+    base_date: str,
+    patient_list_dir: str | Path = DEFAULT_PATIENT_IDS_OUTPUT_DIR,
+) -> Path:
+    """Build the expected patient ID file path for the evaluation base date."""
+    return build_patient_ids_output_path(
+        base_date=base_date,
+        output_dir=patient_list_dir,
+    )
 
 
 def evaluate_patient(
@@ -550,6 +566,206 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
     }
 
 
+def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """Analyze rank and task distributions from per-patient evaluation details."""
+    evaluated_details = [
+        detail for detail in details if detail.get("status") == "success_evaluated"
+    ]
+    predicted_ranks: list[int] = []
+    actual_ranks: list[int] = []
+    matched_actual_ranks: list[int] = []
+    missed_actual_ranks: list[int] = []
+    predicted_missing_count = 0
+    actual_missing_count = 0
+    predicted_games: Counter[tuple[str, str | None]] = Counter()
+    actual_games: Counter[tuple[str, str | None]] = Counter()
+    matched_games: Counter[tuple[str, str | None]] = Counter()
+    missed_actual_games: Counter[tuple[str, str | None]] = Counter()
+    per_patient: list[dict[str, Any]] = []
+
+    for detail in evaluated_details:
+        matched_game_ids = set(dedupe_texts(detail.get("matched_game_ids") or []))
+        predicted_counts = _list_dicts(
+            detail.get("predicted_game_similar_user_counts")
+        )
+        actual_counts = _list_dicts(detail.get("actual_game_similar_user_counts"))
+
+        for item in predicted_counts:
+            game_id = normalize_text(item.get("game_id"))
+            if game_id is None:
+                continue
+            game_name = normalize_text(item.get("game_name"))
+            predicted_games[(game_id, game_name)] += 1
+            rank = _rank_value(item)
+            if rank is None:
+                predicted_missing_count += 1
+            else:
+                predicted_ranks.append(rank)
+
+        for item in actual_counts:
+            game_id = normalize_text(item.get("game_id"))
+            if game_id is None:
+                continue
+            game_name = normalize_text(item.get("game_name"))
+            actual_games[(game_id, game_name)] += 1
+            rank = _rank_value(item)
+            if rank is None:
+                actual_missing_count += 1
+            else:
+                actual_ranks.append(rank)
+            if game_id in matched_game_ids:
+                matched_games[(game_id, game_name)] += 1
+                if rank is not None:
+                    matched_actual_ranks.append(rank)
+            else:
+                missed_actual_games[(game_id, game_name)] += 1
+                if rank is not None:
+                    missed_actual_ranks.append(rank)
+
+        per_patient.append(
+            {
+                "patient_id": detail.get("patient_id"),
+                "task_hit": detail.get("task_hit"),
+                "matched_task_count": detail.get("matched_task_count", 0),
+                "predicted_task_count": detail.get("predicted_task_count", 0),
+                "actual_task_count": detail.get("actual_task_count", 0),
+                "precision": detail.get("precision"),
+                "recall": detail.get("recall"),
+                "predicted_rank_min": _min_rank(predicted_counts),
+                "predicted_rank_max": _max_rank(predicted_counts),
+                "actual_rank_min": _min_rank(actual_counts),
+                "actual_rank_max": _max_rank(actual_counts),
+                "similar_user_game_counts_task_count": detail.get(
+                    "similar_user_game_counts_task_count"
+                ),
+                "elapsed_seconds": detail.get("elapsed_seconds"),
+            }
+        )
+
+    similar_user_game_counts_task_counts = [
+        int(detail["similar_user_game_counts_task_count"])
+        for detail in evaluated_details
+        if isinstance(detail.get("similar_user_game_counts_task_count"), int | float)
+    ]
+
+    return {
+        "evaluated_count": len(evaluated_details),
+        "rank_stats": {
+            "predicted": build_number_stats(predicted_ranks),
+            "actual": build_number_stats(actual_ranks),
+            "matched_actual": build_number_stats(matched_actual_ranks),
+            "missed_actual": build_number_stats(missed_actual_ranks),
+        },
+        "rank_buckets": {
+            "predicted": build_rank_buckets(predicted_ranks),
+            "actual": build_rank_buckets(actual_ranks),
+            "matched_actual": build_rank_buckets(matched_actual_ranks),
+            "missed_actual": build_rank_buckets(missed_actual_ranks),
+        },
+        "missing_from_similar_user_game_counts": {
+            "predicted_task_count": predicted_missing_count,
+            "actual_task_count": actual_missing_count,
+        },
+        "similar_user_game_counts_task_count_stats": build_number_stats(
+            similar_user_game_counts_task_counts
+        ),
+        "top_predicted_games": _counter_to_game_rows(predicted_games),
+        "top_actual_games": _counter_to_game_rows(actual_games),
+        "top_matched_games": _counter_to_game_rows(matched_games),
+        "top_missed_actual_games": _counter_to_game_rows(missed_actual_games),
+        "per_patient": per_patient,
+    }
+
+
+def build_number_stats(values: list[int | float]) -> dict[str, Any]:
+    """Build compact numeric distribution stats."""
+    numeric_values = [float(value) for value in values]
+    if not numeric_values:
+        return {
+            "count": 0,
+            "min": None,
+            "p25": None,
+            "median": None,
+            "mean": None,
+            "p75": None,
+            "max": None,
+        }
+    return {
+        "count": len(numeric_values),
+        "min": _clean_number(min(numeric_values)),
+        "p25": _clean_number(percentile(numeric_values, 0.25)),
+        "median": _clean_number(percentile(numeric_values, 0.5)),
+        "mean": round(average_numbers(numeric_values), 4),
+        "p75": _clean_number(percentile(numeric_values, 0.75)),
+        "max": _clean_number(max(numeric_values)),
+    }
+
+
+def build_rank_buckets(ranks: list[int]) -> dict[str, int]:
+    """Bucket similar-user count ranks for quick inspection."""
+    buckets = {"1-7": 0, "8-10": 0, "11-20": 0, "21-50": 0, "51+": 0}
+    for rank in ranks:
+        if rank <= 7:
+            buckets["1-7"] += 1
+        elif rank <= 10:
+            buckets["8-10"] += 1
+        elif rank <= 20:
+            buckets["11-20"] += 1
+        elif rank <= 50:
+            buckets["21-50"] += 1
+        else:
+            buckets["51+"] += 1
+    return buckets
+
+
+def _list_dicts(value: Any) -> list[dict[str, Any]]:
+    """Return list items that are dictionaries."""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _rank_value(item: dict[str, Any]) -> int | None:
+    """Return a positive integer rank from a mapped game-count item."""
+    rank = item.get("similar_user_count_rank")
+    if isinstance(rank, int) and not isinstance(rank, bool) and rank > 0:
+        return rank
+    return None
+
+
+def _min_rank(items: list[dict[str, Any]]) -> int | None:
+    ranks = [_rank_value(item) for item in items]
+    present_ranks = [rank for rank in ranks if rank is not None]
+    return min(present_ranks, default=None)
+
+
+def _max_rank(items: list[dict[str, Any]]) -> int | None:
+    ranks = [_rank_value(item) for item in items]
+    present_ranks = [rank for rank in ranks if rank is not None]
+    return max(present_ranks, default=None)
+
+
+def _counter_to_game_rows(
+    counter: Counter[tuple[str, str | None]],
+    *,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Convert game counters to JSON-friendly rows."""
+    return [
+        {
+            "game_id": game_id,
+            "game_name": game_name,
+            "count": count,
+        }
+        for (game_id, game_name), count in counter.most_common(limit)
+    ]
+
+
+def _clean_number(value: float) -> int | float:
+    """Return ints without a trailing decimal for JSON readability."""
+    return int(value) if value.is_integer() else round(value, 4)
+
+
 def write_outputs(
     details: list[dict[str, Any]],
     summary: dict[str, Any],
@@ -577,6 +793,23 @@ def write_outputs(
     return summary_path, details_path
 
 
+def write_analysis_output(
+    analysis: dict[str, Any],
+    *,
+    output_dir: str | Path,
+    analysis_file: str,
+) -> Path:
+    """Write analysis JSON output."""
+    resolved_output_dir = Path(output_dir)
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    analysis_path = resolved_output_dir / analysis_file
+    analysis_path.write_text(
+        json.dumps(analysis, ensure_ascii=False, indent=2, default=str) + "\n",
+        encoding="utf-8",
+    )
+    return analysis_path
+
+
 def build_experiment_config(
     *,
     base_date: str,
@@ -587,7 +820,6 @@ def build_experiment_config(
     query_family: str | None,
     task_top_k: int,
     use_llm: bool,
-    active_on_base_date: bool,
 ) -> dict[str, Any]:
     """Build experiment metadata saved with evaluation outputs."""
     query_settings = load_query_settings(config_path)
@@ -597,6 +829,7 @@ def build_experiment_config(
     fallback_candidate_task_window_days = (
         query_settings.training_task_prediction.candidate_task_window_days
     )
+    scored_path_top_k = query_settings.score_pattern_paths.top_k
     return {
         "base_date": base_date,
         "window_days": window_days,
@@ -606,7 +839,8 @@ def build_experiment_config(
         "query_family": query_family,
         "task_top_k": task_top_k,
         "use_llm": use_llm,
-        "active_on_base_date": active_on_base_date,
+        "prompt_template": CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
+        "scored_path_top_k": scored_path_top_k,
         "disease_course_window_days": disease_course_window_days,
         "fallback_candidate_task_window_days": fallback_candidate_task_window_days,
         "effective_candidate_task_window_days": (
@@ -652,7 +886,6 @@ def run_batch_evaluation(
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     limit: int | None = None,
-    active_on_base_date: bool = False,
     save_prompt: bool = True,
     prompt_output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
 ) -> list[dict[str, Any]]:
@@ -660,6 +893,8 @@ def run_batch_evaluation(
     started_at = time.perf_counter()
     if limit is not None and limit <= 0:
         raise ValueError(f"limit must be a positive integer, got {limit}.")
+    if not patient_ids:
+        raise ValueError("patient_ids must contain at least one patient ID.")
     details: list[dict[str, Any]] = []
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
@@ -668,23 +903,17 @@ def run_batch_evaluation(
                 config_path=Path(config_path),
             )
         )
-        resolved_patient_ids = resolve_patient_ids_for_evaluation(
-            user_service,
-            patient_ids=patient_ids,
-            base_date=base_date,
-            active_on_base_date=active_on_base_date,
-        )
+        resolved_patient_ids = patient_ids
         if limit is not None:
             resolved_patient_ids = resolved_patient_ids[:limit]
         LOGGER.info(
-            "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, active_on_base_date=%s",
+            "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s",
             len(resolved_patient_ids),
             base_date,
             window_days,
             query_family,
             task_top_k,
             use_llm,
-            active_on_base_date,
         )
         for index, patient_id in enumerate(resolved_patient_ids, start=1):
             detail = evaluate_patient(
@@ -727,13 +956,10 @@ def resolve_patient_ids_for_evaluation(
     *,
     patient_ids: list[str] | None,
     base_date: str,
-    active_on_base_date: bool,
 ) -> list[str]:
     """Resolve the patient ID list used by batch evaluation."""
     if patient_ids is not None:
         return patient_ids
-    if active_on_base_date:
-        return user_service.get_patient_ids_with_training_on_date(base_date)
     return user_service.get_patient_ids()
 
 
@@ -811,9 +1037,8 @@ def main() -> int:
     args = parse_args()
     started_at = time.perf_counter()
     LOGGER.info(
-        "Starting prediction evaluation: patient_id=%s, patient_ids_file=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, output_dir=%s",
+        "Starting prediction evaluation: patient_id=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, output_dir=%s",
         args.patient_id,
-        args.patient_ids_file,
         args.base_date,
         args.window_days,
         args.query_family,
@@ -822,19 +1047,25 @@ def main() -> int:
         args.output_dir,
     )
     try:
-        if args.patient_id is not None and args.patient_ids_file is not None:
+        if args.patient_id is not None:
+            patient_ids = [args.patient_id]
+        else:
+            patient_ids_file = build_patient_ids_file_from_base_date(
+                base_date=args.base_date,
+                patient_list_dir=args.patient_list_dir,
+            )
+            if not Path(patient_ids_file).exists():
+                export_patient_ids_with_training_on_date(
+                    base_date=args.base_date,
+                    config_path=args.config,
+                    output_dir=args.patient_list_dir,
+                )
+            patient_ids = read_patient_ids(patient_ids_file)
+        if not patient_ids:
             raise ValueError(
-                "patient_ids_file and --patient-id cannot be used together."
+                "No patient IDs were provided. Use --patient-id or ensure the "
+                "base_date patient ID file can be generated."
             )
-        patient_ids = (
-            [args.patient_id]
-            if args.patient_id is not None
-            else (
-                read_patient_ids(args.patient_ids_file)
-                if args.patient_ids_file is not None
-                else None
-            )
-        )
         details = run_batch_evaluation(
             patient_ids,
             base_date=args.base_date,
@@ -846,11 +1077,11 @@ def main() -> int:
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             limit=args.limit,
-            active_on_base_date=args.active_on_base_date,
             save_prompt=not args.no_save_prompt,
             prompt_output_dir=args.prompt_output_dir,
         )
         summary = summarize_evaluation_details(details)
+        analysis = analyze_evaluation_details(details)
         experiment_config = build_experiment_config(
             base_date=args.base_date,
             window_days=args.window_days,
@@ -860,7 +1091,6 @@ def main() -> int:
             query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
-            active_on_base_date=args.active_on_base_date,
         )
         summary["experiment_config"] = experiment_config
         resolved_output_dir = build_experiment_output_dir(
@@ -874,12 +1104,17 @@ def main() -> int:
             summary_file=args.summary_file,
             details_file=args.details_file,
         )
+        analysis_path = write_analysis_output(
+            analysis,
+            output_dir=resolved_output_dir,
+            analysis_file=args.analysis_file,
+        )
     except Exception as exc:
         LOGGER.exception("Training task prediction evaluation failed: %s", exc)
         return 1
 
     LOGGER.info(
-        "Completed prediction evaluation: total_count=%s, evaluated_count=%s, not_evaluable_count=%s, failed_count=%s, task_hit_rate=%s, summary_path=%s, details_path=%s, elapsed_seconds=%s",
+        "Completed prediction evaluation: total_count=%s, evaluated_count=%s, not_evaluable_count=%s, failed_count=%s, task_hit_rate=%s, summary_path=%s, details_path=%s, analysis_path=%s, elapsed_seconds=%s",
         summary["total_count"],
         summary["evaluated_count"],
         summary["not_evaluable_count"],
@@ -887,6 +1122,7 @@ def main() -> int:
         summary["task_hit_rate"],
         summary_path,
         details_path,
+        analysis_path,
         round(time.perf_counter() - started_at, 3),
     )
     LOGGER.info(json.dumps(summary, ensure_ascii=False, indent=2, default=str))

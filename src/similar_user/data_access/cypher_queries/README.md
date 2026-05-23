@@ -10,6 +10,7 @@
 |---|---|---|---|---|
 | 查询全库患者 ID | `PATIENT_IDS_QUERY` | `patients.py` | 无 | `patient_id` |
 | 查询指定日期有训练记录的患者 ID | `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | `patients.py` | `base_date` | `patient_id` |
+| 查询指定日期有训练记录的患者 ID，并在查询阶段限制数量 | `PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY` | `patients.py` | `base_date`, `limit` | `patient_id` |
 | 查询可作为 source patient 的二级脑能力患者 ID | `SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY` | `patients.py` | 无 | `patient_id` |
 
 ### 患者训练历史
@@ -41,6 +42,7 @@
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
 | 查询患者在 base_date 当天或之前最近有效日期的画像实体 | `PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `base_date` | `effective_date`, `diseases`, `symptoms`, `unknowns` |
+| 按患者最近画像实体、性别、执行学历和执行年龄范围查询专属任务相关游戏 | `PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | `patient_entity_queries.py` | `patient_id`, `base_date`, `age_window` | `g`, `profile_age`, `profile_gender`, `profile_education`, `support_count` |
 | 查询患者从某日期开始的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date` | `i1` |
 | 查询患者早于 end_date 的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `end_date` | `i1` |
 | 查询患者左闭右开日期区间内的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date`, `end_date` | `i1` |
@@ -75,10 +77,13 @@
 |---|---|---|---|---|
 | 从疾病扩展到相关游戏，每个游戏随机保留一条路径 | `DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `disease_id` | `row` |
 | 从疾病扩展到专属任务相关游戏，每个游戏随机保留一条路径 | `DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `disease_id` | `row` |
+| 按疾病、执行学历和执行年龄范围查询专属任务相关游戏 | `DISEASE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | `entity_expansions.py` | `disease_id`, `education`, `min_age`, `max_age` | `g`, `support_count`, `taskset_count`, `task_instance_count` |
 | 从症状扩展到相关游戏，每个游戏随机保留一条路径 | `SYMPTOM_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `symptom_id` | `row` |
 | 从症状扩展到专属任务相关游戏，每个游戏随机保留一条路径 | `SYMPTOM_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `symptom_id` | `row` |
+| 按症状、执行学历和执行年龄范围查询专属任务相关游戏 | `SYMPTOM_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | `entity_expansions.py` | `symptom_id`, `education`, `min_age`, `max_age` | `g`, `support_count`, `taskset_count`, `task_instance_count` |
 | 从未知节点扩展到相关游戏，每个游戏随机保留一条路径 | `UNKNOWN_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `unknown_id` | `row` |
 | 从未知节点扩展到专属任务相关游戏，每个游戏随机保留一条路径 | `UNKNOWN_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY` | `entity_expansions.py` | `unknown_id` | `row` |
+| 按未知节点、执行学历和执行年龄范围查询专属任务相关游戏 | `UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | `entity_expansions.py` | `unknown_id`, `education`, `min_age`, `max_age` | `g`, `support_count`, `taskset_count`, `task_instance_count` |
 
 ### 固定模式 path 检索
 
@@ -184,6 +189,7 @@ Disease -- TaskInstanceSet -- Patient
 |---|---|---|---|
 | `PATIENT_IDS_QUERY` | 查询全库患者 ID | 无 | `patient_id` |
 | `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | 查询指定日期有训练记录的患者 ID | `base_date` | `patient_id` |
+| `PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY` | 查询指定日期有训练记录的患者 ID，并在查询阶段限制数量 | `base_date`, `limit` | `patient_id` |
 | `SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY` | 查询可作为 source patient 的二级脑能力患者 ID | 无 | `patient_id` |
 
 ### `patient_training_history.py`
@@ -215,6 +221,7 @@ Disease -- TaskInstanceSet -- Patient
 | Query | 用途 | 主要参数 | 返回 |
 |---|---|---|---|
 | `PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY` | 查询患者在 base_date 当天或之前最近有效日期的画像实体 | `patient_id`, `base_date` | `effective_date`, `diseases`, `symptoms`, `unknowns` |
+| `PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | 按患者最近画像实体、性别、执行学历和执行年龄范围查询专属任务相关游戏 | `patient_id`, `base_date`, `age_window` | `g`, `profile_age`, `profile_gender`, `profile_education`, `support_count` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重任务实例 | `patient_id`, `start_date` | `i1` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重任务实例 | `patient_id`, `end_date` | `i1` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重任务实例 | `patient_id`, `start_date`, `end_date` | `i1` |

@@ -57,13 +57,24 @@ class KgRepository:
         )
         return self._extract_patient_ids(rows)
 
-    def get_patient_ids_with_training_on_date(self, base_date: str) -> list[str]:
+    def get_patient_ids_with_training_on_date(
+        self,
+        base_date: str,
+        limit: int | None = None,
+    ) -> list[str]:
         """Return patient IDs with training records on base_date."""
         normalized_base_date = self._normalize_required_string(base_date, "base_date")
-        spec = get_graph_query_spec("patient_ids_with_training_on_date")
+        parameters: dict[str, object] = {"base_date": normalized_base_date}
+        if limit is None:
+            spec = get_graph_query_spec("patient_ids_with_training_on_date")
+        else:
+            if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+                raise ValueError("limit must be a positive integer.")
+            spec = get_graph_query_spec("patient_ids_with_training_on_date_limit")
+            parameters["limit"] = limit
         rows = self.client.run_query(
             query=spec.query,
-            parameters={"base_date": normalized_base_date},
+            parameters=parameters,
         )
         return self._extract_patient_ids(rows)
 
@@ -126,6 +137,27 @@ class KgRepository:
             parameters={"disease_id": normalized_disease_id},
         )
 
+    def get_disease_education_age_exclusive_task_games(
+        self,
+        disease_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching disease, education, and age range."""
+        normalized_disease_id = self._normalize_required_string(
+            disease_id,
+            "disease_id",
+        )
+        return self._get_entity_education_age_exclusive_task_games(
+            query_name="disease_education_age_exclusive_task_game",
+            id_parameter_name="disease_id",
+            entity_id=normalized_disease_id,
+            education=education,
+            min_age=min_age,
+            max_age=max_age,
+        )
+
     def get_symptom_taskset_task_game_sampled_per_game(
         self,
         symptom_id: str,
@@ -158,6 +190,27 @@ class KgRepository:
             parameters={"symptom_id": normalized_symptom_id},
         )
 
+    def get_symptom_education_age_exclusive_task_games(
+        self,
+        symptom_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching symptom, education, and age range."""
+        normalized_symptom_id = self._normalize_required_string(
+            symptom_id,
+            "symptom_id",
+        )
+        return self._get_entity_education_age_exclusive_task_games(
+            query_name="symptom_education_age_exclusive_task_game",
+            id_parameter_name="symptom_id",
+            entity_id=normalized_symptom_id,
+            education=education,
+            min_age=min_age,
+            max_age=max_age,
+        )
+
     def get_unknown_taskset_task_game_sampled_per_game(
         self,
         unknown_id: str,
@@ -188,6 +241,66 @@ class KgRepository:
         return self.client.run_query(
             query=spec.query,
             parameters={"unknown_id": normalized_unknown_id},
+        )
+
+    def get_unknown_education_age_exclusive_task_games(
+        self,
+        unknown_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching unknown, education, and age range."""
+        normalized_unknown_id = self._normalize_required_string(
+            unknown_id,
+            "unknown_id",
+        )
+        return self._get_entity_education_age_exclusive_task_games(
+            query_name="unknown_education_age_exclusive_task_game",
+            id_parameter_name="unknown_id",
+            entity_id=normalized_unknown_id,
+            education=education,
+            min_age=min_age,
+            max_age=max_age,
+        )
+
+    def _get_entity_education_age_exclusive_task_games(
+        self,
+        *,
+        query_name: str,
+        id_parameter_name: str,
+        entity_id: str,
+        education: str,
+        min_age: int,
+        max_age: int,
+    ) -> list[dict[str, object]]:
+        """Run a shared entity/education/age exclusive-task game query."""
+        normalized_education = self._normalize_required_string(
+            education,
+            "education",
+        )
+        if (
+            not isinstance(min_age, int)
+            or isinstance(min_age, bool)
+            or not isinstance(max_age, int)
+            or isinstance(max_age, bool)
+        ):
+            raise ValueError("min_age and max_age must be integers.")
+        if min_age < 0:
+            raise ValueError(f"min_age must be non-negative, got {min_age}.")
+        if max_age < min_age:
+            raise ValueError(
+                f"max_age must be greater than or equal to min_age, got {max_age}."
+            )
+        spec = get_graph_query_spec(query_name)
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                id_parameter_name: entity_id,
+                "education": normalized_education,
+                "min_age": min_age,
+                "max_age": max_age,
+            },
         )
 
     def get_patient_training_date_games_by_start_date(
@@ -580,6 +693,36 @@ class KgRepository:
             parameters={
                 "patient_id": normalized_patient_id,
                 "base_date": normalized_base_date,
+            },
+        )
+
+    def get_patient_profile_education_age_exclusive_task_games(
+        self,
+        patient_id: str,
+        base_date: str,
+        age_window: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching a patient's profile and age window."""
+        normalized_patient_id = patient_id.strip()
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+        if (
+            not isinstance(age_window, int)
+            or isinstance(age_window, bool)
+            or age_window < 0
+        ):
+            raise ValueError("age_window must be a non-negative integer.")
+
+        spec = get_graph_query_spec(
+            "patient_profile_education_age_exclusive_task_game"
+        )
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "base_date": normalized_base_date,
+                "age_window": age_window,
             },
         )
 

@@ -14,6 +14,10 @@ from ..utils.logger import get_logger
 
 LOGGER = get_logger(__name__)
 DEFAULT_TASK_TOP_K = 7
+PROMPT_OVERALL_TOP_N = 30
+PROMPT_HIGH_SCORE_USER_COUNT = 5
+PROMPT_PER_HIGH_SCORE_USER_TOP_K = 5
+PROMPT_MAX_CANDIDATES = 50
 
 SYSTEM_PROMPT = """
 你是训练任务预测助手。你只能基于输入中的目标用户历史、相似用户历史和候选训练任务进行预测。
@@ -44,6 +48,9 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V2 = (
     "返回 JSON 对象，不要添加 Markdown。\n\n"
 )
 
+CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE = TASK_PREDICTION_PROMPT_TEMPLATE_V2
+
 
 @dataclass(frozen=True)
 class SimilarUserCandidate:
@@ -66,6 +73,7 @@ class TrainingTaskPredictionService:
 
     user_service: UserService
     llm_client: LlmClient | None = None
+    prompt_candidate_compression_enabled: bool = True
 
     def predict_from_pipeline_result(
         self,
@@ -148,17 +156,58 @@ class TrainingTaskPredictionService:
             similar_user_task_evidence,
             allowed_candidate_game_ids,
         )
+        if self.prompt_candidate_compression_enabled:
+            prompt_candidate_game_ids = select_prompt_candidate_game_ids(
+                similar_user_game_counts,
+                similar_user_task_evidence,
+                overall_top_n=PROMPT_OVERALL_TOP_N,
+                high_score_user_count=PROMPT_HIGH_SCORE_USER_COUNT,
+                per_high_score_user_top_k=PROMPT_PER_HIGH_SCORE_USER_TOP_K,
+                max_prompt_candidates=PROMPT_MAX_CANDIDATES,
+            )
+            prompt_similar_user_game_counts = filter_game_counts_to_ids(
+                similar_user_game_counts,
+                prompt_candidate_game_ids,
+            )
+            prompt_similar_user_task_evidence = filter_task_evidence_to_ids(
+                similar_user_task_evidence,
+                prompt_candidate_game_ids,
+            )
+            prompt_candidate_tasks = filter_candidate_tasks_to_ids(
+                candidate_tasks,
+                prompt_candidate_game_ids,
+            )
+            if not prompt_candidate_tasks and candidate_tasks:
+                prompt_candidate_game_ids = set(allowed_candidate_game_ids)
+                prompt_similar_user_game_counts = similar_user_game_counts
+                prompt_similar_user_task_evidence = similar_user_task_evidence
+                prompt_candidate_tasks = candidate_tasks
+        else:
+            prompt_candidate_game_ids = set(allowed_candidate_game_ids)
+            prompt_similar_user_game_counts = similar_user_game_counts
+            prompt_similar_user_task_evidence = similar_user_task_evidence
+            prompt_candidate_tasks = candidate_tasks
+        prompt_candidate_selection = {
+            "enabled": self.prompt_candidate_compression_enabled,
+            "overall_top_n": PROMPT_OVERALL_TOP_N,
+            "high_score_user_count": PROMPT_HIGH_SCORE_USER_COUNT,
+            "per_high_score_user_top_k": PROMPT_PER_HIGH_SCORE_USER_TOP_K,
+            "max_prompt_candidates": PROMPT_MAX_CANDIDATES,
+            "selected_candidate_count": len(prompt_candidate_game_ids),
+            "source_similar_user_game_count": len(similar_user_game_counts),
+            "source_candidate_task_count": len(candidate_tasks),
+        }
 
         rule_based_tasks = build_rule_based_predictions(
-            candidate_tasks,
+            prompt_candidate_tasks,
             top_k=task_top_k,
         )
-        
+
         prompt = build_task_prediction_prompt(
             patient_id=resolved_patient_id,
-            similar_user_game_counts=similar_user_game_counts,
-            similar_user_task_evidence=similar_user_task_evidence,
-            candidate_training_tasks=candidate_tasks,
+            similar_user_game_counts=prompt_similar_user_game_counts,
+            similar_user_task_evidence=prompt_similar_user_task_evidence,
+            candidate_training_tasks=prompt_candidate_tasks,
             task_top_k=task_top_k,
         )
 
@@ -191,9 +240,10 @@ class TrainingTaskPredictionService:
                 "candidate_task_windows": candidate_task_windows,
                 "candidate_task_source": candidate_source_type,
             },
-            "similar_user_game_counts": similar_user_game_counts,
-            "similar_user_task_evidence": similar_user_task_evidence,
-            "candidate_training_tasks": candidate_tasks,
+            "prompt_candidate_selection": prompt_candidate_selection,
+            "similar_user_game_counts": prompt_similar_user_game_counts,
+            "similar_user_task_evidence": prompt_similar_user_task_evidence,
+            "candidate_training_tasks": prompt_candidate_tasks,
             "predicted_training_tasks": _resolve_predicted_tasks(
                 llm_prediction,
                 rule_based_tasks,
@@ -569,6 +619,65 @@ def filter_task_evidence_to_ids(
     return filtered_evidence
 
 
+def filter_candidate_tasks_to_ids(
+    candidate_tasks: list[dict[str, Any]],
+    allowed_game_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Keep only candidate tasks whose IDs are in the selected prompt set."""
+    if not allowed_game_ids:
+        return []
+    return [
+        task
+        for task in candidate_tasks
+        if _normalize_text(task.get("game_id")) in allowed_game_ids
+    ]
+
+
+def select_prompt_candidate_game_ids(
+    similar_user_game_counts: list[dict[str, Any]],
+    similar_user_task_evidence: list[dict[str, Any]],
+    *,
+    overall_top_n: int,
+    high_score_user_count: int,
+    per_high_score_user_top_k: int,
+    max_prompt_candidates: int,
+) -> set[str]:
+    """Select a compact prompt candidate set from global and high-score evidence."""
+    selected_game_ids: list[str] = []
+    seen_game_ids: set[str] = set()
+
+    def add_game_id(raw_game_id: Any) -> None:
+        game_id = _normalize_text(raw_game_id)
+        if game_id is None or game_id in seen_game_ids:
+            return
+        selected_game_ids.append(game_id)
+        seen_game_ids.add(game_id)
+
+    for game_count in similar_user_game_counts[: max(0, overall_top_n)]:
+        add_game_id(game_count.get("game_id"))
+
+    scored_evidence = sorted(
+        similar_user_task_evidence,
+        key=lambda item: (
+            -float(item.get("candidate_score") or 0.0)
+            if isinstance(item, dict)
+            else 0.0,
+            str(item.get("patient_id") or "") if isinstance(item, dict) else "",
+        ),
+    )
+    for evidence in scored_evidence[: max(0, high_score_user_count)]:
+        tasks = evidence.get("tasks")
+        if not isinstance(tasks, list):
+            continue
+        for task in tasks[: max(0, per_high_score_user_top_k)]:
+            if isinstance(task, dict):
+                add_game_id(task.get("game_id"))
+
+    if max_prompt_candidates <= 0:
+        return set()
+    return set(selected_game_ids[:max_prompt_candidates])
+
+
 def find_consecutive_target_game_ids(
     target_history: list[dict[str, Any]],
 ) -> set[str]:
@@ -669,7 +778,7 @@ def build_task_prediction_prompt(
         },
     }
     return (
-        TASK_PREDICTION_PROMPT_TEMPLATE_V1
+        CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE
         + f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
     )
 

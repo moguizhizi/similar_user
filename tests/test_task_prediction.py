@@ -18,10 +18,12 @@ from src.similar_user.services.task_prediction import (
     build_target_task_window,
     extract_similar_user_candidates,
     filter_game_counts_to_ids,
+    filter_candidate_tasks_to_ids,
     filter_recent_target_repeated_games,
     filter_task_evidence_to_ids,
     parse_json_object_from_text,
     parse_date_value,
+    select_prompt_candidate_game_ids,
     summarize_training_history,
 )
 
@@ -335,6 +337,49 @@ class TaskPredictionTest(unittest.TestCase):
             ],
         )
 
+    def test_filter_candidate_tasks_to_ids_keeps_selected_prompt_tasks(self) -> None:
+        result = filter_candidate_tasks_to_ids(
+            [
+                {"game_id": "1", "game_name": "任务A"},
+                {"game_id": "2", "game_name": "任务B"},
+            ],
+            {"2"},
+        )
+
+        self.assertEqual(result, [{"game_id": "2", "game_name": "任务B"}])
+
+    def test_select_prompt_candidate_game_ids_mixes_global_and_high_score_tasks(
+        self,
+    ) -> None:
+        selected = select_prompt_candidate_game_ids(
+            [
+                {"game_id": "1", "count": 10},
+                {"game_id": "2", "count": 9},
+                {"game_id": "3", "count": 8},
+            ],
+            [
+                {
+                    "patient_id": "201",
+                    "candidate_score": 0.5,
+                    "tasks": [{"game_id": "4", "count": 3}],
+                },
+                {
+                    "patient_id": "202",
+                    "candidate_score": 2.0,
+                    "tasks": [
+                        {"game_id": "5", "count": 2},
+                        {"game_id": "2", "count": 1},
+                    ],
+                },
+            ],
+            overall_top_n=2,
+            high_score_user_count=1,
+            per_high_score_user_top_k=2,
+            max_prompt_candidates=4,
+        )
+
+        self.assertEqual(selected, {"1", "2", "5"})
+
     def test_build_rule_based_predictions_returns_ranked_tasks(self) -> None:
         predictions = build_rule_based_predictions(
             [
@@ -446,10 +491,12 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertNotIn("target_history_summary", result)
         self.assertEqual(
             result["candidate_training_tasks"],
-            [
-                {"game_id": "1", "game_name": "任务A"},
-                {"game_id": "7", "game_name": "画像任务G"},
-            ],
+            [{"game_id": "1", "game_name": "任务A"}],
+        )
+        self.assertEqual(result["prompt_candidate_selection"]["enabled"], True)
+        self.assertEqual(
+            result["prompt_candidate_selection"]["source_candidate_task_count"],
+            2,
         )
         self.assertEqual(
             result["candidate_source"]["candidate_task_source"],
@@ -524,6 +571,45 @@ class TaskPredictionTest(unittest.TestCase):
             ],
         )
         self.assertEqual(result["candidate_training_tasks"], [{"game_id": "2", "game_name": "任务B"}])
+
+    def test_predict_from_pipeline_result_can_disable_prompt_candidate_compression(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}
+        ]
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "1", "name": "任务A"}},
+            {"g": {"id": "7", "name": "画像任务G"}},
+        ]
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            prompt_candidate_compression_enabled=False,
+        )
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": ["201"]},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=2,
+        )
+
+        self.assertEqual(result["prompt_candidate_selection"]["enabled"], False)
+        self.assertEqual(
+            result["candidate_training_tasks"],
+            [
+                {"game_id": "1", "game_name": "任务A"},
+                {"game_id": "7", "game_name": "画像任务G"},
+            ],
+        )
 
     def test_predict_from_pipeline_result_falls_back_to_distinct_games_without_profile_tasks(
         self,
