@@ -57,13 +57,24 @@ class KgRepository:
         )
         return self._extract_patient_ids(rows)
 
-    def get_patient_ids_with_training_on_date(self, base_date: str) -> list[str]:
+    def get_patient_ids_with_training_on_date(
+        self,
+        base_date: str,
+        limit: int | None = None,
+    ) -> list[str]:
         """Return patient IDs with training records on base_date."""
         normalized_base_date = self._normalize_required_string(base_date, "base_date")
-        spec = get_graph_query_spec("patient_ids_with_training_on_date")
+        parameters: dict[str, object] = {"base_date": normalized_base_date}
+        if limit is None:
+            spec = get_graph_query_spec("patient_ids_with_training_on_date")
+        else:
+            if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+                raise ValueError("limit must be a positive integer.")
+            spec = get_graph_query_spec("patient_ids_with_training_on_date_limit")
+            parameters["limit"] = limit
         rows = self.client.run_query(
             query=spec.query,
-            parameters={"base_date": normalized_base_date},
+            parameters=parameters,
         )
         return self._extract_patient_ids(rows)
 
@@ -682,6 +693,36 @@ class KgRepository:
             parameters={
                 "patient_id": normalized_patient_id,
                 "base_date": normalized_base_date,
+            },
+        )
+
+    def get_patient_profile_education_age_exclusive_task_games(
+        self,
+        patient_id: str,
+        base_date: str,
+        age_window: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive-task games matching a patient's profile and age window."""
+        normalized_patient_id = patient_id.strip()
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+        if (
+            not isinstance(age_window, int)
+            or isinstance(age_window, bool)
+            or age_window < 0
+        ):
+            raise ValueError("age_window must be a non-negative integer.")
+
+        spec = get_graph_query_spec(
+            "patient_profile_education_age_exclusive_task_game"
+        )
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "base_date": normalized_base_date,
+                "age_window": age_window,
             },
         )
 

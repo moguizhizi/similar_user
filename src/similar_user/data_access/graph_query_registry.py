@@ -28,6 +28,7 @@ from .cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
+    PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
@@ -39,6 +40,7 @@ from .cypher_queries import (
     PATIENT_SECONDARY_ABILITY_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
     PATIENT_TOTAL_SCORES_BY_DISEASE_COURSE_WINDOW_QUERY,
     PATIENT_IDS_QUERY,
+    PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
     SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
@@ -268,6 +270,16 @@ PATIENT_IDENTITY_SPECS = (
         query=PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     ),
     _spec(
+        name="patient_ids_with_training_on_date_limit",
+        category=GraphQueryCategory.PATIENT_IDENTITY,
+        description="查询指定日期有训练记录的患者 ID，并在查询阶段限制数量",
+        source_label="Patient",
+        source_parameters=("base_date", "limit"),
+        path_shape="(p:Patient)--(s:TaskInstanceSet)",
+        row_fields=("patient_id",),
+        query=PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY,
+    ),
+    _spec(
         name="source_patient_ids_with_secondary_ability_scores",
         category=GraphQueryCategory.PATIENT_IDENTITY,
         description="查询可作为 source patient 的二级脑能力患者 ID",
@@ -425,6 +437,27 @@ PATIENT_GAME_COLLECTION_SPECS = (
         path_shape="(p:Patient)--(s1:TaskInstanceSet)--(i1:TaskInstance)--(g:Game)",
         row_fields=("g",),
         query=PATIENT_GAMES_BY_DATE_RANGE_QUERY,
+    ),
+    _spec(
+        name="patient_profile_education_age_exclusive_task_game",
+        category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
+        description="按患者最近画像实体、性别、执行学历和执行年龄范围查询专属任务相关游戏",
+        source_label="Patient",
+        source_parameters=("patient_id", "base_date", "age_window"),
+        path_shape=(
+            "(p:Patient)--(profile_s:TaskInstanceSet)--"
+            "(Disease|Symptom|Unknown)--(s:TaskInstanceSet)--"
+            "(i:TaskInstance {任务类型: '专属'})--(g:Game)"
+        ),
+        row_fields=(
+            "g",
+            "profile_age",
+            "profile_gender",
+            "profile_education",
+            "support_count",
+        ),
+        group_field="g",
+        query=PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     ),
 )
 

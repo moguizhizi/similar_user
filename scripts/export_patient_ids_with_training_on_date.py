@@ -35,6 +35,7 @@ from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
 
 LOGGER = get_logger(__name__)
 DEFAULT_OUTPUT_DIR = Path("data/patient_ids")
+DEFAULT_PATIENT_ID_LIMIT = 100
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,6 +57,12 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         default=str(DEFAULT_OUTPUT_DIR),
         help="Base directory for the generated patient ID file.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_PATIENT_ID_LIMIT,
+        help="Fetch at most this many patient IDs in the Neo4j query.",
     )
     return parser.parse_args()
 
@@ -91,10 +98,13 @@ def export_patient_ids_with_training_on_date(
     base_date: str,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     output_dir: str | Path = DEFAULT_OUTPUT_DIR,
+    limit: int | None = DEFAULT_PATIENT_ID_LIMIT,
 ) -> dict[str, Any]:
     """Fetch active patient IDs from Neo4j and write them to a date-specific file."""
     parsed_base_date = parse_date_value(base_date, "base_date")
     normalized_base_date = parsed_base_date.isoformat()
+    if limit is not None and limit <= 0:
+        raise ValueError("limit must be a positive integer.")
     output_path = build_patient_ids_output_path(
         base_date=normalized_base_date,
         output_dir=output_dir,
@@ -107,12 +117,14 @@ def export_patient_ids_with_training_on_date(
             )
         )
         patient_ids = user_service.get_patient_ids_with_training_on_date(
-            normalized_base_date
+            normalized_base_date,
+            limit,
         )
 
     written_path = write_patient_ids(patient_ids, output_path)
     return {
         "base_date": normalized_base_date,
+        "limit": limit,
         "patient_count": len(patient_ids),
         "output_path": str(written_path),
     }
@@ -126,6 +138,7 @@ def main() -> int:
             base_date=args.base_date,
             config_path=args.config,
             output_dir=args.output_dir,
+            limit=args.limit,
         )
     except Exception as exc:
         LOGGER.exception("Failed to export patient IDs: %s", exc)

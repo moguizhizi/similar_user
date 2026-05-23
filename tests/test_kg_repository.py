@@ -32,6 +32,7 @@ from src.similar_user.data_access.cypher_queries import (
     UNKNOWN_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY,
     DISTINCT_TRAINING_GAMES_QUERY,
     PATIENT_IDS_QUERY,
+    PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
@@ -55,6 +56,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
+    PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -142,6 +144,22 @@ class KgRepositoryTest(unittest.TestCase):
             parameters={"base_date": "2022-05-22"},
         )
 
+    def test_get_patient_ids_with_training_on_date_limits_query(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"patient_id": "40"}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_ids_with_training_on_date(
+            " 2022-05-22 ",
+            limit=100,
+        )
+
+        self.assertEqual(result, ["40"])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY,
+            parameters={"base_date": "2022-05-22", "limit": 100},
+        )
+
     def test_get_patient_ids_with_training_on_date_rejects_blank_base_date(
         self,
     ) -> None:
@@ -149,6 +167,12 @@ class KgRepositoryTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "base_date must be a non-empty string."):
             repository.get_patient_ids_with_training_on_date("   ")
+
+        with self.assertRaisesRegex(ValueError, "limit must be a positive integer."):
+            repository.get_patient_ids_with_training_on_date(
+                "2022-05-22",
+                limit=0,
+            )
 
     def test_get_source_patient_ids_with_secondary_ability_scores(self) -> None:
         mock_client = Mock()
@@ -391,6 +415,71 @@ class KgRepositoryTest(unittest.TestCase):
                 "max_age": 70,
             },
         )
+
+    def test_get_patient_profile_education_age_exclusive_task_games(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "g": {"id": "42", "name": "任务A"},
+                "profile_age": 68,
+                "profile_gender": "男",
+                "profile_education": "本科",
+                "support_count": 5,
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_profile_education_age_exclusive_task_games(
+            " 20104662 ",
+            " 2024-01-31 ",
+            5,
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "g": {"id": "42", "name": "任务A"},
+                    "profile_age": 68,
+                    "profile_gender": "男",
+                    "profile_education": "本科",
+                    "support_count": 5,
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_PROFILE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+            parameters={
+                "patient_id": "20104662",
+                "base_date": "2024-01-31",
+                "age_window": 5,
+            },
+        )
+
+    def test_get_patient_profile_education_age_exclusive_task_games_validates_age_window(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "age_window must be a non-negative integer.",
+        ):
+            repository.get_patient_profile_education_age_exclusive_task_games(
+                "20104662",
+                "2024-01-31",
+                -1,
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "age_window must be a non-negative integer.",
+        ):
+            repository.get_patient_profile_education_age_exclusive_task_games(
+                "20104662",
+                "2024-01-31",
+                "5",  # type: ignore[arg-type]
+            )
 
     def test_get_unknown_taskset_task_game_sampled_per_game(self) -> None:
         mock_client = Mock()

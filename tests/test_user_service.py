@@ -42,6 +42,25 @@ class UserServiceTest(unittest.TestCase):
         self.assertEqual(result, ["40"])
         mock_repository.get_patient_ids_with_training_on_date.assert_called_once_with(
             "2022-05-22",
+            None,
+        )
+
+    def test_get_patient_ids_with_training_on_date_delegates_limit_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_ids_with_training_on_date.return_value = ["40"]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_ids_with_training_on_date(
+            "2022-05-22",
+            limit=100,
+        )
+
+        self.assertEqual(result, ["40"])
+        mock_repository.get_patient_ids_with_training_on_date.assert_called_once_with(
+            "2022-05-22",
+            100,
         )
 
     def test_get_source_patient_ids_with_secondary_ability_scores_delegates_to_repository(
@@ -70,6 +89,28 @@ class UserServiceTest(unittest.TestCase):
 
         self.assertEqual(result, [{"g": {"id": "42", "name": "打怪物"}}])
         mock_repository.get_distinct_training_games.assert_called_once_with()
+
+    def test_get_patient_profile_education_age_exclusive_task_games_delegates_to_repository(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_profile_education_age_exclusive_task_games.return_value = [
+            {"g": {"id": "42"}, "support_count": 5}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_profile_education_age_exclusive_task_games(
+            "20104662",
+            "2024-01-31",
+            5,
+        )
+
+        self.assertEqual(result, [{"g": {"id": "42"}, "support_count": 5}])
+        mock_repository.get_patient_profile_education_age_exclusive_task_games.assert_called_once_with(
+            "20104662",
+            "2024-01-31",
+            5,
+        )
 
     def test_get_patient_profile_candidate_training_games_expands_profile_entities(
         self,
