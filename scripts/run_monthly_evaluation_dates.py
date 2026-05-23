@@ -48,6 +48,7 @@ class MonthlyEvaluationRun:
 
     month: str
     base_date: str
+    patient_export_command: list[str]
     command: list[str]
     log_path: str
 
@@ -181,6 +182,22 @@ def build_evaluation_command(
     return command
 
 
+def build_patient_export_command(
+    *,
+    base_date: str,
+    config_path: str | Path,
+) -> list[str]:
+    """Build the command that refreshes the limited patient ID file."""
+    return [
+        sys.executable,
+        "scripts/export_patient_ids_with_training_on_date.py",
+        "--base-date",
+        base_date,
+        "--config",
+        str(config_path),
+    ]
+
+
 def write_selected_training_dates(
     selected_dates: list[str],
     output_path: str | Path,
@@ -209,6 +226,10 @@ def build_monthly_evaluation_runs(
     runs: list[MonthlyEvaluationRun] = []
     for selected_date in selected_dates:
         month = selected_date[:7]
+        patient_export_command = build_patient_export_command(
+            base_date=selected_date,
+            config_path=config_path,
+        )
         command = build_evaluation_command(
             base_date=selected_date,
             window_days=window_days,
@@ -220,6 +241,7 @@ def build_monthly_evaluation_runs(
             MonthlyEvaluationRun(
                 month=month,
                 base_date=selected_date,
+                patient_export_command=patient_export_command,
                 command=command,
                 log_path=str(resolved_log_dir / f"evaluate_{selected_date}.log"),
             )
@@ -243,6 +265,7 @@ def run_monthly_evaluations(
                 {
                     "month": run.month,
                     "base_date": run.base_date,
+                    "patient_export_command": run.patient_export_command,
                     "command": run.command,
                     "log_path": run.log_path,
                     "dry_run": True,
@@ -253,6 +276,28 @@ def run_monthly_evaluations(
         log_path = Path(run.log_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("w", encoding="utf-8") as log_file:
+            export_completed = subprocess.run(
+                run.patient_export_command,
+                cwd=PROJECT_ROOT,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            if export_completed.returncode != 0:
+                result_item = {
+                    "month": run.month,
+                    "base_date": run.base_date,
+                    "patient_export_command": run.patient_export_command,
+                    "command": run.command,
+                    "log_path": run.log_path,
+                    "patient_export_returncode": export_completed.returncode,
+                    "returncode": export_completed.returncode,
+                }
+                failures.append(result_item)
+                if not keep_going:
+                    break
+                continue
+
             completed = subprocess.run(
                 run.command,
                 cwd=PROJECT_ROOT,
@@ -263,8 +308,10 @@ def run_monthly_evaluations(
         result_item = {
             "month": run.month,
             "base_date": run.base_date,
+            "patient_export_command": run.patient_export_command,
             "command": run.command,
             "log_path": run.log_path,
+            "patient_export_returncode": export_completed.returncode,
             "returncode": completed.returncode,
         }
         if completed.returncode == 0:

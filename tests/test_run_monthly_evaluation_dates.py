@@ -53,6 +53,23 @@ class RunMonthlyEvaluationDatesTest(unittest.TestCase):
             ],
         )
 
+    def test_build_patient_export_command_refreshes_base_date_file(self) -> None:
+        command = run_monthly_evaluation_dates.build_patient_export_command(
+            base_date="2024-02-23",
+            config_path="config/settings.yaml",
+        )
+
+        self.assertEqual(
+            command[1:],
+            [
+                "scripts/export_patient_ids_with_training_on_date.py",
+                "--base-date",
+                "2024-02-23",
+                "--config",
+                "config/settings.yaml",
+            ],
+        )
+
     def test_write_selected_training_dates_writes_one_date_per_line(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir) / "monthly_dates.txt"
@@ -74,12 +91,14 @@ class RunMonthlyEvaluationDatesTest(unittest.TestCase):
                 run_monthly_evaluation_dates.MonthlyEvaluationRun(
                     month="2024-01",
                     base_date="2024-01-31",
+                    patient_export_command=["python", "export"],
                     command=["python", "fail"],
                     log_path=str(Path(temp_dir) / "fail.log"),
                 ),
                 run_monthly_evaluation_dates.MonthlyEvaluationRun(
                     month="2024-02",
                     base_date="2024-02-23",
+                    patient_export_command=["python", "export"],
                     command=["python", "ok"],
                     log_path=str(Path(temp_dir) / "ok.log"),
                 ),
@@ -89,30 +108,29 @@ class RunMonthlyEvaluationDatesTest(unittest.TestCase):
                 "scripts.run_monthly_evaluation_dates.subprocess.run"
             ) as mock_run:
                 mock_run.side_effect = [
+                    Mock(returncode=0),
                     Mock(returncode=1),
+                    Mock(returncode=0),
                     Mock(returncode=0),
                 ]
 
                 result = run_monthly_evaluation_dates.run_monthly_evaluations(runs)
 
-        self.assertEqual(mock_run.call_count, 2)
+        self.assertEqual(mock_run.call_count, 4)
         self.assertEqual(result["failed_count"], 1)
         self.assertEqual(result["success_count"], 1)
 
-    def test_run_monthly_evaluations_can_stop_on_failure(self) -> None:
+    def test_run_monthly_evaluations_stops_after_patient_export_failure(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             runs = [
                 run_monthly_evaluation_dates.MonthlyEvaluationRun(
                     month="2024-01",
                     base_date="2024-01-31",
-                    command=["python", "fail"],
+                    patient_export_command=["python", "export"],
+                    command=["python", "evaluate"],
                     log_path=str(Path(temp_dir) / "fail.log"),
-                ),
-                run_monthly_evaluation_dates.MonthlyEvaluationRun(
-                    month="2024-02",
-                    base_date="2024-02-23",
-                    command=["python", "ok"],
-                    log_path=str(Path(temp_dir) / "ok.log"),
                 ),
             ]
 
@@ -121,12 +139,46 @@ class RunMonthlyEvaluationDatesTest(unittest.TestCase):
             ) as mock_run:
                 mock_run.return_value = Mock(returncode=1)
 
+                result = run_monthly_evaluation_dates.run_monthly_evaluations(runs)
+
+        mock_run.assert_called_once()
+        self.assertEqual(result["failed_count"], 1)
+        self.assertEqual(result["success_count"], 0)
+        self.assertEqual(result["failures"][0]["patient_export_returncode"], 1)
+
+    def test_run_monthly_evaluations_can_stop_on_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runs = [
+                run_monthly_evaluation_dates.MonthlyEvaluationRun(
+                    month="2024-01",
+                    base_date="2024-01-31",
+                    patient_export_command=["python", "export"],
+                    command=["python", "fail"],
+                    log_path=str(Path(temp_dir) / "fail.log"),
+                ),
+                run_monthly_evaluation_dates.MonthlyEvaluationRun(
+                    month="2024-02",
+                    base_date="2024-02-23",
+                    patient_export_command=["python", "export"],
+                    command=["python", "ok"],
+                    log_path=str(Path(temp_dir) / "ok.log"),
+                ),
+            ]
+
+            with patch(
+                "scripts.run_monthly_evaluation_dates.subprocess.run"
+            ) as mock_run:
+                mock_run.side_effect = [
+                    Mock(returncode=0),
+                    Mock(returncode=1),
+                ]
+
                 result = run_monthly_evaluation_dates.run_monthly_evaluations(
                     runs,
                     keep_going=False,
                 )
 
-        mock_run.assert_called_once()
+        self.assertEqual(mock_run.call_count, 2)
         self.assertEqual(result["failed_count"], 1)
         self.assertEqual(result["success_count"], 0)
 
@@ -135,6 +187,7 @@ class RunMonthlyEvaluationDatesTest(unittest.TestCase):
             run_monthly_evaluation_dates.MonthlyEvaluationRun(
                 month="2024-02",
                 base_date="2024-02-23",
+                patient_export_command=["python", "export"],
                 command=["python", "evaluate"],
                 log_path="logs/evaluate_2024-02-23.log",
             )
