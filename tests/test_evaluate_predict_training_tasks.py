@@ -352,7 +352,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         mock_load_query_settings.return_value = Mock(
             candidate_ranking=Mock(disease_course_window_days=180),
             score_pattern_paths=Mock(top_k=50),
-            training_task_prediction=Mock(candidate_task_window_days=30),
+            training_task_prediction=Mock(prompt_candidate_compression_enabled=True),
         )
 
         config = evaluate_predict_training_tasks.build_experiment_config(
@@ -368,8 +368,8 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
 
         self.assertEqual(config["disease_course_window_days"], 180)
         self.assertEqual(config["scored_path_top_k"], 50)
-        self.assertEqual(config["fallback_candidate_task_window_days"], 30)
-        self.assertEqual(config["effective_candidate_task_window_days"], 180)
+        self.assertNotIn("fallback_candidate_task_window_days", config)
+        self.assertNotIn("effective_candidate_task_window_days", config)
         self.assertEqual(config["base_date"], "2022-05-22")
         self.assertEqual(config["task_top_k"], 7)
         self.assertFalse(config["use_llm"])

@@ -180,10 +180,21 @@ def run_training_task_prediction(
 ) -> dict[str, Any]:
     """Run training-task prediction from an existing candidate result."""
     query_settings = load_query_settings(config_path)
-    candidate_task_window_days = (
+    disease_course_window_days = (
         query_settings.candidate_ranking.disease_course_window_days
-        or query_settings.training_task_prediction.candidate_task_window_days
     )
+    if disease_course_window_days is None:
+        raise ValueError(
+            "candidate_ranking disease_course_window_days is required for training-task prediction."
+        )
+    if (
+        not isinstance(disease_course_window_days, int)
+        or isinstance(disease_course_window_days, bool)
+        or disease_course_window_days <= 0
+    ):
+        raise ValueError(
+            "candidate_ranking disease_course_window_days must be a positive integer."
+        )
     raw_prompt_candidate_compression_enabled = getattr(
         query_settings.training_task_prediction,
         "prompt_candidate_compression_enabled",
@@ -210,7 +221,7 @@ def run_training_task_prediction(
         return service.predict_from_pipeline_result(
             pipeline_result,
             base_date=base_date,
-            window_days=candidate_task_window_days,
+            window_days=disease_course_window_days,
             task_top_k=task_top_k,
             use_llm=use_llm,
             include_prompt=include_prompt,

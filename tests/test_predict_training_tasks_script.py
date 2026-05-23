@@ -93,7 +93,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
     @patch("scripts.predict_training_tasks.UserService")
     @patch("scripts.predict_training_tasks.Neo4jClient.from_config")
     @patch("scripts.predict_training_tasks.load_query_settings")
-    def test_run_training_task_prediction_reads_candidate_task_window_from_config(
+    def test_run_training_task_prediction_reads_disease_course_window_from_config(
         self,
         mock_load_query_settings: Mock,
         mock_from_config: Mock,
@@ -102,7 +102,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
     ) -> None:
         mock_load_query_settings.return_value = Mock(
             candidate_ranking=Mock(disease_course_window_days=365),
-            training_task_prediction=Mock(candidate_task_window_days=30),
+            training_task_prediction=Mock(prompt_candidate_compression_enabled=True),
         )
         mock_client_context = Mock()
         mock_client_context.__enter__ = Mock(return_value=Mock())
@@ -132,6 +132,31 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             include_prompt=True,
         )
         mock_user_service_cls.assert_called_once()
+
+    @patch("scripts.predict_training_tasks.Neo4jClient.from_config")
+    @patch("scripts.predict_training_tasks.load_query_settings")
+    def test_run_training_task_prediction_requires_disease_course_window(
+        self,
+        mock_load_query_settings: Mock,
+        mock_from_config: Mock,
+    ) -> None:
+        mock_load_query_settings.return_value = Mock(
+            candidate_ranking=Mock(disease_course_window_days=None),
+            training_task_prediction=Mock(prompt_candidate_compression_enabled=True),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "candidate_ranking disease_course_window_days is required",
+        ):
+            predict_training_tasks.run_training_task_prediction(
+                {"patient_id": "40", "candidate_result": {"candidates": []}},
+                base_date="2022-05-22",
+                config_path="config/custom.yaml",
+                use_llm=False,
+            )
+
+        mock_from_config.assert_not_called()
 
     def test_summarize_prediction_result_reads_nested_prediction_for_ids(self) -> None:
         result = predict_training_tasks.summarize_prediction_result(

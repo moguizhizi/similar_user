@@ -93,7 +93,6 @@ class CandidateRankingSettings:
 class TrainingTaskPredictionSettings:
     """Configuration for predicting training tasks from similar-user histories."""
 
-    candidate_task_window_days: int = 14
     prompt_candidate_compression_enabled: bool = True
 
 
@@ -300,22 +299,10 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             raise ValueError("candidate_ranking patterns must contain non-empty strings.")
         normalized_patterns.append(pattern.strip())
     scoring = _parse_candidate_scoring_settings(candidate_ranking_data.get("scoring"))
-    candidate_task_window_days = training_task_prediction_data.get(
-        "candidate_task_window_days",
-        14,
-    )
     prompt_candidate_compression_enabled = training_task_prediction_data.get(
         "prompt_candidate_compression_enabled",
         True,
     )
-    if (
-        not isinstance(candidate_task_window_days, int)
-        or isinstance(candidate_task_window_days, bool)
-        or candidate_task_window_days <= 0
-    ):
-        raise ValueError(
-            "training_task_prediction candidate_task_window_days must be a positive integer."
-        )
     if not isinstance(prompt_candidate_compression_enabled, bool):
         raise ValueError(
             "training_task_prediction prompt_candidate_compression_enabled must be a boolean."
@@ -339,7 +326,6 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             scoring=scoring,
         ),
         training_task_prediction=TrainingTaskPredictionSettings(
-            candidate_task_window_days=candidate_task_window_days,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
         ),
     )
