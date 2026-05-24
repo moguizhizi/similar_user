@@ -143,7 +143,7 @@ def run_similar_user_pipeline(
             config_path=resolved_config_path,
             base_date=base_date,
             window_days=window_days,
-            query_family=query_family,
+            query_family=query_family or "training_order",
         )
         path_generation = [_summarize_path_result(item) for item in path_results]
         _raise_if_path_results_empty(
@@ -157,6 +157,9 @@ def run_similar_user_pipeline(
         score_and_save_configured_pattern_paths(
             patient_id,
             config_path=resolved_config_path,
+            base_date=base_date,
+            window_days=window_days,
+            query_family=query_family or "training_order",
         )
 
     candidate_result = build_similar_user_candidates(

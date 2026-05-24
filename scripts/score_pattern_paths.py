@@ -123,6 +123,23 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_SCORED_OUTPUT_DIR),
         help="Directory used to store scored path detail and summary JSON files.",
     )
+    parser.add_argument(
+        "--base-date",
+        default=None,
+        help="Path cache base date used to locate saved raw pattern paths.",
+    )
+    parser.add_argument(
+        "--window-days",
+        type=int,
+        default=None,
+        help="Path cache window-days value used to locate saved raw pattern paths.",
+    )
+    parser.add_argument(
+        "--query-family",
+        default=None,
+        choices=("training_order", "date_window"),
+        help="Path cache query family used to locate saved raw pattern paths.",
+    )
     args = parser.parse_args()
     if args.pattern is None and not args.patterns_from_config:
         parser.error("one of --pattern or --patterns-from-config is required")
@@ -138,6 +155,9 @@ def score_pattern_paths(
     pattern: str = DEFAULT_PATTERN,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
+    base_date: str | None = None,
+    window_days: int | None = None,
+    query_family: str | None = None,
 ) -> dict[str, object]:
     """Load a saved pattern result and score its domain paths."""
     started_at = time.perf_counter()
@@ -150,7 +170,13 @@ def score_pattern_paths(
         top_k,
         config_path,
     )
-    stored_result = PatternResultStore(config_path).load(pattern, source_id)
+    stored_result = PatternResultStore(config_path).load(
+        pattern,
+        source_id,
+        base_date=base_date,
+        window_days=window_days,
+        query_family=query_family,
+    )
     scorer = get_path_scorer(stored_result.pattern)
     domain_paths = stored_result.to_domain_paths()
 
@@ -234,6 +260,9 @@ def score_configured_pattern_paths(
     *,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
+    base_date: str | None = None,
+    window_days: int | None = None,
+    query_family: str | None = None,
 ) -> list[dict[str, object]]:
     """Score all configured patient-source pattern paths for one source patient."""
     started_at = time.perf_counter()
@@ -256,6 +285,11 @@ def score_configured_pattern_paths(
             pattern=pattern,
             config_path=config_path,
             path_index=path_index,
+            **_path_cache_kwargs(
+                base_date=base_date,
+                window_days=window_days,
+                query_family=query_family,
+            ),
         )
         for pattern in selected_patterns
     ]
@@ -276,12 +310,20 @@ def score_and_save_configured_pattern_paths(
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
     output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    base_date: str | None = None,
+    window_days: int | None = None,
+    query_family: str | None = None,
 ) -> list[dict[str, object]]:
     """Score configured patient-source pattern paths and persist each result."""
     results = score_configured_pattern_paths(
         source_id,
         config_path=config_path,
         path_index=path_index,
+        **_path_cache_kwargs(
+            base_date=base_date,
+            window_days=window_days,
+            query_family=query_family,
+        ),
     )
     save_scored_pattern_results(results, output_dir=output_dir)
     return results
@@ -512,11 +554,13 @@ def main() -> int:
     """Score saved pattern paths and log JSON output."""
     args = parse_args()
     try:
+        cache_args = _build_path_cache_args(args)
         if getattr(args, "patterns_from_config", False) is True:
             result = score_configured_pattern_paths(
                 args.source_id,
                 config_path=args.config,
                 path_index=args.path_index,
+                **cache_args,
             )
         else:
             result = score_pattern_paths(
@@ -524,6 +568,7 @@ def main() -> int:
                 pattern=args.pattern,
                 config_path=args.config,
                 path_index=args.path_index,
+                **cache_args,
             )
         if args.path_index is None:
             save_scored_pattern_results(
@@ -536,6 +581,37 @@ def main() -> int:
 
     LOGGER.info(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     return 0
+
+
+def _build_path_cache_args(args: argparse.Namespace) -> dict[str, object]:
+    """Return optional path-cache lookup arguments from parsed CLI args."""
+    cache_args: dict[str, object] = {}
+    base_date = getattr(args, "base_date", None)
+    if isinstance(base_date, str) and base_date.strip():
+        cache_args["base_date"] = base_date.strip()
+    window_days = getattr(args, "window_days", None)
+    if isinstance(window_days, int) and not isinstance(window_days, bool):
+        cache_args["window_days"] = window_days
+    query_family = getattr(args, "query_family", None)
+    if isinstance(query_family, str) and query_family.strip():
+        cache_args["query_family"] = query_family.strip()
+    return cache_args
+
+
+def _path_cache_kwargs(
+    *,
+    base_date: str | None,
+    window_days: int | None,
+    query_family: str | None,
+) -> dict[str, object]:
+    kwargs: dict[str, object] = {}
+    if base_date is not None:
+        kwargs["base_date"] = base_date
+    if window_days is not None:
+        kwargs["window_days"] = window_days
+    if query_family is not None:
+        kwargs["query_family"] = query_family
+    return kwargs
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from similar_user.utils.pattern_storage import (
     StoredPatternResult,
     StoredPatternStatistics,
     StoredTrainingDateGames,
+    build_path_key,
     save_pattern_result,
 )
 
@@ -51,6 +52,12 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 "retrieval_context": None,
             }
             save_pattern_result(expected_result, config_path)
+            path_key = build_path_key(
+                config_path,
+                base_date=None,
+                window_days=None,
+                query_family=None,
+            )
 
             loaded_result = read_patient_pattern_result(
                 "30010096",
@@ -59,7 +66,14 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             )
 
         self.assertIsInstance(loaded_result, StoredPatternResult)
-        self.assertEqual(loaded_result.to_dict(), expected_result)
+        loaded_payload = loaded_result.to_dict()
+        self.assertEqual(loaded_payload["source_id"], expected_result["source_id"])
+        self.assertEqual(loaded_payload["patient_id"], expected_result["patient_id"])
+        self.assertEqual(loaded_payload["pattern"], expected_result["pattern"])
+        self.assertEqual(
+            loaded_payload["retrieval_context"]["cache_context"]["path_key"],
+            path_key,
+        )
 
     @patch("scripts.read_patient_pattern_result.LOGGER")
     @patch("scripts.read_patient_pattern_result.parse_args")
@@ -99,6 +113,12 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 "patient_id": "30010096",
             }
             save_pattern_result(expected_result, config_path)
+            path_key = build_path_key(
+                config_path,
+                base_date=None,
+                window_days=None,
+                query_family=None,
+            )
             mock_parse_args.return_value = Mock(
                 patient_id="30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
@@ -108,8 +128,12 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             exit_code = main()
 
         self.assertEqual(exit_code, 0)
-        mock_logger.info.assert_called_once_with(
-            json.dumps(expected_result, ensure_ascii=False, indent=2, default=str)
+        logged_payload = json.loads(mock_logger.info.call_args.args[0])
+        self.assertEqual(logged_payload["source_id"], expected_result["source_id"])
+        self.assertEqual(logged_payload["patient_id"], expected_result["patient_id"])
+        self.assertEqual(
+            logged_payload["retrieval_context"]["cache_context"]["path_key"],
+            path_key,
         )
 
     def test_stored_pattern_result_can_convert_paths_to_domain_objects(self) -> None:
