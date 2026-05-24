@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from scripts.score_pattern_paths import (
+    build_scored_key,
     build_scored_pattern_summary,
     main,
     parse_args,
@@ -41,7 +42,7 @@ from src.similar_user.services.path_scoring import (
     PathScoringRules,
     get_path_scorer,
 )
-from src.similar_user.utils.pattern_storage import save_pattern_result
+from src.similar_user.utils.pattern_storage import build_path_key, save_pattern_result
 
 
 class PathScoringTest(unittest.TestCase):
@@ -832,11 +833,21 @@ class PathScoringTest(unittest.TestCase):
             detail = json.loads(output_paths["detail"].read_text(encoding="utf-8"))
             summary = json.loads(output_paths["summary"].read_text(encoding="utf-8"))
 
-        self.assertEqual(detail, result)
+        expected_detail = {
+            **result,
+            "cache_context": {
+                "cache_type": "scored_pattern_paths",
+                "path_key": "legacy_pathctx",
+                "scored_key": "legacy_scoredctx",
+                "score_top_k": None,
+            },
+        }
+        self.assertEqual(detail, expected_detail)
         self.assertEqual(
             output_paths["detail"].name,
             "30010096.detail.json",
         )
+        self.assertIn("legacy_scoredctx", str(output_paths["detail"]))
         self.assertEqual(
             output_paths["summary"].name,
             "30010096.summary.json",
@@ -848,6 +859,55 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(summary["scores"][0]["game_id"], "348")
         self.assertEqual(summary["scores"][0]["game_name"], "真假句辨别")
         self.assertNotIn("path", summary["scores"][0])
+
+    def test_save_scored_pattern_result_uses_scored_cache_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "score_pattern_paths:",
+                        "  top_k: 150",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
+            )
+            scored_key = build_scored_key(path_key, 150)
+            result = {
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "path_count": 1,
+                "scored_path_count": 1,
+                "retrieval_context": {"score_end_date": "2024-01-31"},
+                "scores": [],
+                "cache_context": {
+                    "cache_type": "scored_pattern_paths",
+                    "path_key": path_key,
+                    "scored_key": scored_key,
+                    "score_top_k": 150,
+                },
+            }
+
+            output_paths = save_scored_pattern_result(result, Path(temp_dir))
+
+        self.assertEqual(
+            output_paths["detail"],
+            Path(temp_dir)
+            / scored_key
+            / "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"
+            / "30"
+            / "30010096.detail.json",
+        )
 
     @patch("scripts.score_pattern_paths.save_scored_pattern_result")
     def test_save_scored_pattern_results_saves_each_result(
@@ -1320,17 +1380,20 @@ class PathScoringTest(unittest.TestCase):
             exit_code = main()
 
         self.assertEqual(exit_code, 0)
+        scored_key = expected["cache_context"]["scored_key"]
         mock_logger.info.assert_any_call(
             "Saved scored pattern result: source_id=%s, pattern=%s, detail_path=%s, summary_path=%s",
             "30010096",
             "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             Path(temp_dir)
             / "scored_pattern_paths"
+            / scored_key
             / "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"
             / "30"
             / "30010096.detail.json",
             Path(temp_dir)
             / "scored_pattern_paths"
+            / scored_key
             / "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"
             / "30"
             / "30010096.summary.json",

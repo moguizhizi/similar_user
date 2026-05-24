@@ -165,6 +165,9 @@ def run_similar_user_pipeline(
     candidate_result = build_similar_user_candidates(
         patient_id,
         config_path=resolved_config_path,
+        base_date=base_date,
+        window_days=window_days,
+        query_family=query_family or "training_order",
     )
     candidate_output_paths = save_similar_user_candidates_result(candidate_result)
     LOGGER.info(

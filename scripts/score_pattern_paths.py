@@ -52,7 +52,7 @@ from similar_user.data_access.pattern_registry import (
 from similar_user.domain.graph_schema import PathPattern
 from similar_user.services.path_scoring import PathScoringRules, get_path_scorer
 from similar_user.utils.logger import get_logger
-from similar_user.utils.pattern_storage import PatternResultStore
+from similar_user.utils.pattern_storage import PatternResultStore, build_path_key
 
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
@@ -237,6 +237,11 @@ def score_pattern_paths(
         },
         "scores": scored_paths,
     }
+    result["cache_context"] = build_scored_cache_context(
+        config_path,
+        retrieval_context=stored_result.retrieval_context,
+        top_k=top_k,
+    )
     LOGGER.debug(
         "Scored pattern result: source_id=%s, source_parameter=%s, path_count=%s, scored_path_count=%s",
         stored_result.source_id,
@@ -334,6 +339,7 @@ def save_scored_pattern_result(
     output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
 ) -> dict[str, Path]:
     """Save full scored details and a compact summary as two JSON files."""
+    result = _with_scored_cache_context(result)
     detail_path, summary_path = get_scored_pattern_output_paths(result, output_dir)
     _write_json_atomic(detail_path, result)
     _write_json_atomic(summary_path, build_scored_pattern_summary(result))
@@ -366,8 +372,9 @@ def get_scored_pattern_output_paths(
     """Return detail and summary output paths for one scored result."""
     source_id = _normalize_result_string(result.get("source_id"), "source_id")
     pattern = _normalize_result_string(result.get("pattern"), "pattern")
+    scored_key = _extract_scored_key(result.get("cache_context"))
     bucket = source_id[:2] or "unknown"
-    output_base = Path(output_dir) / pattern / bucket
+    output_base = Path(output_dir) / scored_key / pattern / bucket
     return (
         output_base / f"{source_id}.detail.json",
         output_base / f"{source_id}.summary.json",
@@ -404,8 +411,111 @@ def build_scored_pattern_summary(result: dict[str, object]) -> dict[str, object]
         "path_count": result.get("path_count"),
         "scored_path_count": result.get("scored_path_count"),
         "retrieval_context": result.get("retrieval_context"),
+        "cache_context": result.get("cache_context"),
         "scores": summary_scores,
     }
+
+
+def build_scored_key(path_key: str, top_k: int | None) -> str:
+    """Build a cache key for scored pattern path results."""
+    top_k_part = str(top_k) if top_k is not None else "all"
+    return f"{path_key}_scoretopk_{top_k_part}"
+
+
+def build_scored_cache_context(
+    config_path: str | Path,
+    *,
+    retrieval_context: dict[str, object] | None,
+    top_k: int | None,
+) -> dict[str, object]:
+    """Build cache metadata for scored pattern path results."""
+    path_cache_context = (
+        retrieval_context.get("cache_context")
+        if isinstance(retrieval_context, dict)
+        else None
+    )
+    path_key = (
+        str(path_cache_context["path_key"])
+        if isinstance(path_cache_context, dict)
+        and isinstance(path_cache_context.get("path_key"), str)
+        else build_path_key(
+            config_path,
+            base_date=_extract_context_string(retrieval_context, "base_date"),
+            window_days=_extract_window_days_from_context(retrieval_context),
+            query_family=_extract_context_string(retrieval_context, "query_family"),
+        )
+    )
+    return {
+        "cache_type": "scored_pattern_paths",
+        "path_key": path_key,
+        "scored_key": build_scored_key(path_key, top_k),
+        "score_top_k": top_k,
+    }
+
+
+def validate_scored_cache_context(
+    scored_result: dict[str, object],
+    *,
+    expected_scored_key: str,
+) -> None:
+    """Raise if scored path metadata does not match the expected scored key."""
+    cache_context = scored_result.get("cache_context")
+    if not isinstance(cache_context, dict):
+        raise ValueError(
+            "Saved scored pattern result is missing cache_context: "
+            f"expected_scored_key={expected_scored_key}."
+        )
+    actual_scored_key = cache_context.get("scored_key")
+    if actual_scored_key != expected_scored_key:
+        raise ValueError(
+            "Saved scored pattern result cache key mismatch: "
+            f"expected={expected_scored_key}, actual={actual_scored_key}."
+        )
+
+
+def _with_scored_cache_context(result: dict[str, object]) -> dict[str, object]:
+    if isinstance(result.get("cache_context"), dict):
+        return result
+    return {
+        **result,
+        "cache_context": {
+            "cache_type": "scored_pattern_paths",
+            "path_key": "legacy_pathctx",
+            "scored_key": "legacy_scoredctx",
+            "score_top_k": None,
+        },
+    }
+
+
+def _extract_scored_key(cache_context: object) -> str:
+    if not isinstance(cache_context, dict):
+        raise ValueError("scored result cache_context must be present before saving.")
+    scored_key = cache_context.get("scored_key")
+    if not isinstance(scored_key, str) or not scored_key.strip():
+        raise ValueError("scored result cache_context.scored_key must be non-empty.")
+    return scored_key.strip()
+
+
+def _extract_context_string(
+    retrieval_context: dict[str, object] | None,
+    key: str,
+) -> str | None:
+    if not isinstance(retrieval_context, dict):
+        return None
+    value = retrieval_context.get(key)
+    return str(value) if value is not None else None
+
+
+def _extract_window_days_from_context(
+    retrieval_context: dict[str, object] | None,
+) -> int | None:
+    if not isinstance(retrieval_context, dict):
+        return None
+    path_window = retrieval_context.get("path_window")
+    if not isinstance(path_window, dict):
+        return None
+    window_days = path_window.get("window_days")
+    return window_days if isinstance(window_days, int) else None
 
 
 def _extract_score_end_date(
