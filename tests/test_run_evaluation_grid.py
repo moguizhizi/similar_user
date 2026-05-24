@@ -11,6 +11,33 @@ from scripts import run_evaluation_grid
 
 
 class RunEvaluationGridTest(unittest.TestCase):
+    def test_parse_args_writes_promoted_baseline_by_default(self) -> None:
+        with patch(
+            "sys.argv",
+            [
+                "run_evaluation_grid.py",
+                "--experiment-config",
+                "config/experiments/evaluation_grid.yaml",
+            ],
+        ):
+            args = run_evaluation_grid.parse_args()
+
+        self.assertTrue(args.write_promoted_baseline)
+
+    def test_parse_args_can_disable_promoted_baseline_writeback(self) -> None:
+        with patch(
+            "sys.argv",
+            [
+                "run_evaluation_grid.py",
+                "--experiment-config",
+                "config/experiments/evaluation_grid.yaml",
+                "--no-write-promoted-baseline",
+            ],
+        ):
+            args = run_evaluation_grid.parse_args()
+
+        self.assertFalse(args.write_promoted_baseline)
+
     def test_build_grid_overrides_expands_cartesian_product(self) -> None:
         overrides = run_evaluation_grid.build_grid_overrides(
             {
@@ -356,6 +383,43 @@ class RunEvaluationGridTest(unittest.TestCase):
             },
         )
 
+    def test_build_promoted_candidate_payloads_uses_top_two_experiments(self) -> None:
+        payloads = run_evaluation_grid.build_promoted_candidate_payloads(
+            [
+                {
+                    "rank": 1,
+                    "name": "exp_001",
+                    "rank_metric": "micro_recall",
+                    "micro_recall": 0.3,
+                    "summary_path": "summary_1.json",
+                    "overrides": {"query.a": 1},
+                },
+                {
+                    "rank": 2,
+                    "name": "exp_002",
+                    "rank_metric": "micro_recall",
+                    "micro_recall": 0.25,
+                    "summary_path": "summary_2.json",
+                    "overrides": {"query.a": 2},
+                },
+                {
+                    "rank": 3,
+                    "name": "exp_003",
+                    "rank_metric": "micro_recall",
+                    "micro_recall": 0.2,
+                    "summary_path": "summary_3.json",
+                    "overrides": {"query.a": 3},
+                },
+            ],
+            stage="coarse_10_users",
+        )
+
+        self.assertEqual(
+            [payload["source_experiment"] for payload in payloads],
+            ["exp_001", "exp_002"],
+        )
+        self.assertEqual([payload["rank"] for payload in payloads], [1, 2])
+
     def test_write_promoted_baseline_overrides_appends_non_active_block(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "evaluation_grid.yaml"
@@ -436,6 +500,56 @@ class RunEvaluationGridTest(unittest.TestCase):
         self.assertEqual(
             updated_config["promoted_baseline_overrides"]["source_experiment"],
             "new",
+        )
+
+    def test_write_promoted_candidate_overrides_appends_top_two_list(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "evaluation_grid.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'stage: "coarse_10_users"',
+                        "",
+                        "baseline_overrides:",
+                        "  query.a: 1",
+                        "",
+                        "experiments:",
+                        "  - name: baseline",
+                        "    overrides: {}",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            run_evaluation_grid.write_promoted_candidate_overrides(
+                config_path,
+                [
+                    {
+                        "source_stage": "coarse_10_users",
+                        "source_experiment": "exp_001",
+                        "rank": 1,
+                        "overrides": {"query.a": 2},
+                    },
+                    {
+                        "source_stage": "coarse_10_users",
+                        "source_experiment": "exp_002",
+                        "rank": 2,
+                        "overrides": {"query.a": 3},
+                    },
+                ],
+            )
+
+            updated_text = config_path.read_text(encoding="utf-8")
+            updated_config = run_evaluation_grid.load_experiment_config(config_path)
+
+        self.assertIn("promoted_candidate_overrides:", updated_text)
+        self.assertEqual(
+            [
+                item["source_experiment"]
+                for item in updated_config["promoted_candidate_overrides"]
+            ],
+            ["exp_001", "exp_002"],
         )
 
 

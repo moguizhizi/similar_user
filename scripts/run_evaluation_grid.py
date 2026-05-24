@@ -119,12 +119,19 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--write-promoted-baseline",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
-            "After ranking completed experiments, append the best experiment as "
-            "promoted_baseline_overrides in the experiment YAML without changing "
-            "the active baseline_overrides."
+            "After ranking completed experiments, write promoted_baseline_overrides "
+            "and promoted_candidate_overrides to the experiment YAML without "
+            "changing the active baseline_overrides. Enabled by default; use "
+            "--no-write-promoted-baseline to disable."
         ),
+    )
+    parser.add_argument(
+        "--no-analysis",
+        action="store_true",
+        help="Do not write analysis_report.json and analysis_report.md after ranking.",
     )
     return parser.parse_args()
 
@@ -622,6 +629,21 @@ def build_promoted_baseline_payload(
     }
 
 
+def build_promoted_candidate_payloads(
+    leaderboard: list[dict[str, Any]],
+    *,
+    stage: str,
+    top_n: int = 2,
+) -> list[dict[str, Any]]:
+    """Build promoted candidate suggestions from the top leaderboard rows."""
+    if top_n <= 0:
+        return []
+    return [
+        build_promoted_baseline_payload(row, stage=stage)
+        for row in leaderboard[:top_n]
+    ]
+
+
 def write_promoted_baseline_overrides(
     experiment_config_path: str | Path,
     promoted_baseline: dict[str, Any],
@@ -644,6 +666,38 @@ def write_promoted_baseline_overrides(
         updated_lines = [
             *lines[:start_index],
             "# Previous promoted_baseline_overrides:",
+            *comment_yaml_lines(lines[start_index:end_index]),
+            "",
+            *promoted_lines,
+            *lines[end_index:],
+        ]
+
+    path.write_text("\n".join(updated_lines).rstrip() + "\n", encoding="utf-8")
+    return path
+
+
+def write_promoted_candidate_overrides(
+    experiment_config_path: str | Path,
+    promoted_candidates: list[dict[str, Any]],
+) -> Path:
+    """Append top promoted candidate override suggestions to an experiment YAML file."""
+    path = Path(experiment_config_path)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    start_index, end_index = find_active_top_level_block(
+        lines,
+        "promoted_candidate_overrides",
+    )
+    promoted_lines = build_top_level_yaml_block_lines(
+        "promoted_candidate_overrides",
+        promoted_candidates,
+    )
+
+    if start_index is None or end_index is None:
+        updated_lines = [*lines, "", *promoted_lines]
+    else:
+        updated_lines = [
+            *lines[:start_index],
+            "# Previous promoted_candidate_overrides:",
             *comment_yaml_lines(lines[start_index:end_index]),
             "",
             *promoted_lines,
@@ -681,7 +735,7 @@ def find_active_top_level_block(
     return start_index, end_index
 
 
-def build_top_level_yaml_block_lines(block_name: str, value: dict[str, Any]) -> list[str]:
+def build_top_level_yaml_block_lines(block_name: str, value: Any) -> list[str]:
     """Build YAML lines for one top-level mapping block."""
     text = yaml.safe_dump(
         {block_name: value},
@@ -737,9 +791,7 @@ def main() -> int:
         result["leaderboard_json_path"] = str(leaderboard_json_path)
         result["leaderboard_csv_path"] = str(leaderboard_csv_path)
         result["best_experiment"] = leaderboard[0] if leaderboard else None
-        if args.write_promoted_baseline:
-            if args.dry_run:
-                raise ValueError("--write-promoted-baseline cannot be used with --dry-run.")
+        if args.write_promoted_baseline and not args.dry_run:
             if not leaderboard:
                 raise ValueError("Cannot write promoted baseline without leaderboard rows.")
             promoted_baseline = build_promoted_baseline_payload(
@@ -750,8 +802,29 @@ def main() -> int:
                 args.experiment_config,
                 promoted_baseline,
             )
+            promoted_candidates = build_promoted_candidate_payloads(
+                leaderboard,
+                stage=stage,
+                top_n=2,
+            )
+            promoted_candidates_path = write_promoted_candidate_overrides(
+                args.experiment_config,
+                promoted_candidates,
+            )
             result["promoted_baseline_overrides_path"] = str(promoted_path)
             result["promoted_baseline_overrides"] = promoted_baseline
+            result["promoted_candidate_overrides_path"] = str(promoted_candidates_path)
+            result["promoted_candidate_overrides"] = promoted_candidates
+        if not args.no_analysis:
+            from scripts.analyze_evaluation_grid import (
+                analyze_and_write_evaluation_grid_report,
+            )
+
+            summary_path = write_grid_summary(result, output_root)
+            result["summary_path"] = str(summary_path)
+            analysis_paths = analyze_and_write_evaluation_grid_report(output_root)
+            result["analysis_json_path"] = str(analysis_paths["json"])
+            result["analysis_report_path"] = str(analysis_paths["markdown"])
         summary_path = write_grid_summary(result, output_root)
         result["summary_path"] = str(summary_path)
     except Exception as exc:
