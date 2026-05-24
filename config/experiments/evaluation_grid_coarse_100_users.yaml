@@ -52,14 +52,12 @@ experiments:
     overrides:
       query.candidate_ranking.total_score_match_top_k: 5
   
-  - name: base_total_score_match_top_k_3_include_similar_user_task_evidence_false_prompt_template_v1
+  - name: base_total_score_match_top_k_3_prompt_template_v1
     overrides:
       query.candidate_ranking.total_score_match_top_k: 3
-      query.training_task_prediction.include_similar_user_task_evidence: false
       query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V1"
 
-  - name: base_total_score_match_top_k_3_include_similar_user_task_evidence_false_prompt_template_v2
+  - name: base_total_score_match_top_k_3_prompt_template_v2
     overrides:
       query.candidate_ranking.total_score_match_top_k: 3
-      query.training_task_prediction.include_similar_user_task_evidence: false
       query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V2"

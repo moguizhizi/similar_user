@@ -17,7 +17,7 @@ from scripts.score_pattern_paths import (
     save_scored_pattern_results,
     score_and_save_configured_pattern_paths,
     score_configured_pattern_paths,
-    score_pattern_paths,
+    score_pattern_paths as _score_pattern_paths,
 )
 from src.similar_user.data_access.pattern_registry import available_path_pattern_aliases
 from src.similar_user.domain import (
@@ -43,6 +43,36 @@ from src.similar_user.services.path_scoring import (
     get_path_scorer,
 )
 from src.similar_user.utils.pattern_storage import build_path_key, save_pattern_result
+
+
+def _retrieval_context(paths: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "base_date": "2024-01-31",
+        "query_family": "training_order",
+        "path_window": {
+            "start_date": "2024-01-17",
+            "end_date": "2024-01-31",
+        },
+        "paths": paths,
+    }
+
+
+def _path_cache_args() -> list[str]:
+    return [
+        "--base-date",
+        "2024-01-31",
+        "--window-days",
+        "14",
+        "--query-family",
+        "training_order",
+    ]
+
+
+def score_pattern_paths(*args: object, **kwargs: object) -> dict[str, object]:
+    kwargs.setdefault("base_date", "2024-01-31")
+    kwargs.setdefault("window_days", 14)
+    kwargs.setdefault("query_family", "training_order")
+    return _score_pattern_paths(*args, **kwargs)
 
 
 class PathScoringTest(unittest.TestCase):
@@ -102,7 +132,7 @@ class PathScoringTest(unittest.TestCase):
             "30010096",
             "--pattern",
             "patient_game_patient",
-        ],
+        ] + _path_cache_args(),
     )
     def test_parse_args_requires_explicit_source_id_and_pattern(self) -> None:
         args = parse_args()
@@ -117,7 +147,7 @@ class PathScoringTest(unittest.TestCase):
             "--source-id",
             "30010096",
             "--patterns-from-config",
-        ],
+        ] + _path_cache_args(),
     )
     def test_parse_args_accepts_patterns_from_config(self) -> None:
         args = parse_args()
@@ -135,7 +165,7 @@ class PathScoringTest(unittest.TestCase):
             "--pattern",
             "patient_game_patient",
             "--patterns-from-config",
-        ],
+        ] + _path_cache_args(),
     )
     def test_parse_args_rejects_pattern_with_patterns_from_config(self) -> None:
         with self.assertRaises(SystemExit):
@@ -149,7 +179,7 @@ class PathScoringTest(unittest.TestCase):
                 "30010096",
                 "--pattern",
                 pattern,
-            ]
+            ] + _path_cache_args()
             if pattern in self.SOURCE_DEMOGRAPHIC_PATTERN_ALIASES:
                 args.extend(["--age", "66", "--education", "本科"])
             with self.subTest(pattern=pattern):
@@ -166,7 +196,7 @@ class PathScoringTest(unittest.TestCase):
             "AU_DIS_0013",
             "--pattern",
             "disease_patient",
-        ],
+        ] + _path_cache_args(),
     )
     def test_parse_args_requires_age_and_education_for_direct_demographic_patterns(
         self,
@@ -186,7 +216,7 @@ class PathScoringTest(unittest.TestCase):
             "66",
             "--education",
             "本科",
-        ],
+        ] + _path_cache_args(),
     )
     def test_parse_args_accepts_age_and_education_for_direct_demographic_patterns(
         self,
@@ -208,7 +238,7 @@ class PathScoringTest(unittest.TestCase):
             "66",
             "--education",
             "未知学历",
-        ],
+        ] + _path_cache_args(),
     )
     def test_parse_args_rejects_unsupported_education_for_direct_demographic_patterns(
         self,
@@ -228,7 +258,7 @@ class PathScoringTest(unittest.TestCase):
             "abc",
             "--education",
             "本科",
-        ],
+        ] + _path_cache_args(),
     )
     def test_parse_args_rejects_non_numeric_age_for_direct_demographic_patterns(
         self,
@@ -709,6 +739,7 @@ class PathScoringTest(unittest.TestCase):
                     }
                 ],
             }
+            result["retrieval_context"] = _retrieval_context(result["paths"])
             save_pattern_result(result, config_path)
 
             scored = score_pattern_paths(
@@ -719,7 +750,7 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(scored["path_count"], 1)
         self.assertEqual(scored["scored_path_count"], 1)
-        self.assertEqual(scored["retrieval_context"]["score_end_date"], None)
+        self.assertEqual(scored["retrieval_context"]["score_end_date"], "2024-01-31")
         self.assertEqual(scored["scores"][0]["score"]["total_score"], 91.25)
 
     def test_score_pattern_paths_returns_top_k_paths(self) -> None:
@@ -788,6 +819,7 @@ class PathScoringTest(unittest.TestCase):
                     },
                 ],
             }
+            result["retrieval_context"] = _retrieval_context(result["paths"])
             save_pattern_result(result, config_path)
 
             scored = score_pattern_paths(
@@ -798,11 +830,12 @@ class PathScoringTest(unittest.TestCase):
 
         self.assertEqual(scored["path_count"], 2)
         self.assertEqual(scored["scored_path_count"], 1)
-        self.assertEqual(scored["retrieval_context"]["score_end_date"], None)
+        self.assertEqual(scored["retrieval_context"]["score_end_date"], "2024-01-31")
         self.assertEqual(scored["scores"][0]["path_index"], 0)
 
     def test_save_scored_pattern_result_writes_detail_and_summary_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
+            scored_key = "base_2024-01-31_window_14_qf_training_order_pathcfg_12345678_scoretopk_150"
             result = {
                 "source_id": "30010096",
                 "source_parameter": "patient_id",
@@ -810,6 +843,12 @@ class PathScoringTest(unittest.TestCase):
                 "path_count": 1,
                 "scored_path_count": 1,
                 "retrieval_context": {"score_end_date": "2022-05-22"},
+                "cache_context": {
+                    "cache_type": "scored_pattern_paths",
+                    "path_key": "base_2024-01-31_window_14_qf_training_order_pathcfg_12345678",
+                    "scored_key": scored_key,
+                    "score_top_k": 150,
+                },
                 "scores": [
                     {
                         "path_index": 3,
@@ -833,21 +872,12 @@ class PathScoringTest(unittest.TestCase):
             detail = json.loads(output_paths["detail"].read_text(encoding="utf-8"))
             summary = json.loads(output_paths["summary"].read_text(encoding="utf-8"))
 
-        expected_detail = {
-            **result,
-            "cache_context": {
-                "cache_type": "scored_pattern_paths",
-                "path_key": "legacy_pathctx",
-                "scored_key": "legacy_scoredctx",
-                "score_top_k": None,
-            },
-        }
-        self.assertEqual(detail, expected_detail)
+        self.assertEqual(detail, result)
         self.assertEqual(
             output_paths["detail"].name,
             "30010096.detail.json",
         )
-        self.assertIn("legacy_scoredctx", str(output_paths["detail"]))
+        self.assertIn(scored_key, str(output_paths["detail"]))
         self.assertEqual(
             output_paths["summary"].name,
             "30010096.summary.json",
@@ -859,6 +889,22 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(summary["scores"][0]["game_id"], "348")
         self.assertEqual(summary["scores"][0]["game_name"], "真假句辨别")
         self.assertNotIn("path", summary["scores"][0])
+
+    def test_save_scored_pattern_result_requires_scored_cache_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "cache_context"):
+                save_scored_pattern_result(
+                    {
+                        "source_id": "30010096",
+                        "source_parameter": "patient_id",
+                        "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                        "path_count": 1,
+                        "scored_path_count": 1,
+                        "retrieval_context": {"score_end_date": "2022-05-22"},
+                        "scores": [],
+                    },
+                    Path(temp_dir),
+                )
 
     def test_save_scored_pattern_result_uses_scored_cache_key(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1015,6 +1061,7 @@ class PathScoringTest(unittest.TestCase):
                     }
                 ],
             }
+            result["retrieval_context"] = _retrieval_context(result["paths"])
             save_pattern_result(result, config_path)
 
             scored = score_pattern_paths(
@@ -1079,6 +1126,7 @@ class PathScoringTest(unittest.TestCase):
                     }
                 ],
             }
+            result["retrieval_context"] = _retrieval_context(result["paths"])
             save_pattern_result(result, config_path)
 
             scored = score_pattern_paths(
@@ -1143,6 +1191,7 @@ class PathScoringTest(unittest.TestCase):
                     }
                 ],
             }
+            result["retrieval_context"] = _retrieval_context(result["paths"])
             save_pattern_result(result, config_path)
 
             scored = score_pattern_paths(
@@ -1189,6 +1238,7 @@ class PathScoringTest(unittest.TestCase):
                 "limit_recommendation": None,
                 "paths": [],
             }
+            result["retrieval_context"] = _retrieval_context(result["paths"])
             save_pattern_result(result, config_path)
 
             with self.assertRaisesRegex(ValueError, "Unsupported scoring pattern"):
@@ -1292,6 +1342,9 @@ class PathScoringTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             output_dir="data/scored_pattern_paths",
+            base_date="2024-01-31",
+            window_days=14,
+            query_family="training_order",
         )
 
         self.assertEqual(actual, results)
@@ -1299,6 +1352,9 @@ class PathScoringTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             path_index=None,
+            base_date="2024-01-31",
+            window_days=14,
+            query_family="training_order",
         )
         mock_save_results.assert_called_once_with(
             results,
@@ -1361,6 +1417,7 @@ class PathScoringTest(unittest.TestCase):
                     }
                 ],
             }
+            result["retrieval_context"] = _retrieval_context(result["paths"])
             save_pattern_result(result, config_path)
             expected = score_pattern_paths(
                 "30010096",
@@ -1375,6 +1432,9 @@ class PathScoringTest(unittest.TestCase):
                 age=None,
                 education=None,
                 scored_paths_dir=str(Path(temp_dir) / "scored_pattern_paths"),
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
             )
 
             exit_code = main()
@@ -1453,6 +1513,7 @@ class PathScoringTest(unittest.TestCase):
                     }
                 ],
             }
+            result["retrieval_context"] = _retrieval_context(result["paths"])
             save_pattern_result(result, config_path)
             expected = score_pattern_paths(
                 "30010096",
@@ -1468,6 +1529,9 @@ class PathScoringTest(unittest.TestCase):
                 age=None,
                 education=None,
                 scored_paths_dir=str(Path(temp_dir) / "scored_pattern_paths"),
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
             )
 
             exit_code = main()
@@ -1510,6 +1574,9 @@ class PathScoringTest(unittest.TestCase):
             age=None,
             education=None,
             scored_paths_dir="data/scored_pattern_paths",
+            base_date="2024-01-31",
+            window_days=14,
+            query_family="training_order",
         )
         mock_score_configured.return_value = results
         mock_save_scored.side_effect = [
@@ -1530,6 +1597,9 @@ class PathScoringTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             path_index=None,
+            base_date="2024-01-31",
+            window_days=14,
+            query_family="training_order",
         )
         self.assertEqual(mock_save_scored.call_count, 2)
         mock_save_scored.assert_any_call(
@@ -1559,6 +1629,9 @@ class PathScoringTest(unittest.TestCase):
             age=None,
             education=None,
             scored_paths_dir="data/scored_pattern_paths",
+            base_date="2024-01-31",
+            window_days=14,
+            query_family="training_order",
         )
 
         exit_code = main()

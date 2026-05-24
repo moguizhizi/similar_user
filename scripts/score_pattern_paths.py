@@ -52,7 +52,7 @@ from similar_user.data_access.pattern_registry import (
 from similar_user.domain.graph_schema import PathPattern
 from similar_user.services.path_scoring import PathScoringRules, get_path_scorer
 from similar_user.utils.logger import get_logger
-from similar_user.utils.pattern_storage import PatternResultStore, build_path_key
+from similar_user.utils.pattern_storage import PatternResultStore
 
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
@@ -125,13 +125,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--base-date",
-        default=None,
+        required=True,
         help="Path cache base date used to locate saved raw pattern paths.",
     )
     parser.add_argument(
         "--window-days",
         type=int,
-        default=None,
+        required=True,
         help="Path cache window-days value used to locate saved raw pattern paths.",
     )
     parser.add_argument(
@@ -339,7 +339,6 @@ def save_scored_pattern_result(
     output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
 ) -> dict[str, Path]:
     """Save full scored details and a compact summary as two JSON files."""
-    result = _with_scored_cache_context(result)
     detail_path, summary_path = get_scored_pattern_output_paths(result, output_dir)
     _write_json_atomic(detail_path, result)
     _write_json_atomic(summary_path, build_scored_pattern_summary(result))
@@ -434,17 +433,12 @@ def build_scored_cache_context(
         if isinstance(retrieval_context, dict)
         else None
     )
-    path_key = (
-        str(path_cache_context["path_key"])
-        if isinstance(path_cache_context, dict)
-        and isinstance(path_cache_context.get("path_key"), str)
-        else build_path_key(
-            config_path,
-            base_date=_extract_context_string(retrieval_context, "base_date"),
-            window_days=_extract_window_days_from_context(retrieval_context),
-            query_family=_extract_context_string(retrieval_context, "query_family"),
-        )
-    )
+    if not isinstance(path_cache_context, dict):
+        raise ValueError("Scored path cache requires retrieval_context.cache_context.")
+    path_key = path_cache_context.get("path_key")
+    if not isinstance(path_key, str) or not path_key.strip():
+        raise ValueError("Scored path cache requires cache_context.path_key.")
+    path_key = path_key.strip()
     return {
         "cache_type": "scored_pattern_paths",
         "path_key": path_key,
@@ -473,20 +467,6 @@ def validate_scored_cache_context(
         )
 
 
-def _with_scored_cache_context(result: dict[str, object]) -> dict[str, object]:
-    if isinstance(result.get("cache_context"), dict):
-        return result
-    return {
-        **result,
-        "cache_context": {
-            "cache_type": "scored_pattern_paths",
-            "path_key": "legacy_pathctx",
-            "scored_key": "legacy_scoredctx",
-            "score_top_k": None,
-        },
-    }
-
-
 def _extract_scored_key(cache_context: object) -> str:
     if not isinstance(cache_context, dict):
         raise ValueError("scored result cache_context must be present before saving.")
@@ -494,28 +474,6 @@ def _extract_scored_key(cache_context: object) -> str:
     if not isinstance(scored_key, str) or not scored_key.strip():
         raise ValueError("scored result cache_context.scored_key must be non-empty.")
     return scored_key.strip()
-
-
-def _extract_context_string(
-    retrieval_context: dict[str, object] | None,
-    key: str,
-) -> str | None:
-    if not isinstance(retrieval_context, dict):
-        return None
-    value = retrieval_context.get(key)
-    return str(value) if value is not None else None
-
-
-def _extract_window_days_from_context(
-    retrieval_context: dict[str, object] | None,
-) -> int | None:
-    if not isinstance(retrieval_context, dict):
-        return None
-    path_window = retrieval_context.get("path_window")
-    if not isinstance(path_window, dict):
-        return None
-    window_days = path_window.get("window_days")
-    return window_days if isinstance(window_days, int) else None
 
 
 def _extract_score_end_date(

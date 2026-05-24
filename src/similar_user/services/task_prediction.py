@@ -28,9 +28,8 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V1 = (
     "请根据以下 JSON 数据预测目标用户下一阶段更可能适合的训练任务。"
     "字段含义：candidate_training_tasks 是唯一允许选择的候选任务池；"
     "similar_user_game_counts 是相似用户时间窗口内各任务出现的总次数；"
-    "similar_user_task_evidence 是每个相似用户的相似性分数及其时间窗口内任务次数；"
     "candidate_score 越大表示该候选用户与目标用户越相似。"
-    "请优先参考相似性分数较高用户的任务证据，并结合总体出现次数排序。"
+    "请结合相似用户任务总次数和候选任务池进行排序。"
     "只允许从 candidate_training_tasks 中选择，返回 JSON 对象，不要添加 Markdown。\n\n"
 )
 
@@ -38,10 +37,28 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V2 = (
     "请根据以下 JSON 数据预测目标用户下一阶段更可能适合的训练任务。"
     "字段含义：candidate_training_tasks 是唯一允许选择的候选任务池；"
     "similar_user_game_counts 是相似用户时间窗口内各任务出现的总次数；"
-    "similar_user_task_evidence 是每个相似用户的相似性分数及其时间窗口内任务次数；"
     "candidate_score 越大表示该候选用户与目标用户越相似。"
     "请综合总体出现次数和高相似用户证据，不要只按 similar_user_game_counts 的总次数排名选择。"
     "如果某任务总体次数中等，但由 candidate_score 较高的相似用户反复支持，也应考虑推荐。"
+    "推荐结果应兼顾高频任务和中等频次但证据质量高的任务。"
+    "只允许从 candidate_training_tasks 中选择，不要重复 game_id。"
+    "必须返回 output_requirement.top_k 个任务；如果候选任务不足 top_k，则返回全部候选任务。"
+    "返回 JSON 对象，不要添加 Markdown。\n\n"
+)
+
+TASK_PREDICTION_PROMPT_TEMPLATE_V3 = (
+    "请根据以下 JSON 数据预测目标用户下一阶段更可能适合的训练任务。"
+    "字段含义：candidate_training_tasks 是唯一允许选择的候选任务池；"
+    "similar_user_game_counts 是相似用户时间窗口内各任务出现的汇总证据，"
+    "其中 count 是原始出现次数；"
+    "weighted_count 是按相似用户分数归一权重加权后的出现强度，"
+    "最高相似用户一次出现贡献 1.0，低相似用户按比例折扣；"
+    "supporting_user_count 是做过该任务的不同相似用户人数；"
+    "avg_support_score 是支持该任务的相似用户平均归一权重；"
+    "max_support_score 是支持该任务的相似用户最高归一权重。"
+    "candidate_score 越大表示该候选用户与目标用户越相似。"
+    "推荐时不要只看 count；如果 count 高但 weighted_count 明显偏低，说明主要由低相似用户贡献，应降低优先级。"
+    "如果 count 中等但 weighted_count、avg_support_score 或 max_support_score 较高，说明该任务有高质量相似用户证据，可以优先考虑。"
     "推荐结果应兼顾高频任务和中等频次但证据质量高的任务。"
     "只允许从 candidate_training_tasks 中选择，不要重复 game_id。"
     "必须返回 output_requirement.top_k 个任务；如果候选任务不足 top_k，则返回全部候选任务。"
@@ -53,7 +70,9 @@ CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE = TASK_PREDICTION_PROMPT_TEMPLATE_V2
 TASK_PREDICTION_PROMPT_TEMPLATES = {
     "TASK_PREDICTION_PROMPT_TEMPLATE_V1": TASK_PREDICTION_PROMPT_TEMPLATE_V1,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V2": TASK_PREDICTION_PROMPT_TEMPLATE_V2,
+    "TASK_PREDICTION_PROMPT_TEMPLATE_V3": TASK_PREDICTION_PROMPT_TEMPLATE_V3,
 }
+WEIGHTED_GAME_COUNTS_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V3"
 
 
 @dataclass(frozen=True)
@@ -80,6 +99,14 @@ class TrainingTaskPredictionService:
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
     profile_candidate_training_window_days: int | None = None
+    similar_user_game_counts_weighting_enabled: bool = False
+    similar_user_game_counts_weighted_sort_enabled: bool = False
+
+    def __post_init__(self) -> None:
+        validate_prompt_weighting_compatibility(
+            self.prompt_template_name,
+            self.similar_user_game_counts_weighting_enabled,
+        )
 
     def predict_from_pipeline_result(
         self,
@@ -146,6 +173,8 @@ class TrainingTaskPredictionService:
         similar_user_game_counts = build_similar_user_game_counts(
             candidates,
             similar_user_histories,
+            weighting_enabled=self.similar_user_game_counts_weighting_enabled,
+            weighted_sort_enabled=self.similar_user_game_counts_weighted_sort_enabled,
         )
         similar_user_game_counts = filter_game_counts_by_ids(
             similar_user_game_counts,
@@ -205,17 +234,21 @@ class TrainingTaskPredictionService:
             "selected_candidate_count": len(prompt_candidate_game_ids),
             "source_similar_user_game_count": len(similar_user_game_counts),
             "source_candidate_task_count": len(candidate_tasks),
+            "similar_user_game_counts_weighting_enabled": (
+                self.similar_user_game_counts_weighting_enabled
+            ),
+            "similar_user_game_counts_weighted_sort_enabled": (
+                self.similar_user_game_counts_weighted_sort_enabled
+            ),
         }
 
         rule_based_tasks = build_rule_based_predictions(
             prompt_candidate_tasks,
             top_k=task_top_k,
         )
-
         prompt = build_task_prediction_prompt(
             patient_id=resolved_patient_id,
             similar_user_game_counts=prompt_similar_user_game_counts,
-            similar_user_task_evidence=prompt_similar_user_task_evidence,
             candidate_training_tasks=prompt_candidate_tasks,
             task_top_k=task_top_k,
             prompt_template_name=self.prompt_template_name,
@@ -501,12 +534,97 @@ def build_candidate_training_tasks_from_distinct_games(
 def build_similar_user_game_counts(
     candidates: list[SimilarUserCandidate],
     similar_user_histories: dict[str, list[dict[str, Any]]],
+    *,
+    weighting_enabled: bool = False,
+    weighted_sort_enabled: bool = False,
 ) -> list[dict[str, Any]]:
     """Aggregate simple game counts from similar-user histories for prompt input."""
-    rows: list[dict[str, Any]] = []
+    if not weighting_enabled:
+        rows: list[dict[str, Any]] = []
+        for candidate in candidates:
+            rows.extend(similar_user_histories.get(candidate.patient_id, []))
+        return build_game_counts_from_history(rows)
+
+    candidate_weights = _normalize_candidate_weights(candidates)
+    game_index: dict[str, dict[str, Any]] = {}
     for candidate in candidates:
-        rows.extend(similar_user_histories.get(candidate.patient_id, []))
-    return build_game_counts_from_history(rows)
+        candidate_weight = candidate_weights.get(candidate.patient_id, 1.0)
+        seen_game_ids_for_candidate: set[str] = set()
+        for row in similar_user_histories.get(candidate.patient_id, []):
+            game = _normalize_node(row.get("g"))
+            game_id = _normalize_text(game.get("id")) or _normalize_text(
+                game.get("name")
+            )
+            if game_id is None:
+                continue
+            item = game_index.setdefault(
+                game_id,
+                {
+                    "game_id": game_id,
+                    "game_name": _normalize_text(game.get("name")),
+                    "count": 0,
+                    "weighted_count": 0.0,
+                    "supporting_candidate_ids": [],
+                    "_support_scores": [],
+                },
+            )
+            item["count"] += 1
+            item["weighted_count"] += candidate_weight
+            if game_id not in seen_game_ids_for_candidate:
+                item["supporting_candidate_ids"].append(candidate.patient_id)
+                item["_support_scores"].append(candidate_weight)
+                seen_game_ids_for_candidate.add(game_id)
+
+    game_counts: list[dict[str, Any]] = []
+    for item in game_index.values():
+        support_scores = item.pop("_support_scores")
+        supporting_user_count = len(support_scores)
+        item["weighted_count"] = round(float(item["weighted_count"]), 4)
+        item["supporting_user_count"] = supporting_user_count
+        item["avg_support_score"] = round(
+            sum(float(score) for score in support_scores) / supporting_user_count,
+            4,
+        )
+        item["max_support_score"] = round(
+            max(float(score) for score in support_scores),
+            4,
+        )
+        game_counts.append(item)
+
+    if weighted_sort_enabled:
+        return sorted(
+            game_counts,
+            key=lambda item: (
+                -float(item["weighted_count"]),
+                -int(item["supporting_user_count"]),
+                -int(item["count"]),
+                str(item["game_id"]),
+            ),
+        )
+    return sorted(
+        game_counts,
+        key=lambda item: (
+            -int(item["count"]),
+            str(item["game_id"]),
+        ),
+    )
+
+
+def _normalize_candidate_weights(
+    candidates: list[SimilarUserCandidate],
+) -> dict[str, float]:
+    """Normalize candidate weights within one target user's candidate set."""
+    raw_weights = {
+        candidate.patient_id: candidate.weight
+        for candidate in candidates
+    }
+    max_weight = max(raw_weights.values(), default=1.0)
+    if max_weight <= 0:
+        max_weight = 1.0
+    return {
+        patient_id: round(float(weight) / max_weight, 4)
+        for patient_id, weight in raw_weights.items()
+    }
 
 
 def build_similar_user_task_evidence(
@@ -750,7 +868,6 @@ def build_task_prediction_prompt(
     *,
     patient_id: str,
     similar_user_game_counts: list[dict[str, Any]],
-    similar_user_task_evidence: list[dict[str, Any]],
     candidate_training_tasks: list[dict[str, Any]],
     task_top_k: int,
     prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
@@ -761,8 +878,6 @@ def build_task_prediction_prompt(
     patient_id：目标用户 ID，用于标识当前要预测训练任务的患者。
     similar_user_game_counts：相似用户在预测任务时间窗口内的任务出现次数汇总，
         用于提供“哪些任务在相似用户中更常见”的整体证据。
-    similar_user_task_evidence：按相似用户拆分的任务证据，包含候选用户 ID、
-        相似性分数和该用户窗口内的任务次数，用于让 LLM 判断证据来源和权重。
     candidate_training_tasks：允许 LLM 选择的候选训练任务池；最终输出的 game_id
         和 game_name 必须来自这里，避免生成库外任务。
     task_top_k：要求 LLM 返回的推荐任务数量上限。
@@ -770,7 +885,6 @@ def build_task_prediction_prompt(
     payload = {
         "patient_id": patient_id,
         "similar_user_game_counts": similar_user_game_counts,
-        "similar_user_task_evidence": similar_user_task_evidence,
         "candidate_training_tasks": candidate_training_tasks,
         "output_requirement": {
             "top_k": task_top_k,
@@ -806,6 +920,26 @@ def get_task_prediction_prompt_template(prompt_template_name: str) -> str:
             f"Available templates: {available_names}."
         )
     return prompt_template
+
+
+def validate_prompt_weighting_compatibility(
+    prompt_template_name: str,
+    similar_user_game_counts_weighting_enabled: bool,
+) -> None:
+    """Raise when a weighted-count prompt is used without weighted inputs."""
+    normalized_name = (
+        prompt_template_name.strip()
+        if isinstance(prompt_template_name, str)
+        else ""
+    )
+    if (
+        normalized_name == WEIGHTED_GAME_COUNTS_PROMPT_TEMPLATE_NAME
+        and not similar_user_game_counts_weighting_enabled
+    ):
+        raise ValueError(
+            "TASK_PREDICTION_PROMPT_TEMPLATE_V3 requires "
+            "similar_user_game_counts_weighting_enabled=true."
+        )
 
 
 def _resolve_predicted_tasks(

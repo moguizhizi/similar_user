@@ -19,11 +19,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 import tempfile
 import time
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -78,13 +80,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--base-date",
-        default=None,
+        required=True,
         help="Path/scored cache base date used to locate saved scored paths.",
     )
     parser.add_argument(
         "--window-days",
         type=int,
-        default=None,
+        required=True,
         help="Path/scored cache window-days value used to locate saved scored paths.",
     )
     parser.add_argument(
@@ -181,6 +183,11 @@ def build_similar_user_candidates(
         result.setdefault("retrieval_context", {})[
             "disease_course_window_days"
         ] = resolved_disease_course_window_days
+        result["cache_context"] = build_candidate_cache_context(
+            resolved_config_path,
+            scored_key=scored_key,
+            disease_course_window_days=resolved_disease_course_window_days,
+        )
     LOGGER.info(
         "Completed similar-user candidate build: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s, elapsed_seconds=%s",
         patient_id,
@@ -204,7 +211,7 @@ def load_saved_scored_pattern_result(
     """Load one saved scored detail file produced by score_pattern_paths.py."""
     normalized_source_id = _normalize_required_string(source_id, "source_id")
     normalized_pattern = resolve_path_pattern(pattern).value
-    resolved_scored_key = scored_key or "legacy_scoredctx"
+    resolved_scored_key = _normalize_required_string(scored_key, "scored_key")
     detail_path = (
         Path(scored_paths_dir)
         / resolved_scored_key
@@ -236,8 +243,6 @@ def build_expected_scored_key(
 ) -> str:
     """Build the scored path cache key expected by candidate aggregation."""
     query_settings = load_query_settings(config_path)
-    if base_date is None and window_days is None and query_family is None:
-        return "legacy_scoredctx"
     path_key = build_path_key(
         config_path,
         base_date=base_date,
@@ -273,8 +278,9 @@ def get_similar_user_candidate_output_paths(
 ) -> tuple[Path, Path]:
     """Return detail and summary output paths for one candidate result."""
     source_id = _normalize_required_string(result.get("source_id"), "source_id")
+    candidate_key = _extract_candidate_key(result.get("cache_context"))
     bucket = source_id[:2] or "unknown"
-    output_base = Path(output_dir) / bucket
+    output_base = Path(output_dir) / candidate_key / bucket
     return (
         output_base / f"{source_id}.detail.json",
         output_base / f"{source_id}.summary.json",
@@ -321,8 +327,35 @@ def _build_candidate_score_output(
         "source_parameter": result.get("source_parameter"),
         "candidate_top_k": result.get("candidate_top_k"),
         "retrieval_context": result.get("retrieval_context"),
+        "cache_context": result.get("cache_context"),
         "candidate_count": result.get("candidate_count"),
         "candidates": score_candidates,
+    }
+
+
+def build_candidate_key(scored_key: str, candidate_config_hash: str) -> str:
+    """Build a cache key for similar-user candidate results."""
+    return f"{scored_key}_candcfg_{candidate_config_hash}"
+
+
+def build_candidate_cache_context(
+    config_path: str | Path,
+    *,
+    scored_key: str,
+    disease_course_window_days: int | None,
+) -> dict[str, Any]:
+    """Build cache metadata for similar-user candidate results."""
+    candidate_config = _candidate_config_payload(
+        config_path,
+        disease_course_window_days=disease_course_window_days,
+    )
+    candidate_config_hash = _short_hash(candidate_config)
+    return {
+        "cache_type": "similar_user_candidates",
+        "scored_key": scored_key,
+        "candidate_key": build_candidate_key(scored_key, candidate_config_hash),
+        "candidate_config_hash": candidate_config_hash,
+        "candidate_config": candidate_config,
     }
 
 
@@ -398,6 +431,45 @@ def _extract_nested_value(data: dict[str, Any], *keys: str) -> Any:
             return None
         current = current.get(key)
     return current
+
+
+def _extract_candidate_key(cache_context: object) -> str:
+    if not isinstance(cache_context, dict):
+        raise ValueError("candidate result cache_context must be present before saving.")
+    candidate_key = cache_context.get("candidate_key")
+    if not isinstance(candidate_key, str) or not candidate_key.strip():
+        raise ValueError("candidate result cache_context.candidate_key must be non-empty.")
+    return candidate_key.strip()
+
+
+def _candidate_config_payload(
+    config_path: str | Path,
+    *,
+    disease_course_window_days: int | None,
+) -> dict[str, Any]:
+    ranking_settings = load_query_settings(config_path).candidate_ranking
+    return {
+        "patterns": list(ranking_settings.patterns),
+        "candidate_top_k": ranking_settings.candidate_top_k,
+        "total_score_match_top_k": ranking_settings.total_score_match_top_k,
+        "disease_course_window_days": disease_course_window_days,
+        "scoring": _to_plain_data(ranking_settings.scoring),
+    }
+
+
+def _to_plain_data(value: Any) -> Any:
+    if is_dataclass(value):
+        return _to_plain_data(asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _to_plain_data(item) for key, item in sorted(value.items())}
+    if isinstance(value, (list, tuple)):
+        return [_to_plain_data(item) for item in value]
+    return value
+
+
+def _short_hash(payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:8]
 
 
 def _normalize_required_string(value: object, field_name: str) -> str:

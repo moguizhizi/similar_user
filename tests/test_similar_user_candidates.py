@@ -8,15 +8,23 @@ import unittest
 from pathlib import Path
 from unittest.mock import ANY, Mock, patch
 
-from config.settings import CandidateScoringSettings, SetSameScoringSettings
+from config.settings import (
+    CandidateScoringSettings,
+    SetSameScoringSettings,
+    load_query_settings,
+)
 from scripts.build_similar_user_candidates import (
+    build_candidate_cache_context,
     build_similar_user_candidate_summary,
-    build_similar_user_candidates,
+    build_similar_user_candidates as _build_similar_user_candidates,
     load_saved_scored_pattern_result,
     main,
     save_similar_user_candidates_result,
 )
-from scripts.score_pattern_paths import build_scored_key, save_scored_pattern_result
+from scripts.score_pattern_paths import (
+    build_scored_key,
+    save_scored_pattern_result as _save_scored_pattern_result,
+)
 from scripts.run_similar_user_pipeline import (
     EmptyPathResultsError,
     main as pipeline_main,
@@ -25,6 +33,47 @@ from scripts.run_similar_user_pipeline import (
 )
 from similar_user.services.similarity import SimilarUserCandidateService
 from similar_user.utils.pattern_storage import build_path_key, save_pattern_result
+
+
+def _cache_kwargs() -> dict[str, object]:
+    return {
+        "base_date": "2024-01-31",
+        "window_days": 14,
+        "query_family": "training_order",
+    }
+
+
+def _scored_cache_context(output_dir: str | Path) -> dict[str, object]:
+    config_path = Path(output_dir).parent / "settings.yaml"
+    score_top_k = load_query_settings(config_path).score_pattern_paths.top_k
+    path_key = build_path_key(
+        config_path,
+        base_date="2024-01-31",
+        window_days=14,
+        query_family="training_order",
+    )
+    return {
+        "cache_type": "scored_pattern_paths",
+        "path_key": path_key,
+        "scored_key": build_scored_key(path_key, score_top_k),
+        "score_top_k": score_top_k,
+    }
+
+
+def save_scored_pattern_result(
+    result: dict[str, object],
+    output_dir: str | Path,
+) -> dict[str, Path]:
+    if not isinstance(result.get("cache_context"), dict):
+        result = {**result, "cache_context": _scored_cache_context(output_dir)}
+    return _save_scored_pattern_result(result, output_dir)
+
+
+def build_similar_user_candidates(*args: object, **kwargs: object) -> dict[str, object]:
+    kwargs.setdefault("base_date", "2024-01-31")
+    kwargs.setdefault("window_days", 14)
+    kwargs.setdefault("query_family", "training_order")
+    return _build_similar_user_candidates(*args, **kwargs)
 
 
 class SimilarUserCandidatesTest(unittest.TestCase):
@@ -1365,6 +1414,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "30010096",
                 pattern="patient_game_patient",
                 scored_paths_dir=Path(temp_dir) / "scored_pattern_paths",
+                scored_key="missing_scored_key",
             )
 
         self.assertIsNone(result)
@@ -1434,6 +1484,19 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "scored_path_count": 5,
             "retrieval_context": {"score_end_date": "2022-05-22"},
             "candidate_count": 1,
+            "cache_context": {
+                "cache_type": "similar_user_candidates",
+                "scored_key": "test_scored_key",
+                "candidate_key": "test_scored_key_candcfg_12345678",
+                "candidate_config_hash": "12345678",
+                "candidate_config": {
+                    "patterns": ["patient_game_patient"],
+                    "candidate_top_k": 2,
+                    "total_score_match_top_k": 1,
+                    "disease_course_window_days": 14,
+                    "scoring": {},
+                },
+            },
             "candidates": [
                 {
                     "patient_id": "20113562",
@@ -1487,6 +1550,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             output_paths["detail"].name,
             "30010096.detail.json",
         )
+        self.assertIn("test_scored_key_candcfg_12345678", str(output_paths["detail"]))
         expected_score_summary = build_similar_user_candidate_summary(result)
         self.assertEqual(
             detail["candidates"][0]["score_details"],
@@ -1527,6 +1591,87 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertNotIn("patterns", summary)
         self.assertNotIn("path_count", summary)
         self.assertNotIn("scored_path_count", summary)
+
+    def test_save_similar_user_candidates_result_requires_candidate_cache_key(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "cache_context must be present"):
+                save_similar_user_candidates_result(
+                    {
+                        "source_id": "30010096",
+                        "source_parameter": "patient_id",
+                        "candidate_top_k": 10,
+                        "candidate_count": 0,
+                        "candidates": [],
+                    },
+                    Path(temp_dir),
+                )
+
+    def test_save_similar_user_candidates_result_uses_candidate_cache_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            output_dir = Path(temp_dir) / "similar_user_candidates"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "score_pattern_paths:",
+                        "  top_k: 150",
+                        "candidate_ranking:",
+                        "  patterns:",
+                        "    - patient_game_patient",
+                        "  candidate_top_k: 10",
+                        "  total_score_match_top_k: 3",
+                        "  disease_course_window_days: 14",
+                        "  scoring:",
+                        "    common_game_score_similarity: false",
+                        "    game_similarity_with_diversity_score: false",
+                        "    disease_course_secondary_ability: true",
+                        "    set_same:",
+                        "      disease: false",
+                        "      symptom: false",
+                        "      unknown: false",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
+            )
+            scored_key = build_scored_key(path_key, 150)
+            cache_context = build_candidate_cache_context(
+                config_path,
+                scored_key=scored_key,
+                disease_course_window_days=14,
+            )
+
+            output_paths = save_similar_user_candidates_result(
+                {
+                    "source_id": "30010096",
+                    "source_parameter": "patient_id",
+                    "candidate_top_k": 10,
+                    "retrieval_context": {"score_end_date": "2024-01-31"},
+                    "candidate_count": 0,
+                    "candidates": [],
+                    "cache_context": cache_context,
+                },
+                output_dir,
+            )
+
+        self.assertEqual(
+            output_paths["detail"],
+            output_dir
+            / cache_context["candidate_key"]
+            / "30"
+            / "30010096.detail.json",
+        )
+        self.assertIn(f"{scored_key}_candcfg_", cache_context["candidate_key"])
 
     @patch("scripts.build_similar_user_candidates.LOGGER")
     @patch("scripts.build_similar_user_candidates.parse_args")
