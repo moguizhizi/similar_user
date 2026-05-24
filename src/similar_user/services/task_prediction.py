@@ -79,6 +79,7 @@ class TrainingTaskPredictionService:
     llm_client: LlmClient | None = None
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
+    profile_candidate_training_window_days: int | None = None
 
     def predict_from_pipeline_result(
         self,
@@ -122,6 +123,9 @@ class TrainingTaskPredictionService:
             self.user_service.get_patient_profile_candidate_training_games(
                 resolved_patient_id,
                 target_task_window["base_date"],
+                profile_candidate_training_window_days=(
+                    self.profile_candidate_training_window_days
+                ),
             )
         )
         if not isinstance(profile_candidate_game_rows, list):

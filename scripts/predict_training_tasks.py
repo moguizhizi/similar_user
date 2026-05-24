@@ -234,6 +234,9 @@ def run_training_task_prediction(
         if isinstance(raw_include_similar_user_task_evidence, bool)
         else True
     )
+    profile_candidate_training_window_days = (
+        query_settings.training_task_prediction.profile_candidate_training_window_days
+    )
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
             kg_repository=KgRepository(
@@ -248,6 +251,7 @@ def run_training_task_prediction(
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name,
             include_similar_user_task_evidence=include_similar_user_task_evidence,
+            profile_candidate_training_window_days=profile_candidate_training_window_days,
         )
         return service.predict_from_pipeline_result(
             pipeline_result,

@@ -123,8 +123,16 @@ class UserService:
         patient_id: str,
         base_date: str,
         age_window: int = 0,
+        profile_candidate_training_window_days: int | None = None,
     ) -> list[dict[str, object]]:
         """Return exclusive-task games matching patient profile filters."""
+        if profile_candidate_training_window_days is not None:
+            return self.kg_repository.get_patient_profile_gender_education_age_windowed_exclusive_task_games(
+                patient_id,
+                base_date,
+                age_window,
+                profile_candidate_training_window_days,
+            )
         return self.get_patient_profile_gender_education_age_exclusive_task_games(
             patient_id,
             base_date,

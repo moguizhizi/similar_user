@@ -95,6 +95,7 @@ class TrainingTaskPredictionSettings:
 
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+    profile_candidate_training_window_days: int | None = None
 
 
 @dataclass(frozen=True)
@@ -316,6 +317,18 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction prompt_template_name must be a non-empty string."
         )
+    profile_candidate_training_window_days = training_task_prediction_data.get(
+        "profile_candidate_training_window_days",
+        None,
+    )
+    if profile_candidate_training_window_days is not None and (
+        not isinstance(profile_candidate_training_window_days, int)
+        or isinstance(profile_candidate_training_window_days, bool)
+        or profile_candidate_training_window_days < 0
+    ):
+        raise ValueError(
+            "training_task_prediction profile_candidate_training_window_days must be a non-negative integer or null."
+        )
 
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
@@ -337,6 +350,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         training_task_prediction=TrainingTaskPredictionSettings(
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name.strip(),
+            profile_candidate_training_window_days=profile_candidate_training_window_days,
         ),
     )
 

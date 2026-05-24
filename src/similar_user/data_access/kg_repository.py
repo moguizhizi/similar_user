@@ -726,6 +726,46 @@ class KgRepository:
             },
         )
 
+    def get_patient_profile_gender_education_age_windowed_exclusive_task_games(
+        self,
+        patient_id: str,
+        base_date: str,
+        age_window: int,
+        profile_candidate_training_window_days: int,
+    ) -> list[dict[str, object]]:
+        """Return profile-matched exclusive-task games within a training-date window."""
+        normalized_patient_id = patient_id.strip()
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if not normalized_patient_id:
+            raise ValueError("patient_id must be a non-empty string.")
+        if (
+            not isinstance(age_window, int)
+            or isinstance(age_window, bool)
+            or age_window < 0
+        ):
+            raise ValueError("age_window must be a non-negative integer.")
+        if (
+            not isinstance(profile_candidate_training_window_days, int)
+            or isinstance(profile_candidate_training_window_days, bool)
+            or profile_candidate_training_window_days < 0
+        ):
+            raise ValueError(
+                "profile_candidate_training_window_days must be a non-negative integer."
+            )
+
+        spec = get_graph_query_spec(
+            "patient_profile_gender_education_age_windowed_exclusive_task_game"
+        )
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "base_date": normalized_base_date,
+                "age_window": age_window,
+                "profile_candidate_training_window_days": profile_candidate_training_window_days,
+            },
+        )
+
     def get_patient_secondary_ability_scores_by_disease_course_window(
         self,
         patient_id: str,

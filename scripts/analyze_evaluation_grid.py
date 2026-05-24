@@ -111,9 +111,9 @@ def analyze_evaluation_grid(grid_dir: str | Path) -> dict[str, Any]:
         best.get("overrides"),
     )
     second_best_parameter_diff = build_parameter_diff_to_reference(
+        baseline.get("overrides") if baseline else {},
         second_best.get("overrides") if second_best else {},
-        best.get("overrides"),
-        reference_label="second_best",
+        reference_label="baseline",
     )
     warnings = build_warnings(leaderboard, best_summary, grid_summary)
     recommendation = build_recommendation(
@@ -404,14 +404,14 @@ def build_markdown_report(analysis: dict[str, Any]) -> str:
     else:
         lines.append("- No parameter differences from baseline.")
 
-    lines.extend(["", "## Parameter Diff: Best vs Second-best", ""])
+    lines.extend(["", "## Parameter Diff: Second-best vs Baseline", ""])
     if second_best_parameter_diff:
         lines.extend(
-            f"- `{key}`: `{value.get('second_best')}` -> `{value.get('best')}`"
+            f"- `{key}`: `{value.get('baseline')}` -> `{value.get('best')}`"
             for key, value in second_best_parameter_diff.items()
         )
     else:
-        lines.append("- No parameter differences from second-best.")
+        lines.append("- No parameter differences from baseline.")
 
     lines.extend(["", "## Warnings", ""])
     if warnings:

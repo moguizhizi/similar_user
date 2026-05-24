@@ -534,6 +534,7 @@ class TaskPredictionTest(unittest.TestCase):
         user_service.get_patient_profile_candidate_training_games.assert_called_once_with(
             "40",
             "2022-05-22",
+            profile_candidate_training_window_days=None,
         )
         user_service.get_distinct_training_games.assert_not_called()
         user_service.get_patient_training_task_history_by_date_window.assert_called_once_with(
@@ -599,6 +600,38 @@ class TaskPredictionTest(unittest.TestCase):
             ],
         )
         self.assertEqual(result["candidate_training_tasks"], [{"game_id": "2", "game_name": "任务B"}])
+
+    def test_predict_from_pipeline_result_passes_profile_candidate_training_window(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.return_value = []
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "1", "name": "任务A"}},
+        ]
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            profile_candidate_training_window_days=0,
+        )
+
+        service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": ["201"]},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+        )
+
+        user_service.get_patient_profile_candidate_training_games.assert_called_once_with(
+            "40",
+            "2022-05-22",
+            profile_candidate_training_window_days=0,
+        )
 
     def test_predict_from_pipeline_result_can_disable_prompt_candidate_compression(
         self,

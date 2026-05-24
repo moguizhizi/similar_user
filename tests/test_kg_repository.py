@@ -57,6 +57,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
     PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+    PATIENT_PROFILE_GENDER_EDUCATION_AGE_WINDOWED_EXCLUSIVE_TASK_GAME_QUERY,
     PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -474,6 +475,47 @@ class KgRepositoryTest(unittest.TestCase):
             repository.get_patient_profile_gender_education_age_exclusive_task_games(
                 "20104662",
                 "2024-01-31",
+                -1,
+            )
+
+    def test_get_patient_profile_gender_education_age_windowed_exclusive_task_games_runs_registered_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"g": {"id": "42", "name": "任务A"}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_profile_gender_education_age_windowed_exclusive_task_games(
+            " 20104662 ",
+            " 2024-01-31 ",
+            5,
+            0,
+        )
+
+        self.assertEqual(result, [{"g": {"id": "42", "name": "任务A"}}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_PROFILE_GENDER_EDUCATION_AGE_WINDOWED_EXCLUSIVE_TASK_GAME_QUERY,
+            parameters={
+                "patient_id": "20104662",
+                "base_date": "2024-01-31",
+                "age_window": 5,
+                "profile_candidate_training_window_days": 0,
+            },
+        )
+
+    def test_get_patient_profile_gender_education_age_windowed_exclusive_task_games_validates_window(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "profile_candidate_training_window_days must be a non-negative integer.",
+        ):
+            repository.get_patient_profile_gender_education_age_windowed_exclusive_task_games(
+                "20104662",
+                "2024-01-31",
+                0,
                 -1,
             )
 
@@ -2263,6 +2305,9 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertEqual(
             settings.training_task_prediction.prompt_template_name,
             "TASK_PREDICTION_PROMPT_TEMPLATE_V2",
+        )
+        self.assertIsNone(
+            settings.training_task_prediction.profile_candidate_training_window_days,
         )
         self.assertFalse(
             settings.candidate_ranking.scoring.common_game_score_similarity
