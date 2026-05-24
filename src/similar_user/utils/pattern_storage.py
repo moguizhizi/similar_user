@@ -28,7 +28,6 @@ from .logger import get_logger
 
 
 LOGGER = get_logger(__name__)
-LEGACY_PATH_KEY = "legacy_pathctx"
 
 
 @dataclass(frozen=True)
@@ -251,9 +250,8 @@ def get_pattern_result_output_dir(
     settings = load_query_settings(config_path)
     normalized_pattern = resolve_path_pattern(pattern)
     base_dir = Path(settings.pattern_path_storage.output_dir)
-    if path_key is not None:
-        base_dir = base_dir / path_key
-    return base_dir / normalized_pattern.value
+    normalized_path_key = _normalize_required_string(path_key, "path_key")
+    return base_dir / normalized_path_key / normalized_pattern.value
 
 
 def get_pattern_result_output_path(
@@ -409,14 +407,15 @@ def build_path_key(
     query_family: str | None,
 ) -> str:
     """Build a filesystem-safe cache key for raw pattern path results."""
+    normalized_base_date = _normalize_required_string(base_date, "base_date")
+    if window_days is None or isinstance(window_days, bool) or window_days <= 0:
+        raise ValueError("window_days must be a positive integer.")
     graph_path_limit_hash = _short_hash(
         {"graph_path_limit": _graph_path_limit_config_payload(config_path)}
     )
-    if not base_date or window_days is None:
-        return f"{LEGACY_PATH_KEY}_pathcfg_{graph_path_limit_hash}"
     normalized_query_family = _normalize_query_family_for_key(query_family)
     return (
-        f"base_{_slug_part(base_date)}"
+        f"base_{_slug_part(normalized_base_date)}"
         f"_window_{window_days}"
         f"_qf_{normalized_query_family}"
         f"_pathcfg_{graph_path_limit_hash}"
@@ -438,6 +437,13 @@ def build_path_cache_context(
         window_days = _extract_window_days(raw_path_window)
         raw_query_family = retrieval_context.get("query_family")
         query_family = str(raw_query_family) if raw_query_family is not None else None
+    if base_date is None:
+        raise ValueError("retrieval_context.base_date must be present for path cache key.")
+    if window_days is None:
+        raise ValueError(
+            "retrieval_context.path_window must include a valid start_date/end_date "
+            "for path cache key."
+        )
 
     graph_path_limit = _graph_path_limit_config_payload(config_path)
     path_config_hash = _short_hash({"graph_path_limit": graph_path_limit})

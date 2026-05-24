@@ -19,6 +19,18 @@ from similar_user.utils.pattern_storage import (
 )
 
 
+def _retrieval_context() -> dict[str, object]:
+    return {
+        "base_date": "2024-01-31",
+        "query_family": "training_order",
+        "path_window": {
+            "start_date": "2024-01-17",
+            "end_date": "2024-01-31",
+        },
+        "paths": [],
+    }
+
+
 class ReadPatientPatternResultScriptTest(unittest.TestCase):
     def test_read_patient_pattern_result_returns_typed_result(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -49,20 +61,23 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 "first_training_date": "2022-01-01",
                 "last_training_date": "2022-01-13",
                 "training_date_count": 2,
-                "retrieval_context": None,
+                "retrieval_context": _retrieval_context(),
             }
             save_pattern_result(expected_result, config_path)
             path_key = build_path_key(
                 config_path,
-                base_date=None,
-                window_days=None,
-                query_family=None,
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
             )
 
             loaded_result = read_patient_pattern_result(
                 "30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
             )
 
         self.assertIsInstance(loaded_result, StoredPatternResult)
@@ -109,20 +124,23 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 "first_training_date": None,
                 "last_training_date": None,
                 "training_date_count": 0,
-                "retrieval_context": None,
+                "retrieval_context": _retrieval_context(),
                 "patient_id": "30010096",
             }
             save_pattern_result(expected_result, config_path)
             path_key = build_path_key(
                 config_path,
-                base_date=None,
-                window_days=None,
-                query_family=None,
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
             )
             mock_parse_args.return_value = Mock(
                 patient_id="30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config=str(config_path),
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
             )
 
             exit_code = main()
