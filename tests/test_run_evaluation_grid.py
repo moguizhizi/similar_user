@@ -226,7 +226,25 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "--dry-run",
                 "--skip-path-build",
                 "--skip-path-scoring",
+                "--prompt-output-dir",
+                "data/evaluation_grid/runs/exp_001/prompts",
             ],
+        )
+
+    def test_build_evaluation_command_respects_configured_prompt_dir(self) -> None:
+        command = run_evaluation_grid.build_evaluation_command(
+            base_options={
+                "base_date": "2023-10-15",
+                "prompt_output_dir": "data/custom-prompts",
+            },
+            config_path="data/evaluation_grid/generated_configs/exp_001.yaml",
+            output_dir="data/evaluation_grid/runs/exp_001",
+        )
+
+        self.assertIn("--prompt-output-dir", command)
+        self.assertEqual(
+            command[command.index("--prompt-output-dir") + 1],
+            "data/custom-prompts",
         )
 
     def test_run_evaluation_grid_skips_existing_summary(self) -> None:

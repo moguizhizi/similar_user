@@ -352,6 +352,8 @@ def build_evaluation_command(
         command.append("--skip-path-scoring")
     if bool(base_options.get("no_save_prompt", False)):
         command.append("--no-save-prompt")
+    elif base_options.get("prompt_output_dir") is None:
+        command.extend(["--prompt-output-dir", str(Path(output_dir) / "prompts")])
     return command
 
 
