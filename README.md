@@ -109,15 +109,15 @@ python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 
 python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14
 python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --config config/settings.yaml
 python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --query-family training_order
-python scripts/build_pattern_paths.py --source-id <patient_id> --patterns-from-config --base-date 2022-05-22 --window-days 14
+python scripts/build_pattern_paths.py --source-id <patient_id> --patterns-from-config --base-date 2022-05-22 --window-days 14 --query-family training_order
+python scripts/run_monthly_pattern_paths.py --window-days 14 --query-family training_order
 
 # 对已保存的固定模式路径打分
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --config config/settings.yaml
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --path-index 0
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --top-k 20 --scored-paths-dir data/scored_pattern_paths
-python scripts/score_pattern_paths.py --source-id <patient_id> --patterns-from-config --top-k 20
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --query-family training_order
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --query-family training_order --config config/settings.yaml
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --query-family training_order --path-index 0
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --query-family training_order --scored-paths-dir data/scored_pattern_paths
+python scripts/score_pattern_paths.py --source-id <patient_id> --patterns-from-config --base-date 2022-05-22 --window-days 14 --query-family training_order
 
 # 读取已保存的固定模式路径结果
 python scripts/read_patient_pattern_result.py <patient_id>
@@ -155,9 +155,9 @@ python scripts/run_evaluation_grid.py --experiment-config config/experiments/eva
 
 `run_similar_user_pipeline.py` 默认会先重新生成并保存固定模式 path，再读取保存结果打分并生成候选用户。如果已经有可用的离线路径结果，可以使用 `--skip-path-build` 跳过 path 检索。脚本默认使用 `--output-level ids`，候选用户仅以 `candidate_ids` 列出全部 `patient_id`；使用 `--output-level scores` 时输出 `patient_id` 和 `candidate_score`；使用 `--output-level full` 时输出完整 `candidate_result` 和候选明细。
 
-`build_pattern_paths.py --patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次构建这些 patient 起点模式的离线 path；如果 YAML 中配置了 `disease_patient`、`symptom_patient`、`unknown_patient` 这类 direct 模式，脚本会报错，避免把 patient_id 与 disease_id/symptom_id/unknown_id 混用。
+`build_pattern_paths.py --patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次构建这些 patient 起点模式的离线 path；如果 YAML 中配置了 `disease_patient`、`symptom_patient`、`unknown_patient` 这类 direct 模式，脚本会报错，避免把 patient_id 与 disease_id/symptom_id/unknown_id 混用。建议显式传入 `--query-family training_order`，这样生成的 `data/pattern_paths/{path_key}/...` 与后续评分命令使用的缓存上下文完全一致。
 
-`score_pattern_paths.py` 默认会保存评分明细和摘要。`--patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次评分这些 patient 起点模式；`--top-k` 在批量模式下对每个 pattern 分别生效。`--path-index` 仅用于单条 path 调试，不会保存评分文件。
+`score_pattern_paths.py` 默认会保存评分明细和摘要。`--patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次评分这些 patient 起点模式；`--path-index` 仅用于单条 path 调试，不会保存评分文件。评分复用已保存 path 时，应传入与构建 path 相同的 `--base-date`、`--window-days` 和 `--query-family`，脚本会用这些参数定位并校验对应的 `path_key`。
 
 `build_similar_user_candidates.py` 读取配置文件中的 `query.candidate_ranking`，默认会保存完整候选明细和轻量摘要到 `data/similar_user_candidates/`。如需调整候选返回数量，直接修改 YAML：
 
