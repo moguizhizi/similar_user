@@ -25,7 +25,7 @@ query:
   pattern_path_storage:
     output_dir: "data/pattern_paths"
   score_pattern_paths:
-    top_k: 50
+    top_k: 150
   candidate_ranking:
     patterns:
       - "patient_game_patient"
