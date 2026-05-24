@@ -45,7 +45,10 @@ from similar_user.utils.logger import get_logger
 from scripts.score_pattern_paths import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_SCORED_OUTPUT_DIR,
+    build_scored_key,
+    validate_scored_cache_context,
 )
+from similar_user.utils.pattern_storage import build_path_key
 
 
 LOGGER = get_logger(__name__)
@@ -73,6 +76,23 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_CANDIDATES_DIR),
         help="Directory used to store similar-user candidate detail and summary JSON files.",
     )
+    parser.add_argument(
+        "--base-date",
+        default=None,
+        help="Path/scored cache base date used to locate saved scored paths.",
+    )
+    parser.add_argument(
+        "--window-days",
+        type=int,
+        default=None,
+        help="Path/scored cache window-days value used to locate saved scored paths.",
+    )
+    parser.add_argument(
+        "--query-family",
+        default=None,
+        choices=("training_order", "date_window"),
+        help="Path/scored cache query family used to locate saved scored paths.",
+    )
     return parser.parse_args()
 
 
@@ -82,11 +102,20 @@ def build_similar_user_candidates(
     config_path: str | Path | None = None,
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
     disease_course_window_days: int | None = None,
+    base_date: str | None = None,
+    window_days: int | None = None,
+    query_family: str | None = None,
 ) -> dict[str, Any]:
     """Aggregate ranked candidate users from top-k scored paths."""
     started_at = time.perf_counter()
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     ranking_settings = load_query_settings(resolved_config_path).candidate_ranking
+    scored_key = build_expected_scored_key(
+        resolved_config_path,
+        base_date=base_date,
+        window_days=window_days,
+        query_family=query_family,
+    )
     resolved_disease_course_window_days = (
         ranking_settings.disease_course_window_days
         if disease_course_window_days is None
@@ -123,6 +152,7 @@ def build_similar_user_candidates(
                 patient_id,
                 pattern=item,
                 scored_paths_dir=scored_paths_dir,
+                scored_key=scored_key,
             )
             if scored_result is not None:
                 scored_results.append(scored_result)
@@ -169,12 +199,15 @@ def load_saved_scored_pattern_result(
     *,
     pattern: str,
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    scored_key: str | None = None,
 ) -> dict[str, Any] | None:
     """Load one saved scored detail file produced by score_pattern_paths.py."""
     normalized_source_id = _normalize_required_string(source_id, "source_id")
     normalized_pattern = resolve_path_pattern(pattern).value
+    resolved_scored_key = scored_key or "legacy_scoredctx"
     detail_path = (
         Path(scored_paths_dir)
+        / resolved_scored_key
         / normalized_pattern
         / (normalized_source_id[:2] or "unknown")
         / f"{normalized_source_id}.detail.json"
@@ -190,7 +223,28 @@ def load_saved_scored_pattern_result(
         data = json.load(file)
     if not isinstance(data, dict):
         raise ValueError(f"Saved scored detail must contain a JSON object: {detail_path}")
+    validate_scored_cache_context(data, expected_scored_key=resolved_scored_key)
     return data
+
+
+def build_expected_scored_key(
+    config_path: str | Path,
+    *,
+    base_date: str | None,
+    window_days: int | None,
+    query_family: str | None,
+) -> str:
+    """Build the scored path cache key expected by candidate aggregation."""
+    query_settings = load_query_settings(config_path)
+    if base_date is None and window_days is None and query_family is None:
+        return "legacy_scoredctx"
+    path_key = build_path_key(
+        config_path,
+        base_date=base_date,
+        window_days=window_days,
+        query_family=query_family,
+    )
+    return build_scored_key(path_key, query_settings.score_pattern_paths.top_k)
 
 
 def save_similar_user_candidates_result(
@@ -384,6 +438,7 @@ def main() -> int:
             args.patient_id,
             config_path=args.config,
             scored_paths_dir=args.scored_paths_dir,
+            **_scored_cache_kwargs(args),
         )
         output_paths = save_similar_user_candidates_result(
             result,
@@ -399,6 +454,20 @@ def main() -> int:
         return 1
 
     return 0
+
+
+def _scored_cache_kwargs(args: argparse.Namespace) -> dict[str, object]:
+    kwargs: dict[str, object] = {}
+    base_date = getattr(args, "base_date", None)
+    if isinstance(base_date, str) and base_date.strip():
+        kwargs["base_date"] = base_date.strip()
+    window_days = getattr(args, "window_days", None)
+    if isinstance(window_days, int) and not isinstance(window_days, bool):
+        kwargs["window_days"] = window_days
+    query_family = getattr(args, "query_family", None)
+    if isinstance(query_family, str) and query_family.strip():
+        kwargs["query_family"] = query_family.strip()
+    return kwargs
 
 
 if __name__ == "__main__":

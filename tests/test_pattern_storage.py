@@ -9,6 +9,7 @@ from pathlib import Path
 from src.similar_user.utils.pattern_storage import (
     PatternResultStore,
     StoredPatternResult,
+    build_path_key,
     get_pattern_result_output_path,
     get_pattern_result_output_dir,
     save_pattern_result,
@@ -159,8 +160,30 @@ class PatternStorageTest(unittest.TestCase):
             output_path = save_pattern_result(first_result, config_path)
             save_pattern_result(second_result, config_path)
             store = PatternResultStore(config_path)
+            path_key = build_path_key(
+                config_path,
+                base_date=None,
+                window_days=None,
+                query_family=None,
+            )
+            expected_loaded_result["retrieval_context"]["cache_context"] = {
+                "cache_type": "pattern_paths",
+                "path_key": path_key,
+                "base_date": None,
+                "window_days": None,
+                "query_family": "default",
+                "path_config_hash": path_key.rsplit("_", 1)[-1],
+                "path_config": {
+                    "graph_path_limit": {
+                        "bands": [{"max_g_count": None, "per_g": 1}],
+                        "max_limit_source": "total_paths",
+                        "per_g_strategy": "band",
+                    }
+                },
+            }
 
             self.assertTrue(output_path.exists())
+            self.assertIn(path_key, str(output_path))
             loaded_result = store.load(second_result["pattern"], "30010096")
 
             self.assertIsInstance(loaded_result, StoredPatternResult)
@@ -204,15 +227,26 @@ class PatternStorageTest(unittest.TestCase):
             output_path = save_pattern_result(result, config_path)
             store = PatternResultStore(config_path)
             loaded_result = store.load("disease_patient", "AU_DIS_0013")
+            path_key = build_path_key(
+                config_path,
+                base_date=None,
+                window_days=None,
+                query_family=None,
+            )
             alias_output_path = get_pattern_result_output_path(
                 config_path,
                 "disease_patient",
                 "AU_DIS_0013",
+                path_key=path_key,
             )
 
         self.assertEqual(
             output_path,
-            output_dir / "DISEASE_TASKSET_PATIENT" / "AU" / "AU_DIS_0013.json",
+            output_dir
+            / path_key
+            / "DISEASE_TASKSET_PATIENT"
+            / "AU"
+            / "AU_DIS_0013.json",
         )
         self.assertEqual(alias_output_path, output_path)
         self.assertEqual(loaded_result.source_id, "AU_DIS_0013")
@@ -252,7 +286,13 @@ class PatternStorageTest(unittest.TestCase):
             )
 
             store = PatternResultStore(config_path)
-            records = list(store.iter_pattern_results(pattern))
+            path_key = build_path_key(
+                config_path,
+                base_date=None,
+                window_days=None,
+                query_family=None,
+            )
+            records = list(store.iter_pattern_results(pattern, path_key=path_key))
 
         self.assertEqual(len(records), 2)
         self.assertTrue(all(isinstance(record, StoredPatternResult) for record in records))
@@ -263,6 +303,64 @@ class PatternStorageTest(unittest.TestCase):
         self.assertEqual(
             {record.source_id for record in records},
             {"30010096", "19000001"},
+        )
+
+    def test_save_pattern_result_uses_windowed_path_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            output_dir = Path(temp_dir) / "pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "pattern_path_storage:",
+                        f'  output_dir: "{output_dir}"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "retrieval_context": {
+                    "base_date": "2024-01-31",
+                    "query_family": "training_order",
+                    "path_window": {
+                        "start_date": "2024-01-17",
+                        "end_date": "2024-01-31",
+                    },
+                    "paths": [],
+                },
+            }
+            path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
+            )
+
+            output_path = save_pattern_result(result, config_path)
+            loaded_result = PatternResultStore(config_path).load(
+                result["pattern"],
+                "30010096",
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
+            )
+
+        self.assertEqual(
+            output_path,
+            output_dir
+            / path_key
+            / "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"
+            / "30"
+            / "30010096.json",
+        )
+        self.assertEqual(
+            loaded_result.retrieval_context["cache_context"]["path_key"],
+            path_key,
         )
 
 

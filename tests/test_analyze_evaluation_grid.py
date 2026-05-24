@@ -125,7 +125,7 @@ class AnalyzeEvaluationGridTest(unittest.TestCase):
         )
         self.assertEqual(
             analysis["second_best_parameter_diff"],
-            {"query.a": {"second_best": 3, "best": 2}},
+            {"query.a": {"baseline": 1, "best": 3}},
         )
 
     def test_analyze_and_write_evaluation_grid_report_writes_outputs(self) -> None:

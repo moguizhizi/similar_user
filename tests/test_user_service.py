@@ -152,6 +152,30 @@ class UserServiceTest(unittest.TestCase):
             0,
         )
 
+    def test_get_patient_profile_candidate_training_games_can_use_windowed_profile_filters(
+        self,
+    ) -> None:
+        mock_repository = Mock()
+        mock_repository.get_patient_profile_gender_education_age_windowed_exclusive_task_games.return_value = [
+            {"g": {"id": "1", "name": "画像任务"}}
+        ]
+        service = UserService(kg_repository=mock_repository)
+
+        result = service.get_patient_profile_candidate_training_games(
+            "30010096",
+            "2022-01-13",
+            profile_candidate_training_window_days=0,
+        )
+
+        self.assertEqual(result, [{"g": {"id": "1", "name": "画像任务"}}])
+        mock_repository.get_patient_profile_gender_education_age_windowed_exclusive_task_games.assert_called_once_with(
+            "30010096",
+            "2022-01-13",
+            0,
+            0,
+        )
+        mock_repository.get_patient_profile_gender_education_age_exclusive_task_games.assert_not_called()
+
     def test_get_patient_training_date_games_by_start_date_delegates_to_repository(
         self,
     ) -> None:

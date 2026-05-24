@@ -45,6 +45,7 @@ query:
         unknown: false
   training_task_prediction:
     prompt_candidate_compression_enabled: false
+    profile_candidate_training_window_days: null
 
 similarity:
   top_k: 20

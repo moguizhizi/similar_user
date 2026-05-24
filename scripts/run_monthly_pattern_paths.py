@@ -3,7 +3,8 @@
 默认从训练日期文件中选择 2024 到 2026 年每个月最新的一天。每个日期先刷新
 当天最多 100 个训练患者列表，再逐个调用：
 
-    python scripts/build_pattern_paths.py --source-id PATIENT_ID --patterns-from-config
+    python scripts/build_pattern_paths.py --source-id PATIENT_ID --patterns-from-config \
+        --base-date BASE_DATE --window-days WINDOW_DAYS --query-family training_order
 
 默认 keep-going：某个患者或日期失败后记录失败并继续后续任务。
 """

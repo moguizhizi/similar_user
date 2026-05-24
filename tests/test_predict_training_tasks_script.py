@@ -108,6 +108,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
                 prompt_candidate_compression_enabled=True,
                 prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
                 include_similar_user_task_evidence=False,
+                profile_candidate_training_window_days=0,
             ),
         )
         mock_client_context = Mock()
@@ -136,6 +137,12 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         )
         self.assertFalse(
             mock_service_cls.call_args.kwargs["include_similar_user_task_evidence"]
+        )
+        self.assertEqual(
+            mock_service_cls.call_args.kwargs[
+                "profile_candidate_training_window_days"
+            ],
+            0,
         )
         mock_service.predict_from_pipeline_result.assert_called_once_with(
             {"patient_id": "40", "candidate_result": {"candidates": []}},

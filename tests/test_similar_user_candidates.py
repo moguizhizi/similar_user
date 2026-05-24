@@ -16,7 +16,7 @@ from scripts.build_similar_user_candidates import (
     main,
     save_similar_user_candidates_result,
 )
-from scripts.score_pattern_paths import save_scored_pattern_result
+from scripts.score_pattern_paths import build_scored_key, save_scored_pattern_result
 from scripts.run_similar_user_pipeline import (
     EmptyPathResultsError,
     main as pipeline_main,
@@ -24,7 +24,7 @@ from scripts.run_similar_user_pipeline import (
     summarize_pipeline_result,
 )
 from similar_user.services.similarity import SimilarUserCandidateService
-from similar_user.utils.pattern_storage import save_pattern_result
+from similar_user.utils.pattern_storage import build_path_key, save_pattern_result
 
 
 class SimilarUserCandidatesTest(unittest.TestCase):
@@ -1370,6 +1370,55 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertIsNone(result)
         mock_logger.warning.assert_called_once()
 
+    def test_load_saved_scored_pattern_result_uses_scored_cache_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            scored_paths_dir = Path(temp_dir) / "scored_pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "score_pattern_paths:",
+                        "  top_k: 150",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                window_days=14,
+                query_family="training_order",
+            )
+            scored_key = build_scored_key(path_key, 150)
+            saved_result = {
+                "source_id": "30010096",
+                "source_parameter": "patient_id",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "path_count": 1,
+                "scored_path_count": 1,
+                "retrieval_context": {"score_end_date": "2024-01-31"},
+                "scores": [],
+                "cache_context": {
+                    "cache_type": "scored_pattern_paths",
+                    "path_key": path_key,
+                    "scored_key": scored_key,
+                    "score_top_k": 150,
+                },
+            }
+            save_scored_pattern_result(saved_result, scored_paths_dir)
+
+            loaded_result = load_saved_scored_pattern_result(
+                "30010096",
+                pattern="patient_game_patient",
+                scored_paths_dir=scored_paths_dir,
+                scored_key=scored_key,
+            )
+
+        self.assertEqual(loaded_result, saved_result)
+
     def test_save_similar_user_candidates_result_writes_detail_and_summary_files(
         self,
     ) -> None:
@@ -1625,10 +1674,16 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
+            base_date="2022-01-17",
+            window_days=14,
+            query_family="date_window",
         )
         mock_score_and_save.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
+            base_date="2022-01-17",
+            window_days=14,
+            query_family="date_window",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
 
@@ -1726,10 +1781,16 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_score_and_save.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
+            base_date="2022-01-17",
+            window_days=14,
+            query_family="training_order",
         )
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
+            base_date="2022-01-17",
+            window_days=14,
+            query_family="training_order",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
 
@@ -1774,6 +1835,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
+            base_date="2022-01-17",
+            window_days=14,
+            query_family="training_order",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
 

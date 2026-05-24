@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -26,6 +28,7 @@ from .logger import get_logger
 
 
 LOGGER = get_logger(__name__)
+LEGACY_PATH_KEY = "legacy_pathctx"
 
 
 @dataclass(frozen=True)
@@ -238,24 +241,38 @@ class StoredPatternResult:
         return value if isinstance(value, list) else []
 
 
-def get_pattern_result_output_dir(config_path: str | Path, pattern: str) -> Path:
+def get_pattern_result_output_dir(
+    config_path: str | Path,
+    pattern: str,
+    *,
+    path_key: str | None = None,
+) -> Path:
     """Return the output directory for a given pattern."""
     settings = load_query_settings(config_path)
     normalized_pattern = resolve_path_pattern(pattern)
-    return Path(settings.pattern_path_storage.output_dir) / normalized_pattern.value
+    base_dir = Path(settings.pattern_path_storage.output_dir)
+    if path_key is not None:
+        base_dir = base_dir / path_key
+    return base_dir / normalized_pattern.value
 
 
 def get_pattern_result_output_path(
     config_path: str | Path,
     pattern: str,
     source_id: str,
+    *,
+    path_key: str | None = None,
 ) -> Path:
     """Return the bucketed JSON output path for one pattern source."""
     normalized_pattern = _normalize_required_string(pattern, "pattern")
     normalized_source_id = _normalize_required_string(source_id, "source_id")
     bucket = normalized_source_id[:2] or "unknown"
     return (
-        get_pattern_result_output_dir(config_path, normalized_pattern)
+        get_pattern_result_output_dir(
+            config_path,
+            normalized_pattern,
+            path_key=path_key,
+        )
         / bucket
         / f"{normalized_source_id}.json"
     )
@@ -272,15 +289,21 @@ class PatternResultStore:
         normalized_result = (
             result if isinstance(result, StoredPatternResult) else StoredPatternResult.from_dict(result)
         )
+        path_context = build_path_cache_context(
+            self.config_path,
+            normalized_result.retrieval_context,
+        )
+        result_payload = _with_path_cache_context(normalized_result, path_context)
         output_path = get_pattern_result_output_path(
             self.config_path,
-            normalized_result.pattern,
-            normalized_result.source_id,
+            result_payload.pattern,
+            result_payload.source_id,
+            path_key=path_context["path_key"],
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         serialized = json.dumps(
-            normalized_result.to_dict(),
+            result_payload.to_dict(),
             ensure_ascii=False,
             default=str,
             indent=2,
@@ -299,23 +322,39 @@ class PatternResultStore:
         os.replace(temp_path, output_path)
         LOGGER.debug(
             "Saved pattern result: source_id=%s, source_parameter=%s, pattern=%s, path_count=%s, output_path=%s",
-            normalized_result.source_id,
-            normalized_result.source_parameter,
-            normalized_result.pattern,
-            len(normalized_result.paths),
+            result_payload.source_id,
+            result_payload.source_parameter,
+            result_payload.pattern,
+            len(result_payload.paths),
             output_path,
         )
         return output_path
 
-    def load(self, pattern: str, source_id: str) -> StoredPatternResult:
+    def load(
+        self,
+        pattern: str,
+        source_id: str,
+        *,
+        base_date: str | None = None,
+        window_days: int | None = None,
+        query_family: str | None = None,
+    ) -> StoredPatternResult:
         """Load one saved result by source ID."""
+        path_key = build_path_key(
+            self.config_path,
+            base_date=base_date,
+            window_days=window_days,
+            query_family=query_family,
+        )
         output_path = get_pattern_result_output_path(
             self.config_path,
             pattern,
             source_id,
+            path_key=path_key,
         )
         with output_path.open("r", encoding="utf-8") as file:
             result = StoredPatternResult.from_dict(json.load(file))
+        validate_path_cache_context(result.retrieval_context, expected_path_key=path_key)
         LOGGER.debug(
             "Loaded pattern result: source_id=%s, source_parameter=%s, pattern=%s, path_count=%s, input_path=%s",
             result.source_id,
@@ -326,9 +365,18 @@ class PatternResultStore:
         )
         return result
 
-    def iter_pattern_results(self, pattern: str) -> Iterator[StoredPatternResult]:
+    def iter_pattern_results(
+        self,
+        pattern: str,
+        *,
+        path_key: str | None = None,
+    ) -> Iterator[StoredPatternResult]:
         """Yield all saved results for the given pattern."""
-        pattern_dir = get_pattern_result_output_dir(self.config_path, pattern)
+        pattern_dir = get_pattern_result_output_dir(
+            self.config_path,
+            pattern,
+            path_key=path_key,
+        )
         if not pattern_dir.exists():
             return
 
@@ -353,11 +401,169 @@ def save_pattern_result(
     return PatternResultStore(config_path).save(result)
 
 
+def build_path_key(
+    config_path: str | Path,
+    *,
+    base_date: str | None,
+    window_days: int | None,
+    query_family: str | None,
+) -> str:
+    """Build a filesystem-safe cache key for raw pattern path results."""
+    graph_path_limit_hash = _short_hash(
+        {"graph_path_limit": _graph_path_limit_config_payload(config_path)}
+    )
+    if not base_date or window_days is None:
+        return f"{LEGACY_PATH_KEY}_pathcfg_{graph_path_limit_hash}"
+    normalized_query_family = _normalize_query_family_for_key(query_family)
+    return (
+        f"base_{_slug_part(base_date)}"
+        f"_window_{window_days}"
+        f"_qf_{normalized_query_family}"
+        f"_pathcfg_{graph_path_limit_hash}"
+    )
+
+
+def build_path_cache_context(
+    config_path: str | Path,
+    retrieval_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build cache metadata from a stored result retrieval context."""
+    base_date = None
+    window_days = None
+    query_family = None
+    if isinstance(retrieval_context, dict):
+        raw_base_date = retrieval_context.get("base_date")
+        base_date = str(raw_base_date) if raw_base_date is not None else None
+        raw_path_window = retrieval_context.get("path_window")
+        window_days = _extract_window_days(raw_path_window)
+        raw_query_family = retrieval_context.get("query_family")
+        query_family = str(raw_query_family) if raw_query_family is not None else None
+
+    graph_path_limit = _graph_path_limit_config_payload(config_path)
+    path_config_hash = _short_hash({"graph_path_limit": graph_path_limit})
+    path_key = build_path_key(
+        config_path,
+        base_date=base_date,
+        window_days=window_days,
+        query_family=query_family,
+    )
+    return {
+        "cache_type": "pattern_paths",
+        "path_key": path_key,
+        "base_date": base_date,
+        "window_days": window_days,
+        "query_family": _normalize_query_family_for_key(query_family),
+        "path_config_hash": path_config_hash,
+        "path_config": {"graph_path_limit": graph_path_limit},
+    }
+
+
+def validate_path_cache_context(
+    retrieval_context: dict[str, Any] | None,
+    *,
+    expected_path_key: str,
+) -> None:
+    """Raise if stored path cache metadata does not match the expected key."""
+    cache_context = (
+        retrieval_context.get("cache_context")
+        if isinstance(retrieval_context, dict)
+        else None
+    )
+    if not isinstance(cache_context, dict):
+        raise ValueError(
+            f"Stored pattern result is missing cache_context for path_key={expected_path_key}."
+        )
+    stored_path_key = cache_context.get("path_key")
+    if stored_path_key != expected_path_key:
+        raise ValueError(
+            "Stored pattern result cache key mismatch: "
+            f"expected={expected_path_key}, actual={stored_path_key}."
+        )
+
+
 def _normalize_required_string(value: object, field_name: str) -> str:
     """Normalize and validate a required string value."""
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string.")
     return value.strip()
+
+
+def _with_path_cache_context(
+    result: StoredPatternResult,
+    path_context: dict[str, Any],
+) -> StoredPatternResult:
+    retrieval_context = dict(result.retrieval_context or {})
+    retrieval_context["cache_context"] = path_context
+    return StoredPatternResult(
+        source_id=result.source_id,
+        source_parameter=result.source_parameter,
+        pattern=result.pattern,
+        patient_id=result.patient_id,
+        ordered_training_dates=result.ordered_training_dates,
+        first_training_date=result.first_training_date,
+        last_training_date=result.last_training_date,
+        training_date_count=result.training_date_count,
+        retrieval_context=retrieval_context,
+    )
+
+
+def _graph_path_limit_config_payload(config_path: str | Path) -> dict[str, Any]:
+    settings = load_query_settings(config_path).graph_path_limit
+    return _to_plain_data(settings)
+
+
+def _to_plain_data(value: Any) -> Any:
+    if is_dataclass(value):
+        return _to_plain_data(asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _to_plain_data(item) for key, item in sorted(value.items())}
+    if isinstance(value, (list, tuple)):
+        return [_to_plain_data(item) for item in value]
+    return value
+
+
+def _short_hash(payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:8]
+
+
+def _normalize_query_family_for_key(query_family: str | None) -> str:
+    if query_family is None or not str(query_family).strip():
+        return "default"
+    return _slug_part(str(query_family).strip())
+
+
+def _slug_part(value: object) -> str:
+    text = str(value).strip().lower()
+    slug = []
+    for char in text:
+        if char.isalnum():
+            slug.append(char)
+        elif char in ("-", "_"):
+            slug.append(char)
+        else:
+            slug.append("-")
+    return "".join(slug).strip("-") or "none"
+
+
+def _extract_window_days(path_window: object) -> int | None:
+    if not isinstance(path_window, dict):
+        return None
+    start_date = _parse_iso_date(path_window.get("start_date"))
+    end_date = _parse_iso_date(path_window.get("end_date"))
+    if start_date is None or end_date is None:
+        return None
+    delta = end_date - start_date
+    return delta.days if delta.days > 0 else None
+
+
+def _parse_iso_date(value: object) -> date | None:
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
 
 
 def _normalize_source_parameter(data: dict[str, Any]) -> str:
@@ -428,6 +634,18 @@ def _normalize_retrieval_context(data: dict[str, Any]) -> dict[str, Any] | None:
             normalized_context["window_statistics"] = (
                 retrieval_context.get("window_statistics")
                 if isinstance(retrieval_context.get("window_statistics"), dict)
+                else None
+            )
+        if "query_family" in retrieval_context:
+            normalized_context["query_family"] = (
+                str(retrieval_context["query_family"])
+                if retrieval_context.get("query_family") is not None
+                else None
+            )
+        if "cache_context" in retrieval_context:
+            normalized_context["cache_context"] = (
+                retrieval_context.get("cache_context")
+                if isinstance(retrieval_context.get("cache_context"), dict)
                 else None
             )
         return normalized_context
