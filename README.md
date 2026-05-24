@@ -172,6 +172,52 @@ query:
     candidate_top_k: 10
 ```
 
+### 缓存 key 与配置变更关系
+
+离线路径、路径评分和候选用户结果分别用不同 key 隔离缓存。写实验 YAML 时，可以先判断本次修改影响哪一层 key，再决定是否能使用 `skip_path_build` / `skip_path_scoring` 复用已有结果。
+
+`path_key` 决定原始 path 缓存目录，保存到 `data/pattern_paths/{path_key}/{pattern}/...`。它由以下内容决定：
+
+- `base.base_date` 或命令行 `--base-date`
+- `base.window_days` 或命令行 `--window-days`
+- `base.query_family` 或命令行 `--query-family`
+- `query.graph_path_limit` 整段配置
+
+如果改了以上任一项，对应的 `path_key` 会变化，需要已有同 key 的 path 文件才能设置 `skip_path_build: true`。`query.candidate_ranking.patterns` 不写进 `path_key` 本身，但每个 pattern 是 `path_key` 下的子目录；新增或删除 pattern 时，也要确认对应 pattern 的 path 文件是否已经生成。
+
+`scored_key` 决定已评分 path 缓存目录，保存到 `data/scored_pattern_paths/{scored_key}/{pattern}/...`。它由以下内容决定：
+
+- 上一层的 `path_key`
+- `query.score_pattern_paths.top_k`
+
+如果改了 `base_date`、`window_days`、`query_family`、`query.graph_path_limit` 或 `query.score_pattern_paths.top_k`，对应的 `scored_key` 会变化，需要已有同 key 的 scored path 文件才能设置 `skip_path_scoring: true`。
+
+`candidate_key` 决定候选相似用户缓存目录，保存到 `data/similar_user_candidates/{candidate_key}/...`。它由以下内容决定：
+
+- 上一层的 `scored_key`
+- `query.candidate_ranking.patterns`
+- `query.candidate_ranking.candidate_top_k`
+- `query.candidate_ranking.total_score_match_top_k`
+- `query.candidate_ranking.disease_course_window_days`
+- `query.candidate_ranking.scoring`
+
+如果只改这些候选聚合参数，通常可以继续复用已有 path 和 scored path，也就是可以保留 `skip_path_build: true` 和 `skip_path_scoring: true`，让程序重新生成新的 candidate 缓存。
+
+`query.training_task_prediction`、`task_top_k`、`use_llm`、prompt 模板等预测评估参数不进入 path、scored path 或 candidate key。它们主要影响预测结果和评估输出；在 `run_evaluation_grid.py` 中，不同实验会通过不同 run 目录隔离评估结果。
+
+常见判断方式：
+
+| 修改内容 | path_key | scored_key | candidate_key | skip 建议 |
+| --- | --- | --- | --- | --- |
+| `base_date` / `window_days` / `query_family` | 变 | 变 | 变 | 不能跳过，除非对应 key 缓存已存在 |
+| `query.graph_path_limit` | 变 | 变 | 变 | 不能跳过，除非对应 key 缓存已存在 |
+| `query.score_pattern_paths.top_k` | 不变 | 变 | 变 | 可跳过 path build；不能跳过 scoring，除非 scored 缓存已存在 |
+| `query.candidate_ranking.patterns` | 不变 | 不变 | 变 | 可跳过 build/scoring，但要确保每个 pattern 的 scored 文件存在 |
+| `candidate_top_k` / `total_score_match_top_k` / `disease_course_window_days` / `candidate_ranking.scoring` | 不变 | 不变 | 变 | 可跳过 build/scoring |
+| `training_task_prediction` / `task_top_k` / prompt 相关参数 | 不变 | 不变 | 不变 | 可跳过 build/scoring，候选缓存也可复用 |
+
+一句话规则：改了 path 层参数就要有新的 path；改了 scoring 层参数就要有新的 scored path；只改候选或 prompt 参数时，通常可以复用前两层缓存。
+
 ## 目录说明
 
 - `config/`：统一 YAML 配置和配置加载入口
