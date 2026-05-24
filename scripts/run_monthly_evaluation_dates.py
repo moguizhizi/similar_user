@@ -117,6 +117,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Pass --skip-path-build to evaluate_predict_training_tasks.py.",
     )
+    parser.add_argument(
+        "--skip-path-scoring",
+        action="store_true",
+        help="Pass --skip-path-scoring to evaluate_predict_training_tasks.py.",
+    )
     return parser.parse_args()
 
 
@@ -163,6 +168,7 @@ def build_evaluation_command(
     config_path: str | Path,
     use_llm: bool,
     skip_path_build: bool,
+    skip_path_scoring: bool,
 ) -> list[str]:
     """Build the evaluate_predict_training_tasks.py command."""
     command = [
@@ -179,6 +185,8 @@ def build_evaluation_command(
         command.append("--dry-run")
     if skip_path_build:
         command.append("--skip-path-build")
+    if skip_path_scoring:
+        command.append("--skip-path-scoring")
     return command
 
 
@@ -220,6 +228,7 @@ def build_monthly_evaluation_runs(
     log_dir: str | Path,
     use_llm: bool,
     skip_path_build: bool,
+    skip_path_scoring: bool,
 ) -> list[MonthlyEvaluationRun]:
     """Build monthly evaluation run descriptors."""
     resolved_log_dir = Path(log_dir)
@@ -236,6 +245,7 @@ def build_monthly_evaluation_runs(
             config_path=config_path,
             use_llm=use_llm,
             skip_path_build=skip_path_build,
+            skip_path_scoring=skip_path_scoring,
         )
         runs.append(
             MonthlyEvaluationRun(
@@ -351,6 +361,7 @@ def main() -> int:
             log_dir=args.log_dir,
             use_llm=args.use_llm,
             skip_path_build=args.skip_path_build,
+            skip_path_scoring=args.skip_path_scoring,
         )
         result = run_monthly_evaluations(
             runs,

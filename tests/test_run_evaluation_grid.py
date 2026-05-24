@@ -173,6 +173,7 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "task_top_k": 7,
                 "use_llm": False,
                 "skip_path_build": True,
+                "skip_path_scoring": True,
                 "limit": 10,
             },
             config_path="data/evaluation_grid/generated_configs/exp_001.yaml",
@@ -197,6 +198,7 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "10",
                 "--dry-run",
                 "--skip-path-build",
+                "--skip-path-scoring",
             ],
         )
 
