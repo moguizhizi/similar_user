@@ -1028,13 +1028,20 @@ def build_experiment_config(
     )
     if not isinstance(prompt_template_name, str) or not prompt_template_name.strip():
         prompt_template_name = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
-    include_similar_user_task_evidence = getattr(
+    similar_user_game_counts_weighting_enabled = getattr(
         query_settings.training_task_prediction,
-        "include_similar_user_task_evidence",
-        True,
+        "similar_user_game_counts_weighting_enabled",
+        False,
     )
-    if not isinstance(include_similar_user_task_evidence, bool):
-        include_similar_user_task_evidence = True
+    if not isinstance(similar_user_game_counts_weighting_enabled, bool):
+        similar_user_game_counts_weighting_enabled = False
+    similar_user_game_counts_weighted_sort_enabled = getattr(
+        query_settings.training_task_prediction,
+        "similar_user_game_counts_weighted_sort_enabled",
+        False,
+    )
+    if not isinstance(similar_user_game_counts_weighted_sort_enabled, bool):
+        similar_user_game_counts_weighted_sort_enabled = False
     return {
         "base_date": base_date,
         "window_days": window_days,
@@ -1046,7 +1053,8 @@ def build_experiment_config(
         "task_top_k": task_top_k,
         "use_llm": use_llm,
         "prompt_template": prompt_template_name,
-        "include_similar_user_task_evidence": include_similar_user_task_evidence,
+        "similar_user_game_counts_weighting_enabled": similar_user_game_counts_weighting_enabled,
+        "similar_user_game_counts_weighted_sort_enabled": similar_user_game_counts_weighted_sort_enabled,
         "scored_path_top_k": scored_path_top_k,
         "disease_course_window_days": disease_course_window_days,
     }

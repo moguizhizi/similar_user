@@ -355,7 +355,8 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             training_task_prediction=Mock(
                 prompt_candidate_compression_enabled=True,
                 prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
-                include_similar_user_task_evidence=False,
+                similar_user_game_counts_weighting_enabled=True,
+                similar_user_game_counts_weighted_sort_enabled=False,
             ),
         )
 
@@ -383,7 +384,8 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             config["prompt_template"],
             "TASK_PREDICTION_PROMPT_TEMPLATE_V1",
         )
-        self.assertFalse(config["include_similar_user_task_evidence"])
+        self.assertTrue(config["similar_user_game_counts_weighting_enabled"])
+        self.assertFalse(config["similar_user_game_counts_weighted_sort_enabled"])
         mock_load_query_settings.assert_called_once_with("config/settings.yaml")
 
     def test_build_experiment_output_dir_uses_parameterized_subdir(self) -> None:

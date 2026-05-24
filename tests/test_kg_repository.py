@@ -2310,6 +2310,12 @@ class KgRepositoryTest(unittest.TestCase):
             settings.training_task_prediction.profile_candidate_training_window_days,
         )
         self.assertFalse(
+            settings.training_task_prediction.similar_user_game_counts_weighting_enabled
+        )
+        self.assertFalse(
+            settings.training_task_prediction.similar_user_game_counts_weighted_sort_enabled
+        )
+        self.assertFalse(
             settings.candidate_ranking.scoring.common_game_score_similarity
         )
         self.assertFalse(

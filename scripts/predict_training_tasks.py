@@ -224,18 +224,28 @@ def run_training_task_prediction(
         and raw_prompt_template_name.strip()
         else CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
     )
-    raw_include_similar_user_task_evidence = getattr(
-        query_settings.training_task_prediction,
-        "include_similar_user_task_evidence",
-        True,
-    )
-    include_similar_user_task_evidence = (
-        raw_include_similar_user_task_evidence
-        if isinstance(raw_include_similar_user_task_evidence, bool)
-        else True
-    )
     profile_candidate_training_window_days = (
         query_settings.training_task_prediction.profile_candidate_training_window_days
+    )
+    raw_similar_user_game_counts_weighting_enabled = getattr(
+        query_settings.training_task_prediction,
+        "similar_user_game_counts_weighting_enabled",
+        False,
+    )
+    similar_user_game_counts_weighting_enabled = (
+        raw_similar_user_game_counts_weighting_enabled
+        if isinstance(raw_similar_user_game_counts_weighting_enabled, bool)
+        else False
+    )
+    raw_similar_user_game_counts_weighted_sort_enabled = getattr(
+        query_settings.training_task_prediction,
+        "similar_user_game_counts_weighted_sort_enabled",
+        False,
+    )
+    similar_user_game_counts_weighted_sort_enabled = (
+        raw_similar_user_game_counts_weighted_sort_enabled
+        if isinstance(raw_similar_user_game_counts_weighted_sort_enabled, bool)
+        else False
     )
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
@@ -250,8 +260,9 @@ def run_training_task_prediction(
             llm_client=llm_client,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name,
-            include_similar_user_task_evidence=include_similar_user_task_evidence,
             profile_candidate_training_window_days=profile_candidate_training_window_days,
+            similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
+            similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
         )
         return service.predict_from_pipeline_result(
             pipeline_result,

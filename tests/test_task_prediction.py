@@ -11,6 +11,7 @@ from src.similar_user.services.task_prediction import (
     SimilarUserCandidate,
     TASK_PREDICTION_PROMPT_TEMPLATE_V1,
     TASK_PREDICTION_PROMPT_TEMPLATE_V2,
+    TASK_PREDICTION_PROMPT_TEMPLATE_V3,
     TrainingTaskPredictionService,
     build_candidate_task_window,
     build_candidate_training_tasks,
@@ -56,7 +57,6 @@ class TaskPredictionTest(unittest.TestCase):
         prompt = build_task_prediction_prompt(
             patient_id="40",
             similar_user_game_counts=[],
-            similar_user_task_evidence=[],
             candidate_training_tasks=[],
             task_top_k=7,
             prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
@@ -65,12 +65,85 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertTrue(prompt.startswith(TASK_PREDICTION_PROMPT_TEMPLATE_V1))
         self.assertFalse(prompt.startswith(TASK_PREDICTION_PROMPT_TEMPLATE_V2))
 
+    def test_build_task_prediction_prompt_uses_weighted_template_v3(self) -> None:
+        prompt = build_task_prediction_prompt(
+            patient_id="40",
+            similar_user_game_counts=[
+                {
+                    "game_id": "1",
+                    "game_name": "任务A",
+                    "count": 3,
+                    "weighted_count": 2.5,
+                    "supporting_user_count": 2,
+                    "avg_support_score": 0.75,
+                    "max_support_score": 1.0,
+                }
+            ],
+            candidate_training_tasks=[],
+            task_top_k=7,
+            prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V3",
+        )
+
+        self.assertTrue(prompt.startswith(TASK_PREDICTION_PROMPT_TEMPLATE_V3))
+        self.assertIn("supporting_user_count 是做过该任务的不同相似用户人数", prompt)
+        self.assertIn('"weighted_count": 2.5', prompt)
+
+    def test_basic_prompt_templates_do_not_describe_weighted_count(self) -> None:
+        self.assertNotIn("weighted_count", TASK_PREDICTION_PROMPT_TEMPLATE_V1)
+        self.assertNotIn("weighted_count", TASK_PREDICTION_PROMPT_TEMPLATE_V2)
+
+    def test_prompt_templates_do_not_describe_task_evidence_payload(self) -> None:
+        self.assertNotIn(
+            "similar_user_task_evidence",
+            TASK_PREDICTION_PROMPT_TEMPLATE_V1,
+        )
+        self.assertNotIn(
+            "similar_user_task_evidence",
+            TASK_PREDICTION_PROMPT_TEMPLATE_V2,
+        )
+        self.assertNotIn(
+            "similar_user_task_evidence",
+            TASK_PREDICTION_PROMPT_TEMPLATE_V3,
+        )
+
+    def test_weighted_template_requires_weighting_enabled(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "TASK_PREDICTION_PROMPT_TEMPLATE_V3 requires",
+        ):
+            TrainingTaskPredictionService(
+                user_service=Mock(),
+                prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V3",
+                similar_user_game_counts_weighting_enabled=False,
+            )
+
+        service = TrainingTaskPredictionService(
+            user_service=Mock(),
+            prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V3",
+            similar_user_game_counts_weighting_enabled=True,
+        )
+
+        self.assertEqual(
+            service.prompt_template_name,
+            "TASK_PREDICTION_PROMPT_TEMPLATE_V3",
+        )
+
+    def test_build_task_prediction_prompt_omits_task_evidence(self) -> None:
+        prompt = build_task_prediction_prompt(
+            patient_id="40",
+            similar_user_game_counts=[],
+            candidate_training_tasks=[],
+            task_top_k=7,
+        )
+
+        self.assertNotIn("similar_user_task_evidence", prompt)
+        self.assertNotIn("input_options", prompt)
+
     def test_build_task_prediction_prompt_rejects_unknown_template(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown prompt_template_name"):
             build_task_prediction_prompt(
                 patient_id="40",
                 similar_user_game_counts=[],
-                similar_user_task_evidence=[],
                 candidate_training_tasks=[],
                 task_top_k=7,
                 prompt_template_name="UNKNOWN_TEMPLATE",
@@ -258,6 +331,60 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertEqual(game_counts[0]["count"], 3)
         self.assertEqual(game_counts[1]["game_id"], "2")
         self.assertEqual(game_counts[1]["count"], 1)
+
+    def test_build_similar_user_game_counts_can_add_weighted_metrics(self) -> None:
+        game_counts = build_similar_user_game_counts(
+            [
+                SimilarUserCandidate("201", 2.0),
+                SimilarUserCandidate("202", 1.0),
+            ],
+            {
+                "201": [
+                    {"g": {"id": "1", "name": "任务A"}},
+                    {"g": {"id": "1", "name": "任务A"}},
+                ],
+                "202": [
+                    {"g": {"id": "1", "name": "任务A"}},
+                    {"g": {"id": "2", "name": "任务B"}},
+                ],
+            },
+            weighting_enabled=True,
+        )
+
+        self.assertEqual(game_counts[0]["game_id"], "1")
+        self.assertEqual(game_counts[0]["count"], 3)
+        self.assertEqual(game_counts[0]["weighted_count"], 2.5)
+        self.assertEqual(game_counts[0]["supporting_user_count"], 2)
+        self.assertEqual(game_counts[0]["avg_support_score"], 0.75)
+        self.assertEqual(game_counts[0]["max_support_score"], 1.0)
+        self.assertEqual(
+            game_counts[0]["supporting_candidate_ids"],
+            ["201", "202"],
+        )
+
+    def test_build_similar_user_game_counts_can_sort_by_weighted_metrics(self) -> None:
+        game_counts = build_similar_user_game_counts(
+            [
+                SimilarUserCandidate("201", 10.0),
+                SimilarUserCandidate("202", 1.0),
+            ],
+            {
+                "201": [
+                    {"g": {"id": "2", "name": "任务B"}},
+                ],
+                "202": [
+                    {"g": {"id": "1", "name": "任务A"}},
+                    {"g": {"id": "1", "name": "任务A"}},
+                    {"g": {"id": "1", "name": "任务A"}},
+                ],
+            },
+            weighting_enabled=True,
+            weighted_sort_enabled=True,
+        )
+
+        self.assertEqual([item["game_id"] for item in game_counts], ["2", "1"])
+        self.assertEqual(game_counts[0]["weighted_count"], 1.0)
+        self.assertEqual(game_counts[1]["weighted_count"], 0.3)
 
     def test_build_similar_user_task_evidence_returns_scores_and_user_tasks(
         self,
@@ -601,38 +728,6 @@ class TaskPredictionTest(unittest.TestCase):
         )
         self.assertEqual(result["candidate_training_tasks"], [{"game_id": "2", "game_name": "任务B"}])
 
-    def test_predict_from_pipeline_result_passes_profile_candidate_training_window(
-        self,
-    ) -> None:
-        user_service = Mock()
-        user_service.get_patient_training_task_history_by_date_window.return_value = []
-        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
-            {"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}
-        ]
-        user_service.get_patient_profile_candidate_training_games.return_value = [
-            {"g": {"id": "1", "name": "任务A"}},
-        ]
-        service = TrainingTaskPredictionService(
-            user_service=user_service,
-            profile_candidate_training_window_days=0,
-        )
-
-        service.predict_from_pipeline_result(
-            {
-                "patient_id": "40",
-                "candidate_summary": {"candidate_ids": ["201"]},
-            },
-            base_date="2022-05-22",
-            window_days=14,
-            use_llm=False,
-        )
-
-        user_service.get_patient_profile_candidate_training_games.assert_called_once_with(
-            "40",
-            "2022-05-22",
-            profile_candidate_training_window_days=0,
-        )
-
     def test_predict_from_pipeline_result_can_disable_prompt_candidate_compression(
         self,
     ) -> None:
@@ -675,6 +770,80 @@ class TaskPredictionTest(unittest.TestCase):
                 {"game_id": "7", "game_name": "画像任务G"},
             ],
         )
+
+    def test_predict_from_pipeline_result_passes_profile_candidate_training_window(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.return_value = []
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "1", "name": "任务A"}},
+        ]
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            profile_candidate_training_window_days=0,
+        )
+
+        service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": ["201"]},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+        )
+
+        user_service.get_patient_profile_candidate_training_games.assert_called_once_with(
+            "40",
+            "2022-05-22",
+            profile_candidate_training_window_days=0,
+        )
+
+    def test_predict_from_pipeline_result_omits_task_evidence_from_prompt(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-01", "g": {"id": "9", "name": "目标任务"}}
+        ]
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-01-02", "g": {"id": "1", "name": "任务A"}}
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "1", "name": "任务A"}},
+        ]
+        service = TrainingTaskPredictionService(user_service=user_service)
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {
+                    "candidates": [{"patient_id": "201", "candidate_score": 2.0}]
+                },
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=1,
+            include_prompt=True,
+        )
+
+        self.assertEqual(
+            result["similar_user_task_evidence"],
+            [
+                {
+                    "patient_id": "201",
+                    "candidate_score": 2.0,
+                    "tasks": [{"game_id": "1", "game_name": "任务A", "count": 1}],
+                }
+            ],
+        )
+        self.assertNotIn("prompt_input_options", result)
+        self.assertNotIn("similar_user_task_evidence", result["llm_prompt"])
 
     def test_predict_from_pipeline_result_falls_back_to_distinct_games_without_profile_tasks(
         self,
