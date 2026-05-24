@@ -5,9 +5,10 @@
 1. 默认先调用 `scripts/build_pattern_paths.py`，按配置中的多个模式构建并保存 paths。
 2. 调用 path 评分逻辑，读取已保存 paths 并保存多个模式的 scored paths。
 3. 再调用候选构建逻辑，读取已保存 scored paths 并聚合候选相似用户。
-3. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
+4. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
 
 如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过第一步，直接基于已有结果打分并构建候选用户。
+如果已经有可用的 scored paths，可以使用 `--skip-path-scoring` 复用已有评分结果并直接构建候选用户。
 
 常用执行方式：
 
@@ -78,6 +79,11 @@ def parse_args() -> argparse.Namespace:
         help="Use existing saved paths and only run scoring plus candidate ranking.",
     )
     parser.add_argument(
+        "--skip-path-scoring",
+        action="store_true",
+        help="Use existing saved scored paths and only run candidate ranking.",
+    )
+    parser.add_argument(
         "--query-family",
         default=None,
         choices=("training_order", "date_window"),
@@ -114,16 +120,18 @@ def run_similar_user_pipeline(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path | None = None,
     skip_path_build: bool = False,
+    skip_path_scoring: bool = False,
     query_family: str | None = None,
 ) -> dict[str, Any]:
     """Run path retrieval, scoring, and candidate ranking as one workflow."""
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     started_at = time.perf_counter()
     LOGGER.info(
-        "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, base_date=%s, window_days=%s, config_path=%s",
+        "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, skip_path_scoring=%s, base_date=%s, window_days=%s, config_path=%s",
         patient_id,
         pattern,
         skip_path_build,
+        skip_path_scoring,
         base_date,
         window_days,
         resolved_config_path,
@@ -145,10 +153,11 @@ def run_similar_user_pipeline(
             window_days=window_days,
         )
 
-    score_and_save_configured_pattern_paths(
-        patient_id,
-        config_path=resolved_config_path,
-    )
+    if not skip_path_scoring:
+        score_and_save_configured_pattern_paths(
+            patient_id,
+            config_path=resolved_config_path,
+        )
 
     candidate_result = build_similar_user_candidates(
         patient_id,
@@ -165,6 +174,7 @@ def run_similar_user_pipeline(
         "pattern": pattern,
         "config_path": str(resolved_config_path),
         "skip_path_build": skip_path_build,
+        "skip_path_scoring": skip_path_scoring,
         "base_date": base_date,
         "window_days": window_days,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
@@ -256,6 +266,7 @@ def summarize_pipeline_result(
         "pattern": result.get("pattern"),
         "config_path": result.get("config_path"),
         "skip_path_build": result.get("skip_path_build"),
+        "skip_path_scoring": result.get("skip_path_scoring"),
         "base_date": result.get("base_date"),
         "window_days": result.get("window_days"),
         "elapsed_seconds": result.get("elapsed_seconds"),
@@ -309,6 +320,7 @@ def main() -> int:
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,
+            skip_path_scoring=args.skip_path_scoring,
             base_date=args.base_date,
             window_days=args.window_days,
             query_family=args.query_family,

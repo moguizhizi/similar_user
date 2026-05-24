@@ -341,6 +341,8 @@ def build_evaluation_command(
         command.append("--dry-run")
     if bool(base_options.get("skip_path_build", False)):
         command.append("--skip-path-build")
+    if bool(base_options.get("skip_path_scoring", False)):
+        command.append("--skip-path-scoring")
     if bool(base_options.get("no_save_prompt", False)):
         command.append("--no-save-prompt")
     return command

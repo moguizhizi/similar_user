@@ -1613,6 +1613,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             },
         )
         self.assertFalse(result["skip_path_build"])
+        self.assertFalse(result["skip_path_scoring"])
         self.assertEqual(result["elapsed_seconds"], 2.345)
         mock_run_path_flows.assert_called_once_with(
             "30010096",
@@ -1720,11 +1721,56 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             },
         )
         self.assertTrue(result["skip_path_build"])
+        self.assertFalse(result["skip_path_scoring"])
         mock_run_path_flows.assert_not_called()
         mock_score_and_save.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
         )
+        mock_build_candidates.assert_called_once_with(
+            "30010096",
+            config_path="config/custom.yaml",
+        )
+        mock_save_candidates.assert_called_once_with(candidate_result)
+
+    @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
+    @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
+    @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
+    @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
+    def test_run_similar_user_pipeline_can_skip_path_scoring(
+        self,
+        mock_run_path_flows: Mock,
+        mock_score_and_save: Mock,
+        mock_build_candidates: Mock,
+        mock_save_candidates: Mock,
+    ) -> None:
+        path_result = {
+            "patient_id": "30010096",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "retrieval_context": {"paths": [{"row": {}}]},
+        }
+        candidate_result = {
+            "patient_id": "30010096",
+            "candidate_count": 1,
+            "candidates": [{"patient_id": "20113562"}],
+        }
+        mock_run_path_flows.return_value = [path_result]
+        mock_build_candidates.return_value = candidate_result
+        mock_save_candidates.return_value = {
+            "detail": Path("data/similar_user_candidates/30/30010096.detail.json"),
+            "summary": Path("data/similar_user_candidates/30/30010096.summary.json"),
+        }
+
+        result = run_similar_user_pipeline(
+            "30010096",
+            base_date="2022-01-17",
+            window_days=14,
+            config_path="config/custom.yaml",
+            skip_path_scoring=True,
+        )
+
+        self.assertTrue(result["skip_path_scoring"])
+        mock_score_and_save.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/custom.yaml",
@@ -1772,6 +1818,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            skip_path_scoring=False,
             query_family="date_window",
             base_date="2022-05-22",
             window_days=14,
@@ -1787,6 +1834,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config_path="config/settings.yaml",
             skip_path_build=False,
+            skip_path_scoring=False,
             query_family="date_window",
             base_date="2022-05-22",
             window_days=14,
@@ -1818,6 +1866,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            skip_path_scoring=False,
             query_family=None,
             base_date="2022-05-22",
             window_days=14,
@@ -1855,6 +1904,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             config="config/settings.yaml",
             skip_path_build=False,
+            skip_path_scoring=False,
             query_family=None,
             base_date="2022-05-22",
             window_days=14,
@@ -1880,6 +1930,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
             "config_path": "config/settings.yaml",
             "skip_path_build": False,
+            "skip_path_scoring": True,
             "base_date": "2022-05-22",
             "window_days": 14,
             "elapsed_seconds": 2.345,
@@ -1946,6 +1997,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             },
         )
         self.assertEqual(summary["elapsed_seconds"], 2.345)
+        self.assertTrue(summary["skip_path_scoring"])
 
     def test_summarize_pipeline_result_includes_all_candidate_ids(self) -> None:
         result = {

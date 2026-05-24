@@ -108,6 +108,11 @@ def parse_args() -> argparse.Namespace:
         help="Use existing saved paths and only run scoring plus candidate ranking.",
     )
     parser.add_argument(
+        "--skip-path-scoring",
+        action="store_true",
+        help="Use existing saved scored paths and only run candidate ranking.",
+    )
+    parser.add_argument(
         "--query-family",
         default=None,
         choices=("training_order", "date_window"),
@@ -200,6 +205,7 @@ def evaluate_patient(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     skip_path_build: bool = False,
+    skip_path_scoring: bool = False,
     query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
@@ -228,6 +234,7 @@ def evaluate_patient(
             pattern=pattern,
             config_path=config_path,
             skip_path_build=skip_path_build,
+            skip_path_scoring=skip_path_scoring,
             query_family=query_family,
             task_top_k=task_top_k,
             use_llm=use_llm,
@@ -1003,6 +1010,7 @@ def build_experiment_config(
     pattern: str,
     config_path: str | Path,
     skip_path_build: bool,
+    skip_path_scoring: bool,
     query_family: str | None,
     task_top_k: int,
     use_llm: bool,
@@ -1020,16 +1028,25 @@ def build_experiment_config(
     )
     if not isinstance(prompt_template_name, str) or not prompt_template_name.strip():
         prompt_template_name = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
+    include_similar_user_task_evidence = getattr(
+        query_settings.training_task_prediction,
+        "include_similar_user_task_evidence",
+        True,
+    )
+    if not isinstance(include_similar_user_task_evidence, bool):
+        include_similar_user_task_evidence = True
     return {
         "base_date": base_date,
         "window_days": window_days,
         "pattern": pattern,
         "config_path": str(config_path),
         "skip_path_build": skip_path_build,
+        "skip_path_scoring": skip_path_scoring,
         "query_family": query_family,
         "task_top_k": task_top_k,
         "use_llm": use_llm,
         "prompt_template": prompt_template_name,
+        "include_similar_user_task_evidence": include_similar_user_task_evidence,
         "scored_path_top_k": scored_path_top_k,
         "disease_course_window_days": disease_course_window_days,
     }
@@ -1068,6 +1085,7 @@ def run_batch_evaluation(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     skip_path_build: bool = False,
+    skip_path_scoring: bool = False,
     query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
@@ -1110,6 +1128,7 @@ def run_batch_evaluation(
                 pattern=pattern,
                 config_path=config_path,
                 skip_path_build=skip_path_build,
+                skip_path_scoring=skip_path_scoring,
                 query_family=query_family,
                 task_top_k=task_top_k,
                 use_llm=use_llm,
@@ -1259,6 +1278,7 @@ def main() -> int:
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,
+            skip_path_scoring=args.skip_path_scoring,
             query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
@@ -1274,6 +1294,7 @@ def main() -> int:
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,
+            skip_path_scoring=args.skip_path_scoring,
             query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,

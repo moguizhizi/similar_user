@@ -355,6 +355,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             training_task_prediction=Mock(
                 prompt_candidate_compression_enabled=True,
                 prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
+                include_similar_user_task_evidence=False,
             ),
         )
 
@@ -364,6 +365,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             pattern="PATTERN",
             config_path="config/settings.yaml",
             skip_path_build=True,
+            skip_path_scoring=True,
             query_family="date_window",
             task_top_k=7,
             use_llm=False,
@@ -375,11 +377,13 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertNotIn("effective_candidate_task_window_days", config)
         self.assertEqual(config["base_date"], "2022-05-22")
         self.assertEqual(config["task_top_k"], 7)
+        self.assertTrue(config["skip_path_scoring"])
         self.assertFalse(config["use_llm"])
         self.assertEqual(
             config["prompt_template"],
             "TASK_PREDICTION_PROMPT_TEMPLATE_V1",
         )
+        self.assertFalse(config["include_similar_user_task_evidence"])
         mock_load_query_settings.assert_called_once_with("config/settings.yaml")
 
     def test_build_experiment_output_dir_uses_parameterized_subdir(self) -> None:
@@ -443,6 +447,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             pattern="PATTERN",
             config_path="config/settings.yaml",
             skip_path_build=True,
+            skip_path_scoring=True,
             query_family="date_window",
             task_top_k=5,
             use_llm=False,
@@ -527,6 +532,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             pattern="PATTERN",
             config_path="config/settings.yaml",
             skip_path_build=True,
+            skip_path_scoring=True,
             query_family="date_window",
             task_top_k=5,
             use_llm=False,

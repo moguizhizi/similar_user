@@ -7,8 +7,8 @@
 3. 默认调用配置中的 LLM 生成预测结果；使用 `--dry-run` 时跳过 LLM，返回确定性的候选任务结果。
 4. 最后按 `--output-level` 输出任务 ID、任务分数或完整端到端结果。
 
-如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过 path 构建，
-直接基于已保存结果生成相似用户候选并预测训练任务。
+如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过 path 构建。
+如果已经有可用的 scored paths，可以使用 `--skip-path-scoring` 复用已有评分结果。
 
 常用执行方式：
 
@@ -71,6 +71,11 @@ def parse_args() -> argparse.Namespace:
         "--skip-path-build",
         action="store_true",
         help="Use existing saved paths and only run scoring plus candidate ranking.",
+    )
+    parser.add_argument(
+        "--skip-path-scoring",
+        action="store_true",
+        help="Use existing saved scored paths and only run candidate ranking.",
     )
     parser.add_argument(
         "--query-family",
@@ -140,6 +145,7 @@ def run_end_to_end_training_task_prediction(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     skip_path_build: bool = False,
+    skip_path_scoring: bool = False,
     query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
@@ -151,6 +157,7 @@ def run_end_to_end_training_task_prediction(
         pattern=pattern,
         config_path=config_path,
         skip_path_build=skip_path_build,
+        skip_path_scoring=skip_path_scoring,
         query_family=query_family,
         base_date=base_date,
         window_days=window_days,
@@ -217,6 +224,16 @@ def run_training_task_prediction(
         and raw_prompt_template_name.strip()
         else CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
     )
+    raw_include_similar_user_task_evidence = getattr(
+        query_settings.training_task_prediction,
+        "include_similar_user_task_evidence",
+        True,
+    )
+    include_similar_user_task_evidence = (
+        raw_include_similar_user_task_evidence
+        if isinstance(raw_include_similar_user_task_evidence, bool)
+        else True
+    )
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
             kg_repository=KgRepository(
@@ -230,6 +247,7 @@ def run_training_task_prediction(
             llm_client=llm_client,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name,
+            include_similar_user_task_evidence=include_similar_user_task_evidence,
         )
         return service.predict_from_pipeline_result(
             pipeline_result,
@@ -322,6 +340,7 @@ def main() -> int:
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,
+            skip_path_scoring=args.skip_path_scoring,
             query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
