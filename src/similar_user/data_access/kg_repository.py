@@ -12,6 +12,14 @@ from ..domain.graph_schema import PathPattern
 from ..utils.logger import get_logger
 
 from .neo4j_client import Neo4jClient
+from .cypher_queries import (
+    DISEASE_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_CACHE_PATHS_QUERY,
+    SYMPTOM_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY,
+    SYMPTOM_TASKSET_PATIENT_CACHE_PATHS_QUERY,
+    UNKNOWN_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_CACHE_PATHS_QUERY,
+)
 from .graph_query_registry import get_graph_query_spec
 from .pattern_registry import (
     PatternQuerySet,
@@ -407,6 +415,52 @@ class KgRepository:
         query = spec.direct_queries.randomized_path.select(date_window)
         parameters: dict[str, object] = {"unknown_id": normalized_unknown_id}
         parameters.update(date_window.parameters())
+
+        return self.client.run_query(
+            query=query,
+            parameters=parameters,
+        )
+
+    def get_direct_taskset_patient_cache_paths(
+        self,
+        pattern: PathPattern,
+        *,
+        start_date: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Return direct source-taskset-patient paths for local cache sync."""
+        normalized_pattern = (
+            pattern if isinstance(pattern, PathPattern) else PathPattern(pattern)
+        )
+        normalized_start_date = self._normalize_optional_string(
+            start_date,
+            "start_date",
+        )
+        query_map = {
+            PathPattern.DISEASE_TASKSET_PATIENT: (
+                DISEASE_TASKSET_PATIENT_CACHE_PATHS_QUERY,
+                DISEASE_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY,
+            ),
+            PathPattern.SYMPTOM_TASKSET_PATIENT: (
+                SYMPTOM_TASKSET_PATIENT_CACHE_PATHS_QUERY,
+                SYMPTOM_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY,
+            ),
+            PathPattern.UNKNOWN_TASKSET_PATIENT: (
+                UNKNOWN_TASKSET_PATIENT_CACHE_PATHS_QUERY,
+                UNKNOWN_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY,
+            ),
+        }
+        try:
+            base_query, start_date_query = query_map[normalized_pattern]
+        except KeyError as exc:
+            raise ValueError(
+                f"Unsupported direct cache sync pattern: {normalized_pattern.value}"
+            ) from exc
+
+        parameters: dict[str, object] = {}
+        query = base_query
+        if normalized_start_date is not None:
+            query = start_date_query
+            parameters["start_date"] = normalized_start_date
 
         return self.client.run_query(
             query=query,

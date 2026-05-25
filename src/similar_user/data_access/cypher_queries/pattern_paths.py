@@ -1358,3 +1358,102 @@ WITH p, collect({
 
 RETURN row
 """.strip()
+
+DISEASE_TASKSET_PATIENT_CACHE_PATHS_QUERY = """
+MATCH
+(d:Disease)
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL
+
+RETURN {
+    d: d,
+    s: s,
+    p: p
+} AS row
+""".strip()
+
+DISEASE_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY = """
+MATCH
+(d:Disease)
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) >= date($start_date)
+
+RETURN {
+    d: d,
+    s: s,
+    p: p
+} AS row
+""".strip()
+
+SYMPTOM_TASKSET_PATIENT_CACHE_PATHS_QUERY = """
+MATCH
+(sym:Symptom)
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL
+
+RETURN {
+    sym: sym,
+    s: s,
+    p: p
+} AS row
+""".strip()
+
+SYMPTOM_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY = """
+MATCH
+(sym:Symptom)
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) >= date($start_date)
+
+RETURN {
+    sym: sym,
+    s: s,
+    p: p
+} AS row
+""".strip()
+
+UNKNOWN_TASKSET_PATIENT_CACHE_PATHS_QUERY = """
+MATCH
+(un:Unknown)
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL
+
+RETURN {
+    un: un,
+    s: s,
+    p: p
+} AS row
+""".strip()
+
+UNKNOWN_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY = """
+MATCH
+(un:Unknown)
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) >= date($start_date)
+
+RETURN {
+    un: un,
+    s: s,
+    p: p
+} AS row
+""".strip()

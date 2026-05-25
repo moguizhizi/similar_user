@@ -14,6 +14,7 @@ from ..data_access.pattern_registry import (
     PatternQueryMode,
     get_path_pattern_spec,
 )
+from .direct_path_provider import DirectPathProvider
 from ..utils.logger import get_logger
 
 
@@ -749,26 +750,15 @@ class UserService:
         path_window: dict[str, Any],
     ) -> dict[str, Any]:
         """Run a direct path query for a source-driven pattern."""
-        if pattern == PathPattern.DISEASE_TASKSET_PATIENT:
-            paths = self.kg_repository.get_disease_taskset_patient_randomized_paths(
-                source_id,
-                start_date=path_window["start_date"],
-                end_date=path_window["end_date"],
-            )
-        elif pattern == PathPattern.SYMPTOM_TASKSET_PATIENT:
-            paths = self.kg_repository.get_symptom_taskset_patient_randomized_paths(
-                source_id,
-                start_date=path_window["start_date"],
-                end_date=path_window["end_date"],
-            )
-        elif pattern == PathPattern.UNKNOWN_TASKSET_PATIENT:
-            paths = self.kg_repository.get_unknown_taskset_patient_randomized_paths(
-                source_id,
-                start_date=path_window["start_date"],
-                end_date=path_window["end_date"],
-            )
-        else:
-            raise ValueError(f"Unsupported direct path pattern: {pattern.value}")
+        paths = DirectPathProvider(
+            kg_repository=self.kg_repository,
+            config_path=self.kg_repository.config_path,
+        ).get_randomized_paths(
+            pattern=pattern,
+            source_id=source_id,
+            start_date=path_window["start_date"],
+            end_date=path_window["end_date"],
+        )
 
         LOGGER.info(
             "Loaded direct randomized paths: source_id=%s, pattern=%s, path_count=%s",

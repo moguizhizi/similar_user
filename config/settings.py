@@ -101,6 +101,16 @@ class TrainingTaskPredictionSettings:
 
 
 @dataclass(frozen=True)
+class DirectPathCacheSettings:
+    """Configuration for local direct-pattern path cache reads and sync."""
+
+    enabled: bool = False
+    sqlite_path: str = "data/direct_path_cache/direct_paths.sqlite"
+    incremental_enabled: bool = True
+    overlap_days: int = 1
+
+
+@dataclass(frozen=True)
 class LlmSettings:
     """Connection settings for an OpenAI-compatible chat-completions service."""
 
@@ -372,6 +382,45 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
         ),
+    )
+
+
+def load_direct_path_cache_settings(
+    config_path: str | Path,
+) -> DirectPathCacheSettings:
+    """Load direct path cache settings from YAML."""
+    data = _extract_config_section(load_yaml_config(config_path), "direct_path_cache")
+
+    enabled = data.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("direct_path_cache enabled must be a boolean.")
+
+    sqlite_path = data.get(
+        "sqlite_path",
+        "data/direct_path_cache/direct_paths.sqlite",
+    )
+    if not isinstance(sqlite_path, str) or not sqlite_path.strip():
+        raise ValueError("direct_path_cache sqlite_path must be a non-empty string.")
+
+    incremental_enabled = data.get("incremental_enabled", True)
+    if not isinstance(incremental_enabled, bool):
+        raise ValueError(
+            "direct_path_cache incremental_enabled must be a boolean."
+        )
+
+    overlap_days = data.get("overlap_days", 1)
+    if (
+        not isinstance(overlap_days, int)
+        or isinstance(overlap_days, bool)
+        or overlap_days < 0
+    ):
+        raise ValueError("direct_path_cache overlap_days must be a non-negative integer.")
+
+    return DirectPathCacheSettings(
+        enabled=enabled,
+        sqlite_path=sqlite_path.strip(),
+        incremental_enabled=incremental_enabled,
+        overlap_days=overlap_days,
     )
 
 
