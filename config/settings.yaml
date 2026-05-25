@@ -55,3 +55,9 @@ similarity:
   embedding:
     enabled: false
     dimension: 64
+
+direct_path_cache:
+  enabled: false
+  sqlite_path: "data/direct_path_cache/direct_paths.sqlite"
+  incremental_enabled: true
+  overlap_days: 1
