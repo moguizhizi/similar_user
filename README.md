@@ -112,6 +112,19 @@ python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient
 python scripts/build_pattern_paths.py --source-id <patient_id> --patterns-from-config --base-date 2022-05-22 --window-days 14 --query-family training_order
 python scripts/run_monthly_pattern_paths.py --window-days 14 --query-family training_order
 
+# 从 Neo4j 同步 disease/symptom/unknown direct path 到 SQLite
+python scripts/sync_direct_path_cache.py
+python scripts/sync_direct_path_cache.py --pattern disease_patient
+python scripts/sync_direct_path_cache.py --pattern symptom_patient
+python scripts/sync_direct_path_cache.py --pattern unknown_patient
+python scripts/sync_direct_path_cache.py --pattern disease_patient --force-full-refresh
+
+# 基于 direct path 缓存或 Neo4j 构建疾病/症状/未知实体开头的 path 结果
+python scripts/build_direct_entity_paths.py
+python scripts/build_direct_entity_paths.py --disease-id AU_DIS_0029
+python scripts/build_direct_entity_paths.py --symptom-id <symptom_id>
+python scripts/build_direct_entity_paths.py --unknown-id <unknown_id>
+
 # 对已保存的固定模式路径打分
 python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --query-family training_order
 python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --window-days 14 --query-family training_order --config config/settings.yaml
