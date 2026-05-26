@@ -42,7 +42,9 @@
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
 | 查询患者在 base_date 当天或之前最近有效日期的画像实体 | `PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `base_date` | `effective_date`, `diseases`, `symptoms`, `unknowns` |
-| 按患者最近画像实体、性别、执行学历和执行年龄范围查询专属任务相关游戏 | `PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | `patient_entity_queries.py` | `patient_id`, `base_date`, `age_window` | `g`, `profile_age`, `profile_gender`, `profile_education`, `support_sources`, `support_count` |
+| 查询患者用于 direct entity path 评分的最近画像、校准年龄和实体 id 列表 | `PATIENT_DIRECT_ENTITY_SCORING_PROFILE_QUERY` | `patient_entity_queries.py` | `patient_id`, `base_date` | `patient_id`, `effective_date`, `gender`, `education`, `profile_age`, `age_at_base_date`, `disease_ids`, `symptom_ids`, `unknown_ids` |
+| 按患者最近画像实体、性别、执行学历和基于 `base_date` 校准后的执行年龄范围查询专属任务相关游戏 | `PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | `patient_entity_queries.py` | `patient_id`, `base_date`, `age_window` | `g`, `profile_age`, `age_at_base_date`, `profile_gender`, `profile_education`, `support_sources`, `support_count` |
+| 按患者最近画像实体、性别、执行学历、基于 `base_date` 校准后的执行年龄范围和候选训练日期窗口查询专属任务相关游戏 | `PATIENT_PROFILE_GENDER_EDUCATION_AGE_WINDOWED_EXCLUSIVE_TASK_GAME_QUERY` | `patient_entity_queries.py` | `patient_id`, `base_date`, `age_window`, `profile_candidate_training_window_days` | `g`, `profile_age`, `age_at_base_date`, `profile_gender`, `profile_education`, `support_sources`, `support_count` |
 | 查询患者从某日期开始的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date` | `i1` |
 | 查询患者早于 end_date 的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY` | `patient_entity_queries.py` | `patient_id`, `end_date` | `i1` |
 | 查询患者左闭右开日期区间内的去重任务实例 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date`, `end_date` | `i1` |
@@ -238,7 +240,9 @@ Disease -- TaskInstanceSet -- Patient
 | Query | 用途 | 主要参数 | 返回 |
 |---|---|---|---|
 | `PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY` | 查询患者在 base_date 当天或之前最近有效日期的画像实体 | `patient_id`, `base_date` | `effective_date`, `diseases`, `symptoms`, `unknowns` |
-| `PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | 按患者最近画像实体、性别、执行学历和执行年龄范围查询专属任务相关游戏 | `patient_id`, `base_date`, `age_window` | `g`, `profile_age`, `profile_gender`, `profile_education`, `support_sources`, `support_count` |
+| `PATIENT_DIRECT_ENTITY_SCORING_PROFILE_QUERY` | 查询患者用于 direct entity path 评分的最近画像、校准年龄和实体 id 列表 | `patient_id`, `base_date` | `patient_id`, `effective_date`, `gender`, `education`, `profile_age`, `age_at_base_date`, `disease_ids`, `symptom_ids`, `unknown_ids` |
+| `PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY` | 按患者最近画像实体、性别、执行学历和基于 `base_date` 校准后的执行年龄范围查询专属任务相关游戏 | `patient_id`, `base_date`, `age_window` | `g`, `profile_age`, `age_at_base_date`, `profile_gender`, `profile_education`, `support_sources`, `support_count` |
+| `PATIENT_PROFILE_GENDER_EDUCATION_AGE_WINDOWED_EXCLUSIVE_TASK_GAME_QUERY` | 按患者最近画像实体、性别、执行学历、基于 `base_date` 校准后的执行年龄范围和候选训练日期窗口查询专属任务相关游戏 | `patient_id`, `base_date`, `age_window`, `profile_candidate_training_window_days` | `g`, `profile_age`, `age_at_base_date`, `profile_gender`, `profile_education`, `support_sources`, `support_count` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重任务实例 | `patient_id`, `start_date` | `i1` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重任务实例 | `patient_id`, `end_date` | `i1` |
 | `PATIENT_DISTINCT_TASK_INSTANCES_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重任务实例 | `patient_id`, `start_date`, `end_date` | `i1` |
