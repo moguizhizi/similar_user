@@ -111,6 +111,15 @@ class DirectPathCacheSettings:
 
 
 @dataclass(frozen=True)
+class DirectEntityPathSettings:
+    """Configuration for building direct entity-start pattern path files."""
+
+    window_days: int = 180
+    direct_path_limit: int = 1000
+    index_path: str = "data/pattern_paths/direct_entity_path_index.json"
+
+
+@dataclass(frozen=True)
 class LlmSettings:
     """Connection settings for an OpenAI-compatible chat-completions service."""
 
@@ -131,6 +140,7 @@ class QuerySettings:
     score_pattern_paths: ScorePatternPathsSettings
     candidate_ranking: CandidateRankingSettings
     training_task_prediction: TrainingTaskPredictionSettings
+    direct_entity_path: DirectEntityPathSettings
 
 
 def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
@@ -233,6 +243,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     score_pattern_paths_data = data.get("score_pattern_paths") or {}
     candidate_ranking_data = data.get("candidate_ranking") or {}
     training_task_prediction_data = data.get("training_task_prediction") or {}
+    direct_entity_path_data = data.get("direct_entity_path") or {}
     bands_data = graph_path_limit_data.get("bands") or []
 
     bands: list[QueryLimitBandSettings] = []
@@ -357,6 +368,31 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction similar_user_game_counts_weighted_sort_enabled must be a boolean."
         )
+    direct_entity_window_days = direct_entity_path_data.get("window_days", 180)
+    if (
+        not isinstance(direct_entity_window_days, int)
+        or isinstance(direct_entity_window_days, bool)
+        or direct_entity_window_days <= 0
+    ):
+        raise ValueError("direct_entity_path window_days must be a positive integer.")
+    direct_path_limit = direct_entity_path_data.get("direct_path_limit", 1000)
+    if (
+        not isinstance(direct_path_limit, int)
+        or isinstance(direct_path_limit, bool)
+        or direct_path_limit <= 0
+    ):
+        raise ValueError(
+            "direct_entity_path direct_path_limit must be a positive integer."
+        )
+    direct_entity_index_path = direct_entity_path_data.get(
+        "index_path",
+        "data/pattern_paths/direct_entity_path_index.json",
+    )
+    if (
+        not isinstance(direct_entity_index_path, str)
+        or not direct_entity_index_path.strip()
+    ):
+        raise ValueError("direct_entity_path index_path must be a non-empty string.")
 
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
@@ -381,6 +417,11 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             profile_candidate_training_window_days=profile_candidate_training_window_days,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
+        ),
+        direct_entity_path=DirectEntityPathSettings(
+            window_days=direct_entity_window_days,
+            direct_path_limit=direct_path_limit,
+            index_path=direct_entity_index_path.strip(),
         ),
     )
 

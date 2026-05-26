@@ -9,6 +9,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
+from .direct_path_cache_queries import (
+    DIRECT_PATH_ALL_SQL_VARIANTS,
+    DIRECT_PATH_RANDOMIZED_SQL_VARIANTS,
+    direct_path_sql_parameters,
+)
+from .pattern_registry import QueryDateWindow
 from ..domain.graph_schema import PathPattern
 
 
@@ -269,48 +275,20 @@ class DirectPathCacheStore:
         """Return cached paths matching the source ID and optional date window."""
         self.initialize()
         source_type, source_field = _source_contract(pattern)
-        filters = [
-            """
-            SELECT
-                dp.source_type,
-                dp.source_id,
-                dp.taskset_id,
-                dp.patient_id,
-                dp.training_date,
-                sn.source_json,
-                ts.taskset_json,
-                pn.patient_json
-            FROM direct_paths dp
-            JOIN source_nodes sn
-              ON sn.source_type = dp.source_type
-             AND sn.source_id = dp.source_id
-            JOIN taskset_nodes ts
-              ON ts.taskset_id = dp.taskset_id
-            JOIN patient_nodes pn
-              ON pn.patient_id = dp.patient_id
-            WHERE dp.pattern = ?
-              AND dp.source_type = ?
-              AND dp.source_id = ?
-            """.strip()
-        ]
-        parameters: list[object] = [pattern.value, source_type, source_id.strip()]
-        if start_date is not None:
-            filters.append("AND dp.training_date >= ?")
-            parameters.append(start_date)
-        if end_date is not None:
-            filters.append("AND dp.training_date < ?")
-            parameters.append(end_date)
-        base_query = " ".join(filters)
+        date_window = QueryDateWindow(
+            start_date=_optional_string(start_date),
+            end_date=_optional_string(end_date),
+        )
         if one_path_per_patient:
-            query = (
-                "SELECT source_json, taskset_json, patient_json, "
-                "patient_id, training_date, taskset_id "
-                f"FROM ({base_query} ORDER BY RANDOM()) "
-                "GROUP BY patient_id "
-                "ORDER BY training_date, taskset_id, patient_id"
-            )
+            query = DIRECT_PATH_RANDOMIZED_SQL_VARIANTS.select(date_window)
         else:
-            query = f"{base_query} ORDER BY training_date, taskset_id, patient_id"
+            query = DIRECT_PATH_ALL_SQL_VARIANTS.select(date_window)
+        parameters = direct_path_sql_parameters(
+            pattern=pattern.value,
+            source_type=source_type,
+            source_id=source_id.strip(),
+            window=date_window,
+        )
 
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()
@@ -335,6 +313,62 @@ class DirectPathCacheStore:
                 (pattern.value,),
             ).fetchone()
         return int(row["path_count"] if row is not None else 0)
+
+    def list_sources(self, pattern: PathPattern) -> list[dict[str, Any]]:
+        """Return cached direct sources for a pattern."""
+        self.initialize()
+        source_type, _ = _source_contract(pattern)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    dp.source_id,
+                    sn.source_json,
+                    count(*) AS path_count,
+                    max(dp.training_date) AS latest_training_date
+                FROM direct_paths dp
+                JOIN source_nodes sn
+                  ON sn.source_type = dp.source_type
+                 AND sn.source_id = dp.source_id
+                WHERE dp.pattern = ?
+                  AND dp.source_type = ?
+                GROUP BY dp.source_id, sn.source_json
+                ORDER BY dp.source_id
+                """.strip(),
+                (pattern.value, source_type),
+            ).fetchall()
+        return [
+            {
+                "source_id": row["source_id"],
+                "source_name": _node_name(json.loads(row["source_json"])),
+                "path_count": int(row["path_count"] or 0),
+                "latest_training_date": row["latest_training_date"],
+            }
+            for row in rows
+        ]
+
+    def get_latest_training_date(
+        self,
+        pattern: PathPattern,
+        source_id: str,
+    ) -> str | None:
+        """Return the latest cached TaskInstanceSet training date for one source."""
+        self.initialize()
+        source_type, _ = _source_contract(pattern)
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT max(training_date) AS latest_training_date
+                FROM direct_paths
+                WHERE pattern = ?
+                  AND source_type = ?
+                  AND source_id = ?
+                """.strip(),
+                (pattern.value, source_type, source_id.strip()),
+            ).fetchone()
+        if row is None or row["latest_training_date"] is None:
+            return None
+        return str(row["latest_training_date"])
 
     def get_last_synced_training_date(self, pattern: PathPattern) -> str | None:
         """Return the stored training-date watermark for a pattern."""
@@ -480,6 +514,14 @@ def _optional_string(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _node_name(node: dict[str, Any]) -> str | None:
+    value = node.get("name")
+    if value is None:
+        value = node.get("名称")
+    text = _optional_string(value)
+    return text
 
 
 def _max_training_date(records: list[DirectPathCacheRecord]) -> str | None:

@@ -328,6 +328,54 @@ class PatternResultStore:
         )
         return output_path
 
+    def save_with_path_context(
+        self,
+        result: StoredPatternResult | dict[str, Any],
+        *,
+        path_context: dict[str, Any],
+    ) -> Path:
+        """Save one source result using a caller-supplied cache context."""
+        normalized_result = (
+            result if isinstance(result, StoredPatternResult) else StoredPatternResult.from_dict(result)
+        )
+        path_key = _normalize_required_string(path_context.get("path_key"), "path_key")
+        result_payload = _with_path_cache_context(normalized_result, path_context)
+        output_path = get_pattern_result_output_path(
+            self.config_path,
+            result_payload.pattern,
+            result_payload.source_id,
+            path_key=path_key,
+        )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        serialized = json.dumps(
+            result_payload.to_dict(),
+            ensure_ascii=False,
+            default=str,
+            indent=2,
+        )
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=output_path.parent,
+            prefix=f"{normalized_result.source_id}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_file.write(serialized)
+            temp_path = Path(temp_file.name)
+
+        os.replace(temp_path, output_path)
+        LOGGER.debug(
+            "Saved pattern result with explicit path context: source_id=%s, source_parameter=%s, pattern=%s, path_count=%s, output_path=%s",
+            result_payload.source_id,
+            result_payload.source_parameter,
+            result_payload.pattern,
+            len(result_payload.paths),
+            output_path,
+        )
+        return output_path
+
     def load(
         self,
         pattern: str,
@@ -399,6 +447,19 @@ def save_pattern_result(
     return PatternResultStore(config_path).save(result)
 
 
+def save_direct_pattern_result(
+    result: dict[str, Any],
+    config_path: str | Path,
+    *,
+    path_context: dict[str, Any],
+) -> Path:
+    """Save a direct entity-start pattern result with an explicit cache context."""
+    return PatternResultStore(config_path).save_with_path_context(
+        result,
+        path_context=path_context,
+    )
+
+
 def build_path_key(
     config_path: str | Path,
     *,
@@ -419,6 +480,32 @@ def build_path_key(
         f"_window_{window_days}"
         f"_qf_{normalized_query_family}"
         f"_pathcfg_{graph_path_limit_hash}"
+    )
+
+
+def build_direct_path_key(
+    *,
+    base_date: str,
+    window_days: int,
+    direct_path_limit: int,
+) -> str:
+    """Build a filesystem-safe cache key for direct entity-start path results."""
+    normalized_base_date = _normalize_required_string(base_date, "base_date")
+    if not isinstance(window_days, int) or isinstance(window_days, bool) or window_days <= 0:
+        raise ValueError("window_days must be a positive integer.")
+    if (
+        not isinstance(direct_path_limit, int)
+        or isinstance(direct_path_limit, bool)
+        or direct_path_limit <= 0
+    ):
+        raise ValueError("direct_path_limit must be a positive integer.")
+    direct_config_hash = _short_hash(
+        {"direct_path": {"direct_path_limit": direct_path_limit}}
+    )
+    return (
+        f"base_{_slug_part(normalized_base_date)}"
+        f"_window_{window_days}"
+        f"_directcfg_{direct_config_hash}"
     )
 
 
@@ -461,6 +548,28 @@ def build_path_cache_context(
         "query_family": _normalize_query_family_for_key(query_family),
         "path_config_hash": path_config_hash,
         "path_config": {"graph_path_limit": graph_path_limit},
+    }
+
+
+def build_direct_path_cache_context(
+    *,
+    base_date: str,
+    window_days: int,
+    direct_path_limit: int,
+) -> dict[str, Any]:
+    """Build cache metadata for direct entity-start pattern path results."""
+    path_key = build_direct_path_key(
+        base_date=base_date,
+        window_days=window_days,
+        direct_path_limit=direct_path_limit,
+    )
+    return {
+        "cache_type": "direct_pattern_paths",
+        "path_key": path_key,
+        "base_date": _normalize_required_string(base_date, "base_date"),
+        "window_days": window_days,
+        "direct_path_limit": direct_path_limit,
+        "direct_config": {"direct_path_limit": direct_path_limit},
     }
 
 

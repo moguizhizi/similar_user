@@ -101,6 +101,48 @@ class DirectPathCacheStoreTest(unittest.TestCase):
             self.assertEqual(result[0]["row"]["s"]["id"], "S2")
             self.assertEqual(result[0]["row"]["p"]["id"], "P2")
 
+    def test_get_paths_filters_by_start_date_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = DirectPathCacheStore(Path(temp_dir) / "direct_paths.sqlite")
+            store.upsert_paths(
+                PathPattern.SYMPTOM_TASKSET_PATIENT,
+                [
+                    _symptom_path("SYM1", "S1", "P1", "2026-05-01"),
+                    _symptom_path("SYM1", "S2", "P2", "2026-05-10"),
+                ],
+            )
+
+            result = store.get_paths(
+                PathPattern.SYMPTOM_TASKSET_PATIENT,
+                "SYM1",
+                start_date="2026-05-05",
+            )
+
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]["row"]["sym"]["id"], "SYM1")
+            self.assertEqual(result[0]["row"]["s"]["id"], "S2")
+
+    def test_get_paths_filters_by_end_date_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = DirectPathCacheStore(Path(temp_dir) / "direct_paths.sqlite")
+            store.upsert_paths(
+                PathPattern.UNKNOWN_TASKSET_PATIENT,
+                [
+                    _unknown_path("UN1", "S1", "P1", "2026-05-01"),
+                    _unknown_path("UN1", "S2", "P2", "2026-05-10"),
+                ],
+            )
+
+            result = store.get_paths(
+                PathPattern.UNKNOWN_TASKSET_PATIENT,
+                "UN1",
+                end_date="2026-05-05",
+            )
+
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]["row"]["un"]["id"], "UN1")
+            self.assertEqual(result[0]["row"]["s"]["id"], "S1")
+
     def test_get_paths_keeps_one_path_per_patient_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = DirectPathCacheStore(Path(temp_dir) / "direct_paths.sqlite")
@@ -185,6 +227,36 @@ def _disease_path(
     return {
         "row": {
             "d": {"id": disease_id, "name": f"disease-{disease_id}"},
+            "s": {"id": taskset_id, "训练日期": training_date},
+            "p": {"id": patient_id, "name": f"patient-{patient_id}"},
+        }
+    }
+
+
+def _symptom_path(
+    symptom_id: str,
+    taskset_id: str,
+    patient_id: str,
+    training_date: str,
+) -> dict[str, object]:
+    return {
+        "row": {
+            "sym": {"id": symptom_id, "name": f"symptom-{symptom_id}"},
+            "s": {"id": taskset_id, "训练日期": training_date},
+            "p": {"id": patient_id, "name": f"patient-{patient_id}"},
+        }
+    }
+
+
+def _unknown_path(
+    unknown_id: str,
+    taskset_id: str,
+    patient_id: str,
+    training_date: str,
+) -> dict[str, object]:
+    return {
+        "row": {
+            "un": {"id": unknown_id, "name": f"unknown-{unknown_id}"},
             "s": {"id": taskset_id, "训练日期": training_date},
             "p": {"id": patient_id, "name": f"patient-{patient_id}"},
         }
