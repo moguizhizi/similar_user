@@ -48,6 +48,10 @@ query:
     profile_candidate_training_window_days: null
     similar_user_game_counts_weighting_enabled: false
     similar_user_game_counts_weighted_sort_enabled: false
+  direct_entity_path:
+    window_days: 180
+    direct_path_limit: 1000
+    index_path: "data/pattern_paths/direct_entity_path_index.json"
 
 similarity:
   top_k: 20

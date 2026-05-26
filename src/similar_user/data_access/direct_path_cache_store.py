@@ -314,6 +314,62 @@ class DirectPathCacheStore:
             ).fetchone()
         return int(row["path_count"] if row is not None else 0)
 
+    def list_sources(self, pattern: PathPattern) -> list[dict[str, Any]]:
+        """Return cached direct sources for a pattern."""
+        self.initialize()
+        source_type, _ = _source_contract(pattern)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    dp.source_id,
+                    sn.source_json,
+                    count(*) AS path_count,
+                    max(dp.training_date) AS latest_training_date
+                FROM direct_paths dp
+                JOIN source_nodes sn
+                  ON sn.source_type = dp.source_type
+                 AND sn.source_id = dp.source_id
+                WHERE dp.pattern = ?
+                  AND dp.source_type = ?
+                GROUP BY dp.source_id, sn.source_json
+                ORDER BY dp.source_id
+                """.strip(),
+                (pattern.value, source_type),
+            ).fetchall()
+        return [
+            {
+                "source_id": row["source_id"],
+                "source_name": _node_name(json.loads(row["source_json"])),
+                "path_count": int(row["path_count"] or 0),
+                "latest_training_date": row["latest_training_date"],
+            }
+            for row in rows
+        ]
+
+    def get_latest_training_date(
+        self,
+        pattern: PathPattern,
+        source_id: str,
+    ) -> str | None:
+        """Return the latest cached TaskInstanceSet training date for one source."""
+        self.initialize()
+        source_type, _ = _source_contract(pattern)
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT max(training_date) AS latest_training_date
+                FROM direct_paths
+                WHERE pattern = ?
+                  AND source_type = ?
+                  AND source_id = ?
+                """.strip(),
+                (pattern.value, source_type, source_id.strip()),
+            ).fetchone()
+        if row is None or row["latest_training_date"] is None:
+            return None
+        return str(row["latest_training_date"])
+
     def get_last_synced_training_date(self, pattern: PathPattern) -> str | None:
         """Return the stored training-date watermark for a pattern."""
         self.initialize()
@@ -458,6 +514,14 @@ def _optional_string(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _node_name(node: dict[str, Any]) -> str | None:
+    value = node.get("name")
+    if value is None:
+        value = node.get("名称")
+    text = _optional_string(value)
+    return text
 
 
 def _max_training_date(records: list[DirectPathCacheRecord]) -> str | None:

@@ -1457,3 +1457,93 @@ RETURN {
     p: p
 } AS row
 """.strip()
+
+DISEASE_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY = """
+MATCH
+(d:Disease)
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    d.id IS NOT NULL AND
+    s.`训练日期` IS NOT NULL
+
+RETURN
+    toString(d.id) AS source_id,
+    d.name AS source_name,
+    count(*) AS path_count,
+    toString(max(date(s.`训练日期`))) AS latest_training_date
+ORDER BY source_id
+""".strip()
+
+SYMPTOM_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY = """
+MATCH
+(sym:Symptom)
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    sym.id IS NOT NULL AND
+    s.`训练日期` IS NOT NULL
+
+RETURN
+    toString(sym.id) AS source_id,
+    sym.name AS source_name,
+    count(*) AS path_count,
+    toString(max(date(s.`训练日期`))) AS latest_training_date
+ORDER BY source_id
+""".strip()
+
+UNKNOWN_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY = """
+MATCH
+(un:Unknown)
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    un.id IS NOT NULL AND
+    s.`训练日期` IS NOT NULL
+
+RETURN
+    toString(un.id) AS source_id,
+    un.name AS source_name,
+    count(*) AS path_count,
+    toString(max(date(s.`训练日期`))) AS latest_training_date
+ORDER BY source_id
+""".strip()
+
+DISEASE_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY = """
+MATCH
+(d:Disease {id: $source_id})
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL
+
+RETURN toString(max(date(s.`训练日期`))) AS latest_training_date
+""".strip()
+
+SYMPTOM_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY = """
+MATCH
+(sym:Symptom {id: $source_id})
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL
+
+RETURN toString(max(date(s.`训练日期`))) AS latest_training_date
+""".strip()
+
+UNKNOWN_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY = """
+MATCH
+(un:Unknown {id: $source_id})
+--(s:TaskInstanceSet)
+--(p:Patient)
+
+WHERE
+    s.`训练日期` IS NOT NULL
+
+RETURN toString(max(date(s.`训练日期`))) AS latest_training_date
+""".strip()

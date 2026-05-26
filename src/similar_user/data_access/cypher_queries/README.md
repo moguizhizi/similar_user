@@ -50,6 +50,17 @@
 | 查询患者左闭右开日期区间内的去重疾病 | `PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date`, `end_date` | `dis` |
 | 查询患者左闭右开日期区间内的去重 unknown 节点 | `PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY` | `patient_entity_queries.py` | `patient_id`, `start_date`, `end_date` | `un` |
 
+### Direct Source Path 元数据
+
+| 场景 | Query | 文件 | 主要参数 | 返回 |
+|---|---|---|---|---|
+| 查询所有疾病 direct path source 及最新训练日期 | `DISEASE_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY` | `pattern_paths.py` | 无 | `source_id`, `source_name`, `path_count`, `latest_training_date` |
+| 查询所有症状 direct path source 及最新训练日期 | `SYMPTOM_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY` | `pattern_paths.py` | 无 | `source_id`, `source_name`, `path_count`, `latest_training_date` |
+| 查询所有 unknown direct path source 及最新训练日期 | `UNKNOWN_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY` | `pattern_paths.py` | 无 | `source_id`, `source_name`, `path_count`, `latest_training_date` |
+| 查询单个疾病 direct path 最新训练日期 | `DISEASE_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY` | `pattern_paths.py` | `source_id` | `latest_training_date` |
+| 查询单个症状 direct path 最新训练日期 | `SYMPTOM_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY` | `pattern_paths.py` | `source_id` | `latest_training_date` |
+| 查询单个 unknown direct path 最新训练日期 | `UNKNOWN_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY` | `pattern_paths.py` | `source_id` | `latest_training_date` |
+
 ### 两个患者的集合比较
 
 | 场景 | Query | 文件 | 主要参数 | 返回 |
@@ -240,6 +251,17 @@ Disease -- TaskInstanceSet -- Patient
 | `PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY` | 查询患者从某日期开始的去重 unknown 节点 | `patient_id`, `start_date` | `un` |
 | `PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY` | 查询患者早于 end_date 的去重 unknown 节点 | `patient_id`, `end_date` | `un` |
 | `PATIENT_DISTINCT_UNKNOWNS_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的去重 unknown 节点 | `patient_id`, `start_date`, `end_date` | `un` |
+
+### `pattern_paths.py` direct source metadata
+
+| Query | 用途 | 主要参数 | 返回 |
+|---|---|---|---|
+| `DISEASE_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY` | 查询所有疾病 direct path source 及最新训练日期 | 无 | `source_id`, `source_name`, `path_count`, `latest_training_date` |
+| `SYMPTOM_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY` | 查询所有症状 direct path source 及最新训练日期 | 无 | `source_id`, `source_name`, `path_count`, `latest_training_date` |
+| `UNKNOWN_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY` | 查询所有 unknown direct path source 及最新训练日期 | 无 | `source_id`, `source_name`, `path_count`, `latest_training_date` |
+| `DISEASE_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY` | 查询单个疾病 direct path 最新训练日期 | `source_id` | `latest_training_date` |
+| `SYMPTOM_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY` | 查询单个症状 direct path 最新训练日期 | `source_id` | `latest_training_date` |
+| `UNKNOWN_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY` | 查询单个 unknown direct path 最新训练日期 | `source_id` | `latest_training_date` |
 
 ### `patient_comparison_queries.py`
 

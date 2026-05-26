@@ -20,6 +20,14 @@ from .cypher_queries import (
     UNKNOWN_TASKSET_PATIENT_CACHE_PATHS_BY_START_DATE_QUERY,
     UNKNOWN_TASKSET_PATIENT_CACHE_PATHS_QUERY,
 )
+from .cypher_queries.pattern_paths import (
+    DISEASE_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY,
+    DISEASE_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY,
+    SYMPTOM_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY,
+    SYMPTOM_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY,
+    UNKNOWN_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY,
+    UNKNOWN_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY,
+)
 from .graph_query_registry import get_graph_query_spec
 from .pattern_registry import (
     PatternQuerySet,
@@ -466,6 +474,57 @@ class KgRepository:
             query=query,
             parameters=parameters,
         )
+
+    def get_direct_taskset_patient_source_summaries(
+        self,
+        pattern: PathPattern,
+    ) -> list[dict[str, object]]:
+        """Return source IDs and latest training dates for a direct path pattern."""
+        normalized_pattern = (
+            pattern if isinstance(pattern, PathPattern) else PathPattern(pattern)
+        )
+        query_map = {
+            PathPattern.DISEASE_TASKSET_PATIENT: DISEASE_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY,
+            PathPattern.SYMPTOM_TASKSET_PATIENT: SYMPTOM_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY,
+            PathPattern.UNKNOWN_TASKSET_PATIENT: UNKNOWN_TASKSET_PATIENT_SOURCE_SUMMARY_QUERY,
+        }
+        try:
+            query = query_map[normalized_pattern]
+        except KeyError as exc:
+            raise ValueError(
+                f"Unsupported direct source summary pattern: {normalized_pattern.value}"
+            ) from exc
+        return self.client.run_query(query=query, parameters={})
+
+    def get_direct_taskset_patient_latest_training_date(
+        self,
+        pattern: PathPattern,
+        source_id: str,
+    ) -> str | None:
+        """Return the latest TaskInstanceSet training date for one direct source."""
+        normalized_pattern = (
+            pattern if isinstance(pattern, PathPattern) else PathPattern(pattern)
+        )
+        normalized_source_id = self._normalize_required_string(source_id, "source_id")
+        query_map = {
+            PathPattern.DISEASE_TASKSET_PATIENT: DISEASE_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY,
+            PathPattern.SYMPTOM_TASKSET_PATIENT: SYMPTOM_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY,
+            PathPattern.UNKNOWN_TASKSET_PATIENT: UNKNOWN_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY,
+        }
+        try:
+            query = query_map[normalized_pattern]
+        except KeyError as exc:
+            raise ValueError(
+                f"Unsupported direct latest-date pattern: {normalized_pattern.value}"
+            ) from exc
+        rows = self.client.run_query(
+            query=query,
+            parameters={"source_id": normalized_source_id},
+        )
+        if not rows:
+            return None
+        value = rows[0].get("latest_training_date")
+        return str(value) if value is not None else None
 
     def get_patient_distinct_games_by_end_date(
         self,
