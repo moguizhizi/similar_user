@@ -29,6 +29,14 @@ from .utils import (
 LOGGER = get_logger(__name__)
 
 
+DIRECT_ENTITY_SCORING_PATTERN = "DIRECT_ENTITY_PATHS"
+DIRECT_ENTITY_CANDIDATE_PATTERNS = {
+    PathPattern.DISEASE_TASKSET_PATIENT.value,
+    PathPattern.SYMPTOM_TASKSET_PATIENT.value,
+    PathPattern.UNKNOWN_TASKSET_PATIENT.value,
+}
+
+
 @dataclass(frozen=True)
 class ScoredDomainPath:
     """One scored raw path paired with its typed domain path."""
@@ -37,6 +45,17 @@ class ScoredDomainPath:
     total_score: float | None
     pattern: PathPattern
     path: Any
+
+
+@dataclass(frozen=True)
+class ScoredCandidatePath:
+    """One scored path normalized to a candidate patient."""
+
+    path_index: int | None
+    total_score: float | None
+    pattern: str
+    candidate_id: str
+    source_type: str
 
 
 @dataclass
@@ -52,6 +71,7 @@ class SimilarUserCandidateService:
         candidate_top_k: int,
         scoring_settings: CandidateScoringSettings | None = None,
         disease_course_window_days: int | None = None,
+        include_direct_entity_paths: bool = True,
     ) -> dict[str, Any]:
         """Deduplicate candidate users from typed scored paths and rank by candidate_score."""
         return self.aggregate_candidates_from_multiple_scored_results(
@@ -59,6 +79,7 @@ class SimilarUserCandidateService:
             candidate_top_k=candidate_top_k,
             scoring_settings=scoring_settings,
             disease_course_window_days=disease_course_window_days,
+            include_direct_entity_paths=include_direct_entity_paths,
         )
 
     def aggregate_candidates_from_multiple_scored_results(
@@ -68,6 +89,7 @@ class SimilarUserCandidateService:
         candidate_top_k: int,
         scoring_settings: CandidateScoringSettings | None = None,
         disease_course_window_days: int | None = None,
+        include_direct_entity_paths: bool = True,
     ) -> dict[str, Any]:
         """Deduplicate candidate users across multiple scored pattern results."""
         if candidate_top_k <= 0:
@@ -78,9 +100,14 @@ class SimilarUserCandidateService:
             raise ValueError("scored_results must contain at least one result.")
         resolved_scoring_settings = scoring_settings or CandidateScoringSettings()
 
-        scored_domain_paths: list[ScoredDomainPath] = []
+        scored_candidate_paths: list[ScoredCandidatePath] = []
         for scored_result in scored_results:
-            scored_domain_paths.extend(_build_scored_domain_paths(scored_result))
+            scored_candidate_paths.extend(
+                _build_scored_candidate_paths(
+                    scored_result,
+                    include_direct_entity_paths=include_direct_entity_paths,
+                )
+            )
 
         first_result = scored_results[0]
         score_end_date = _extract_score_end_date(first_result)
@@ -102,7 +129,7 @@ class SimilarUserCandidateService:
             source_id,
             source_parameter,
             patterns,
-            len(scored_domain_paths),
+            len(scored_candidate_paths),
             candidate_top_k,
             score_end_date,
         )
@@ -120,9 +147,9 @@ class SimilarUserCandidateService:
             }
         )
 
-        for scored_path in scored_domain_paths:
-            candidate_id = scored_path.path.p2.id
-            pattern_key = scored_path.pattern.value
+        for scored_path in scored_candidate_paths:
+            candidate_id = scored_path.candidate_id
+            pattern_key = scored_path.pattern
             bucket = candidate_buckets[candidate_id]
             bucket["patient_id"] = candidate_id
             bucket["match_count"] += 1
@@ -140,6 +167,7 @@ class SimilarUserCandidateService:
                     "path_indices": [],
                     "best_score": None,
                     "avg_score": 0.0,
+                    "source_type": scored_path.source_type,
                     "_score_sum": 0.0,
                 },
             )
@@ -158,7 +186,7 @@ class SimilarUserCandidateService:
             "Prepared similar-user candidate buckets before scoring: source_id=%s, source_parameter=%s, scored_path_count=%s, pre_score_candidate_count=%s, candidate_top_k=%s",
             source_id,
             source_parameter,
-            len(scored_domain_paths),
+            len(scored_candidate_paths),
             len(candidate_buckets),
             candidate_top_k,
         )
@@ -699,6 +727,85 @@ def _build_scored_domain_paths(scored_result: dict[str, Any]) -> list[ScoredDoma
         )
 
     return scored_domain_paths
+
+
+def _build_scored_candidate_paths(
+    scored_result: dict[str, Any],
+    *,
+    include_direct_entity_paths: bool,
+) -> list[ScoredCandidatePath]:
+    """Convert supported scored path payloads to candidate evidence rows."""
+    pattern = scored_result.get("pattern")
+    if (
+        pattern == DIRECT_ENTITY_SCORING_PATTERN
+        or pattern in DIRECT_ENTITY_CANDIDATE_PATTERNS
+    ):
+        if not include_direct_entity_paths:
+            return []
+        return _build_direct_entity_scored_candidate_paths(scored_result)
+
+    return [
+        ScoredCandidatePath(
+            path_index=scored_path.path_index,
+            total_score=scored_path.total_score,
+            pattern=scored_path.pattern.value,
+            candidate_id=scored_path.path.p2.id,
+            source_type="patient_path",
+        )
+        for scored_path in _build_scored_domain_paths(scored_result)
+        if isinstance(getattr(scored_path.path.p2, "id", None), str)
+        and scored_path.path.p2.id.strip()
+    ]
+
+
+def _build_direct_entity_scored_candidate_paths(
+    scored_result: dict[str, Any],
+) -> list[ScoredCandidatePath]:
+    """Convert direct entity scored paths to candidate evidence rows."""
+    scored_candidate_paths: list[ScoredCandidatePath] = []
+    top_level_pattern = scored_result.get("pattern")
+
+    for scored_path in scored_result.get("scores", []):
+        if not isinstance(scored_path, dict):
+            continue
+        candidate_id = _extract_direct_entity_candidate_id(scored_path)
+        if candidate_id is None:
+            continue
+        pattern = scored_path.get("pattern") or top_level_pattern
+        if pattern not in DIRECT_ENTITY_CANDIDATE_PATTERNS:
+            continue
+        scored_candidate_paths.append(
+            ScoredCandidatePath(
+                path_index=_extract_path_index(scored_path),
+                total_score=_extract_total_score(scored_path),
+                pattern=str(pattern),
+                candidate_id=candidate_id,
+                source_type="direct_entity_path",
+            )
+        )
+
+    return scored_candidate_paths
+
+
+def _extract_direct_entity_candidate_id(scored_path: dict[str, Any]) -> str | None:
+    """Extract the candidate patient id from one direct entity scored path."""
+    raw_patient_id = scored_path.get("patient_id")
+    if isinstance(raw_patient_id, str) and raw_patient_id.strip():
+        return raw_patient_id.strip()
+
+    path = scored_path.get("path")
+    if not isinstance(path, dict):
+        return None
+    row = path.get("row")
+    if not isinstance(row, dict):
+        return None
+    patient = row.get("p")
+    if not isinstance(patient, dict):
+        return None
+    raw_row_patient_id = patient.get("id")
+    if isinstance(raw_row_patient_id, str) and raw_row_patient_id.strip():
+        return raw_row_patient_id.strip()
+    return None
 
 
 def _build_candidate_scoring_context(

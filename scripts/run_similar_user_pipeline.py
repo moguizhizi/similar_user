@@ -4,6 +4,7 @@
 
 1. 默认先调用 `scripts/build_pattern_paths.py`，按配置中的多个模式构建并保存 paths。
 2. 调用 path 评分逻辑，读取已保存 paths 并保存多个模式的 scored paths。
+   如果配置开启 direct entity path scoring，也会给离线 direct path 打分。
 3. 再调用候选构建逻辑，读取已保存 scored paths 并聚合候选相似用户。
 4. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
 
@@ -45,6 +46,10 @@ from scripts.build_pattern_paths import run_configured_pattern_path_flows
 from scripts.score_pattern_paths import (
     DEFAULT_CONFIG_PATH,
     score_and_save_configured_pattern_paths,
+)
+from scripts.score_direct_entity_paths import (
+    save_scored_direct_entity_result,
+    score_direct_entity_paths,
 )
 
 
@@ -154,6 +159,13 @@ def run_similar_user_pipeline(
             base_date=base_date,
             query_family=query_family or "training_order",
         )
+        direct_entity_scoring = _score_direct_entity_paths_if_enabled(
+            patient_id,
+            config_path=resolved_config_path,
+            base_date=base_date,
+        )
+    else:
+        direct_entity_scoring = None
 
     candidate_result = build_similar_user_candidates(
         patient_id,
@@ -177,6 +189,7 @@ def run_similar_user_pipeline(
         "window_days": resolved_window_days,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         "path_generation": path_generation,
+        "direct_entity_scoring": direct_entity_scoring,
         "candidate_result": candidate_result,
         "candidate_output_paths": {
             key: str(value) for key, value in candidate_output_paths.items()
@@ -237,6 +250,46 @@ def _resolve_patient_path_window_days(
     config_path: str | Path,
 ) -> int:
     return load_query_settings(config_path).patient_path.window_days
+
+
+def _score_direct_entity_paths_if_enabled(
+    patient_id: str,
+    *,
+    config_path: str | Path,
+    base_date: str,
+) -> dict[str, Any] | None:
+    """Score direct entity paths for an existing patient when enabled."""
+    query_settings = load_query_settings(config_path)
+    if not query_settings.direct_entity_path_scoring.use_when_patient_exists:
+        LOGGER.info(
+            "Skipped direct entity path scoring because use_when_patient_exists=false: patient_id=%s",
+            patient_id,
+        )
+        return None
+
+    result = score_direct_entity_paths(
+        patient_id=patient_id,
+        base_date=base_date,
+        config_path=config_path,
+    )
+    output_paths = save_scored_direct_entity_result(result)
+    LOGGER.info(
+        "Completed direct entity path scoring: patient_id=%s, should_score=%s, scored_path_count=%s, saved_file_count=%s",
+        patient_id,
+        result.get("should_score"),
+        result.get("scored_path_count"),
+        len(output_paths),
+    )
+    return {
+        "should_score": result.get("should_score"),
+        "reason": result.get("reason"),
+        "path_count": result.get("path_count"),
+        "scored_path_count": result.get("scored_path_count"),
+        "output_paths": [
+            {key: str(value) for key, value in item.items()}
+            for item in output_paths
+        ],
+    }
 
 
 def summarize_pipeline_result(

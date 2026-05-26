@@ -53,11 +53,13 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
     PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+    PATIENT_EXISTS_QUERY,
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
     PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     PATIENT_PROFILE_GENDER_EDUCATION_AGE_WINDOWED_EXCLUSIVE_TASK_GAME_QUERY,
+    PATIENT_DIRECT_ENTITY_SCORING_PROFILE_QUERY,
     PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -127,6 +129,25 @@ class KgRepositoryTest(unittest.TestCase):
             query=PATIENT_IDS_QUERY,
             parameters={},
         )
+
+    def test_patient_exists(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"exists": True}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.patient_exists(" 20123188 ")
+
+        self.assertTrue(result)
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_EXISTS_QUERY,
+            parameters={"patient_id": "20123188"},
+        )
+
+    def test_patient_exists_rejects_blank_patient_id(self) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id"):
+            repository.patient_exists("   ")
 
     def test_get_patient_ids_with_training_on_date(self) -> None:
         mock_client = Mock()
@@ -1518,6 +1539,53 @@ class KgRepositoryTest(unittest.TestCase):
                 "   ",
             )
 
+    def test_get_patient_direct_entity_scoring_profile(self) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "patient_id": "20123188",
+                "effective_date": "2026-05-20",
+                "gender": "男",
+                "education": "本科",
+                "profile_age": 66,
+                "age_at_base_date": 66,
+                "disease_ids": ["AU_DIS_0029"],
+                "symptom_ids": [],
+                "unknown_ids": [],
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_patient_direct_entity_scoring_profile(
+            " 20123188 ",
+            " 2026-05-26 ",
+        )
+
+        self.assertEqual(result, mock_client.run_query.return_value)
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_DIRECT_ENTITY_SCORING_PROFILE_QUERY,
+            parameters={
+                "patient_id": "20123188",
+                "base_date": "2026-05-26",
+            },
+        )
+
+    def test_get_patient_direct_entity_scoring_profile_rejects_blank_inputs(
+        self,
+    ) -> None:
+        repository = KgRepository(client=Mock())
+
+        with self.assertRaisesRegex(ValueError, "patient_id"):
+            repository.get_patient_direct_entity_scoring_profile(
+                "   ",
+                "2026-05-26",
+            )
+        with self.assertRaisesRegex(ValueError, "base_date"):
+            repository.get_patient_direct_entity_scoring_profile(
+                "20123188",
+                "   ",
+            )
+
     def test_get_patient_distinct_symptoms_by_end_date(self) -> None:
         mock_client = Mock()
         mock_client.run_query.return_value = [
@@ -2295,7 +2363,7 @@ class KgRepositoryTest(unittest.TestCase):
             ),
         )
         self.assertEqual(settings.pattern_path_storage.output_dir, "data/pattern_paths")
-        self.assertEqual(settings.score_pattern_paths.top_k, 50)
+        self.assertEqual(settings.score_pattern_paths.top_k, 150)
         self.assertEqual(settings.candidate_ranking.candidate_top_k, 10)
         self.assertEqual(settings.candidate_ranking.total_score_match_top_k, 1)
         self.assertEqual(settings.candidate_ranking.disease_course_window_days, 14)
@@ -2327,6 +2395,9 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertFalse(settings.candidate_ranking.scoring.set_same.disease)
         self.assertFalse(settings.candidate_ranking.scoring.set_same.symptom)
         self.assertFalse(settings.candidate_ranking.scoring.set_same.unknown)
+        self.assertFalse(
+            settings.direct_entity_path_scoring.use_when_patient_exists
+        )
         self.assertEqual(
             settings.candidate_ranking.patterns,
             (
@@ -2336,6 +2407,47 @@ class KgRepositoryTest(unittest.TestCase):
                 "patient_unknown_patient",
             ),
         )
+
+    def test_load_query_settings_reads_direct_entity_path_scoring_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 5",
+                        "direct_entity_path_scoring:",
+                        "  use_when_patient_exists: true",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            settings = load_query_settings(config_path)
+
+        self.assertTrue(settings.direct_entity_path_scoring.use_when_patient_exists)
+
+    def test_load_query_settings_rejects_invalid_direct_entity_path_scoring_flag(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 5",
+                        "direct_entity_path_scoring:",
+                        '  use_when_patient_exists: "yes"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "use_when_patient_exists"):
+                load_query_settings(config_path)
 
     def test_get_patient_task_instance_set_ordered_training_dates(self) -> None:
         mock_client = Mock()

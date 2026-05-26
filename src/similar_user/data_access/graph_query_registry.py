@@ -35,6 +35,7 @@ from .cypher_queries import (
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
+    PATIENT_EXISTS_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
@@ -251,6 +252,16 @@ UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_SPEC = _spec(
 )
 
 PATIENT_IDENTITY_SPECS = (
+    _spec(
+        name="patient_exists",
+        category=GraphQueryCategory.PATIENT_IDENTITY,
+        description="判断指定 Patient 节点是否存在",
+        source_label="Patient",
+        source_parameters=("patient_id",),
+        path_shape="(p:Patient)",
+        row_fields=("exists",),
+        query=PATIENT_EXISTS_QUERY,
+    ),
     _spec(
         name="patient_ids",
         category=GraphQueryCategory.PATIENT_IDENTITY,

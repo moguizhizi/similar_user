@@ -127,6 +127,13 @@ class DirectEntityPathSettings:
 
 
 @dataclass(frozen=True)
+class DirectEntityPathScoringSettings:
+    """Configuration for direct entity-start path scoring input resolution."""
+
+    use_when_patient_exists: bool = False
+
+
+@dataclass(frozen=True)
 class LlmSettings:
     """Connection settings for an OpenAI-compatible chat-completions service."""
 
@@ -149,6 +156,7 @@ class QuerySettings:
     candidate_ranking: CandidateRankingSettings
     training_task_prediction: TrainingTaskPredictionSettings
     direct_entity_path: DirectEntityPathSettings
+    direct_entity_path_scoring: DirectEntityPathScoringSettings
 
 
 def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
@@ -253,6 +261,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     candidate_ranking_data = data.get("candidate_ranking") or {}
     training_task_prediction_data = data.get("training_task_prediction") or {}
     direct_entity_path_data = data.get("direct_entity_path") or {}
+    direct_entity_path_scoring_data = data.get("direct_entity_path_scoring") or {}
     bands_data = graph_path_limit_data.get("bands") or []
 
     bands: list[QueryLimitBandSettings] = []
@@ -410,6 +419,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         or not direct_entity_index_path.strip()
     ):
         raise ValueError("direct_entity_path index_path must be a non-empty string.")
+    direct_entity_use_when_patient_exists = direct_entity_path_scoring_data.get(
+        "use_when_patient_exists",
+        False,
+    )
+    if not isinstance(direct_entity_use_when_patient_exists, bool):
+        raise ValueError(
+            "direct_entity_path_scoring use_when_patient_exists must be a boolean."
+        )
 
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
@@ -440,6 +457,9 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             window_days=direct_entity_window_days,
             direct_path_limit=direct_path_limit,
             index_path=direct_entity_index_path.strip(),
+        ),
+        direct_entity_path_scoring=DirectEntityPathScoringSettings(
+            use_when_patient_exists=direct_entity_use_when_patient_exists,
         ),
     )
 

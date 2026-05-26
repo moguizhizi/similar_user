@@ -9,6 +9,7 @@
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
 | 查询全库患者 ID | `PATIENT_IDS_QUERY` | `patients.py` | 无 | `patient_id` |
+| 判断指定 Patient 节点是否存在 | `PATIENT_EXISTS_QUERY` | `patients.py` | `patient_id` | `exists` |
 | 查询指定日期有训练记录的患者 ID | `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | `patients.py` | `base_date` | `patient_id` |
 | 查询指定日期有训练记录的患者 ID，并在查询阶段限制数量 | `PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY` | `patients.py` | `base_date`, `limit` | `patient_id` |
 | 查询可作为 source patient 的二级脑能力患者 ID | `SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY` | `patients.py` | 无 | `patient_id` |
@@ -207,6 +208,7 @@ Disease -- TaskInstanceSet -- Patient
 | Query | 用途 | 主要参数 | 返回 |
 |---|---|---|---|
 | `PATIENT_IDS_QUERY` | 查询全库患者 ID | 无 | `patient_id` |
+| `PATIENT_EXISTS_QUERY` | 判断指定 Patient 节点是否存在 | `patient_id` | `exists` |
 | `PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY` | 查询指定日期有训练记录的患者 ID | `base_date` | `patient_id` |
 | `PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY` | 查询指定日期有训练记录的患者 ID，并在查询阶段限制数量 | `base_date`, `limit` | `patient_id` |
 | `SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY` | 查询可作为 source patient 的二级脑能力患者 ID | 无 | `patient_id` |

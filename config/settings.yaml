@@ -54,6 +54,8 @@ query:
     window_days: 180
     direct_path_limit: 1000
     index_path: "data/pattern_paths/direct_entity_path_index.json"
+  direct_entity_path_scoring:
+    use_when_patient_exists: true
 
 similarity:
   top_k: 20

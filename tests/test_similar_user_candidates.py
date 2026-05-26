@@ -929,6 +929,137 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["candidate_count"], 1)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
 
+    def test_aggregate_candidates_merges_patient_and_direct_entity_paths(self) -> None:
+        patient_row = {
+            "p": {"id": "30010096"},
+            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+            "i1": {"id": "30010096_20220522_348_x", "任务类型": "专属", "结果": "完成"},
+            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+            "i2": {"id": "20113563_20211214_348_x", "结果": "完成", "活跃": "是", "任务类型": "专属"},
+            "s2": {"id": "20113563_20211214", "执行年龄": "65", "执行学历": "本科"},
+            "p2": {"id": "20113563"},
+        }
+        patient_scored_result = {
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "path_count": 1,
+            "scored_path_count": 1,
+            "retrieval_context": {"split_training_date": "2022-01-13"},
+            "scores": [
+                {
+                    "path_index": 0,
+                    "score": {"total_score": 95.0},
+                    "path": {"row": patient_row},
+                },
+            ],
+        }
+        direct_entity_scored_result = {
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
+            "pattern": "DIRECT_ENTITY_PATHS",
+            "path_count": 2,
+            "scored_path_count": 2,
+            "scores": [
+                {
+                    "pattern": "DISEASE_TASKSET_PATIENT",
+                    "path_index": 3,
+                    "patient_id": "20113563",
+                    "score": {"total_score": 88.0},
+                },
+                {
+                    "pattern": "SYMPTOM_TASKSET_PATIENT",
+                    "path_index": 4,
+                    "patient_id": "20113564",
+                    "score": {"total_score": 82.0},
+                },
+            ],
+        }
+
+        result = (
+            SimilarUserCandidateService()
+            .aggregate_candidates_from_multiple_scored_results(
+                [patient_scored_result, direct_entity_scored_result],
+                candidate_top_k=10,
+            )
+        )
+
+        candidates_by_id = {
+            candidate["patient_id"]: candidate for candidate in result["candidates"]
+        }
+        self.assertEqual(result["pre_score_candidate_count"], 2)
+        self.assertEqual(candidates_by_id["20113563"]["match_count"], 2)
+        self.assertEqual(candidates_by_id["20113563"]["best_score"], 95.0)
+        self.assertEqual(candidates_by_id["20113563"]["avg_score"], 91.5)
+        self.assertEqual(
+            sorted(candidates_by_id["20113563"]["pattern_breakdown"]),
+            [
+                "DISEASE_TASKSET_PATIENT",
+                "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            ],
+        )
+        self.assertEqual(
+            candidates_by_id["20113563"]["pattern_breakdown"][
+                "DISEASE_TASKSET_PATIENT"
+            ]["source_type"],
+            "direct_entity_path",
+        )
+        self.assertEqual(candidates_by_id["20113564"]["match_count"], 1)
+
+    def test_aggregate_candidates_can_disable_direct_entity_paths(self) -> None:
+        patient_row = {
+            "p": {"id": "30010096"},
+            "s1": {"id": "30010096_20220522", "执行年龄": "66", "执行学历": "本科"},
+            "i1": {"id": "30010096_20220522_348_x", "任务类型": "专属", "结果": "完成"},
+            "g": {"id": "348", "name": "真假句辨别", "任务类型": "句子识别"},
+            "i2": {"id": "20113563_20211214_348_x", "结果": "完成", "活跃": "是", "任务类型": "专属"},
+            "s2": {"id": "20113563_20211214", "执行年龄": "65", "执行学历": "本科"},
+            "p2": {"id": "20113563"},
+        }
+        patient_scored_result = {
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
+            "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+            "path_count": 1,
+            "scored_path_count": 1,
+            "retrieval_context": {"split_training_date": "2022-01-13"},
+            "scores": [
+                {
+                    "path_index": 0,
+                    "score": {"total_score": 95.0},
+                    "path": {"row": patient_row},
+                },
+            ],
+        }
+        direct_entity_scored_result = {
+            "source_id": "30010096",
+            "source_parameter": "patient_id",
+            "pattern": "DIRECT_ENTITY_PATHS",
+            "path_count": 1,
+            "scored_path_count": 1,
+            "scores": [
+                {
+                    "pattern": "DISEASE_TASKSET_PATIENT",
+                    "path_index": 3,
+                    "patient_id": "20113564",
+                    "score": {"total_score": 88.0},
+                },
+            ],
+        }
+
+        result = (
+            SimilarUserCandidateService()
+            .aggregate_candidates_from_multiple_scored_results(
+                [patient_scored_result, direct_entity_scored_result],
+                candidate_top_k=10,
+                include_direct_entity_paths=False,
+            )
+        )
+
+        self.assertEqual(result["pre_score_candidate_count"], 1)
+        self.assertEqual(result["candidates"][0]["patient_id"], "20113563")
+        self.assertEqual(result["candidates"][0]["match_count"], 1)
+
     def test_build_similar_user_candidates_uses_saved_scored_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
