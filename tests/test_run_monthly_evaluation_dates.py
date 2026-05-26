@@ -32,7 +32,6 @@ class RunMonthlyEvaluationDatesTest(unittest.TestCase):
     def test_build_evaluation_command_uses_python_and_options(self) -> None:
         command = run_monthly_evaluation_dates.build_evaluation_command(
             base_date="2024-02-23",
-            window_days=14,
             config_path="config/settings.yaml",
             use_llm=False,
             skip_path_build=True,
@@ -45,8 +44,6 @@ class RunMonthlyEvaluationDatesTest(unittest.TestCase):
                 "scripts/evaluate_predict_training_tasks.py",
                 "--base-date",
                 "2024-02-23",
-                "--window-days",
-                "14",
                 "--config",
                 "config/settings.yaml",
                 "--dry-run",

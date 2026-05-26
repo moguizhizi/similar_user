@@ -11,7 +11,7 @@
 
 常用执行方式：
 
-    python scripts/build_similar_user_candidates.py 40
+    python scripts/build_similar_user_candidates.py 40 --base-date 2022-05-22
 
 默认从 `config/settings.yaml` 的 `candidate_ranking.patterns` 读取多模式列表。
 """
@@ -84,12 +84,6 @@ def parse_args() -> argparse.Namespace:
         help="Path/scored cache base date used to locate saved scored paths.",
     )
     parser.add_argument(
-        "--window-days",
-        type=int,
-        required=True,
-        help="Path/scored cache window-days value used to locate saved scored paths.",
-    )
-    parser.add_argument(
         "--query-family",
         default=None,
         choices=("training_order", "date_window"),
@@ -105,7 +99,6 @@ def build_similar_user_candidates(
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
     disease_course_window_days: int | None = None,
     base_date: str | None = None,
-    window_days: int | None = None,
     query_family: str | None = None,
 ) -> dict[str, Any]:
     """Aggregate ranked candidate users from top-k scored paths."""
@@ -115,7 +108,6 @@ def build_similar_user_candidates(
     scored_key = build_expected_scored_key(
         resolved_config_path,
         base_date=base_date,
-        window_days=window_days,
         query_family=query_family,
     )
     resolved_disease_course_window_days = (
@@ -238,7 +230,6 @@ def build_expected_scored_key(
     config_path: str | Path,
     *,
     base_date: str | None,
-    window_days: int | None,
     query_family: str | None,
 ) -> str:
     """Build the scored path cache key expected by candidate aggregation."""
@@ -246,7 +237,6 @@ def build_expected_scored_key(
     path_key = build_path_key(
         config_path,
         base_date=base_date,
-        window_days=window_days,
         query_family=query_family,
     )
     return build_scored_key(path_key, query_settings.score_pattern_paths.top_k)
@@ -533,9 +523,6 @@ def _scored_cache_kwargs(args: argparse.Namespace) -> dict[str, object]:
     base_date = getattr(args, "base_date", None)
     if isinstance(base_date, str) and base_date.strip():
         kwargs["base_date"] = base_date.strip()
-    window_days = getattr(args, "window_days", None)
-    if isinstance(window_days, int) and not isinstance(window_days, bool):
-        kwargs["window_days"] = window_days
     query_family = getattr(args, "query_family", None)
     if isinstance(query_family, str) and query_family.strip():
         kwargs["query_family"] = query_family.strip()

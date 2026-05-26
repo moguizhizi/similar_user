@@ -47,7 +47,6 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
 
@@ -82,7 +81,6 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
 
@@ -118,7 +116,6 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
 
@@ -182,7 +179,6 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
             expected_loaded_result = {
@@ -230,7 +226,6 @@ class PatternStorageTest(unittest.TestCase):
                 second_result["pattern"],
                 "30010096",
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
             output_exists = output_path.exists()
@@ -282,7 +277,6 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family=None,
             )
 
@@ -291,7 +285,6 @@ class PatternStorageTest(unittest.TestCase):
                 "disease_patient",
                 "AU_DIS_0013",
                 base_date="2024-01-31",
-                window_days=14,
                 query_family=None,
             )
             alias_output_path = get_pattern_result_output_path(
@@ -369,7 +362,6 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
 
@@ -415,7 +407,6 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
 
@@ -424,7 +415,6 @@ class PatternStorageTest(unittest.TestCase):
                 result["pattern"],
                 "30010096",
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
 

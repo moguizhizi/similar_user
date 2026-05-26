@@ -4,7 +4,7 @@
 当天最多 100 个训练患者列表，再逐个调用：
 
     python scripts/build_pattern_paths.py --source-id PATIENT_ID --patterns-from-config \
-        --base-date BASE_DATE --window-days WINDOW_DAYS --query-family training_order
+        --base-date BASE_DATE --query-family training_order
 
 默认 keep-going：某个患者或日期失败后记录失败并继续后续任务。
 """
@@ -34,7 +34,6 @@ from scripts.run_monthly_evaluation_dates import (
     DEFAULT_END_YEAR,
     DEFAULT_SELECTED_DATES_OUTPUT,
     DEFAULT_START_YEAR,
-    DEFAULT_WINDOW_DAYS,
     read_training_dates,
     select_latest_training_date_per_month,
     write_selected_training_dates,
@@ -80,12 +79,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_END_YEAR,
         help="Last year included in monthly date selection.",
-    )
-    parser.add_argument(
-        "--window-days",
-        type=int,
-        default=DEFAULT_WINDOW_DAYS,
-        help="Window-days argument passed to build_pattern_paths.py.",
     )
     parser.add_argument(
         "--config",
@@ -139,7 +132,6 @@ def build_pattern_path_command(
     *,
     patient_id: str,
     base_date: str,
-    window_days: int,
     config_path: str | Path,
     query_family: str | None,
 ) -> list[str]:
@@ -152,8 +144,6 @@ def build_pattern_path_command(
         "--patterns-from-config",
         "--base-date",
         base_date,
-        "--window-days",
-        str(window_days),
         "--config",
         str(config_path),
     ]
@@ -185,7 +175,6 @@ def build_monthly_pattern_path_runs(
     *,
     selected_dates: list[str],
     patient_list_dir: str | Path,
-    window_days: int,
     config_path: str | Path,
     log_dir: str | Path,
     query_family: str | None,
@@ -202,7 +191,6 @@ def build_monthly_pattern_path_runs(
             command = build_pattern_path_command(
                 patient_id=patient_id,
                 base_date=selected_date,
-                window_days=window_days,
                 config_path=config_path,
                 query_family=query_family,
             )
@@ -342,7 +330,6 @@ def main() -> int:
             else build_monthly_pattern_path_runs(
                 selected_dates=selected_dates,
                 patient_list_dir=args.patient_list_dir,
-                window_days=args.window_days,
                 config_path=args.config,
                 log_dir=args.log_dir,
                 query_family=args.query_family,

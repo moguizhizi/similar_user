@@ -11,19 +11,19 @@
 
 常用执行方式：
 
-    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient
+    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --base-date 2022-05-22
 
 批量评分配置中的 patient 起点模式：
 
-    python scripts/score_pattern_paths.py --source-id 30010096 --patterns-from-config
+    python scripts/score_pattern_paths.py --source-id 30010096 --patterns-from-config --base-date 2022-05-22
 
 调试单条 path，不保存评分文件：
 
-    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --path-index 0
+    python scripts/score_pattern_paths.py --source-id 30010096 --pattern patient_game_patient --base-date 2022-05-22 --path-index 0
 
 对 disease_patient / symptom_patient / unknown_patient 评分时，需要显式提供源节点年龄和学历：
 
-    python scripts/score_pattern_paths.py --source-id AU_DIS_0013 --pattern disease_patient --age 66 --education 本科
+    python scripts/score_pattern_paths.py --source-id AU_DIS_0013 --pattern disease_patient --base-date 2022-05-22 --age 66 --education 本科
 """
 
 from __future__ import annotations
@@ -129,12 +129,6 @@ def parse_args() -> argparse.Namespace:
         help="Path cache base date used to locate saved raw pattern paths.",
     )
     parser.add_argument(
-        "--window-days",
-        type=int,
-        required=True,
-        help="Path cache window-days value used to locate saved raw pattern paths.",
-    )
-    parser.add_argument(
         "--query-family",
         default=None,
         choices=("training_order", "date_window"),
@@ -156,7 +150,6 @@ def score_pattern_paths(
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
     base_date: str | None = None,
-    window_days: int | None = None,
     query_family: str | None = None,
 ) -> dict[str, object]:
     """Load a saved pattern result and score its domain paths."""
@@ -174,7 +167,6 @@ def score_pattern_paths(
         pattern,
         source_id,
         base_date=base_date,
-        window_days=window_days,
         query_family=query_family,
     )
     scorer = get_path_scorer(stored_result.pattern)
@@ -266,7 +258,6 @@ def score_configured_pattern_paths(
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     path_index: int | None = None,
     base_date: str | None = None,
-    window_days: int | None = None,
     query_family: str | None = None,
 ) -> list[dict[str, object]]:
     """Score all configured patient-source pattern paths for one source patient."""
@@ -292,7 +283,6 @@ def score_configured_pattern_paths(
             path_index=path_index,
             **_path_cache_kwargs(
                 base_date=base_date,
-                window_days=window_days,
                 query_family=query_family,
             ),
         )
@@ -316,7 +306,6 @@ def score_and_save_configured_pattern_paths(
     path_index: int | None = None,
     output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
     base_date: str | None = None,
-    window_days: int | None = None,
     query_family: str | None = None,
 ) -> list[dict[str, object]]:
     """Score configured patient-source pattern paths and persist each result."""
@@ -326,7 +315,6 @@ def score_and_save_configured_pattern_paths(
         path_index=path_index,
         **_path_cache_kwargs(
             base_date=base_date,
-            window_days=window_days,
             query_family=query_family,
         ),
     )
@@ -657,9 +645,6 @@ def _build_path_cache_args(args: argparse.Namespace) -> dict[str, object]:
     base_date = getattr(args, "base_date", None)
     if isinstance(base_date, str) and base_date.strip():
         cache_args["base_date"] = base_date.strip()
-    window_days = getattr(args, "window_days", None)
-    if isinstance(window_days, int) and not isinstance(window_days, bool):
-        cache_args["window_days"] = window_days
     query_family = getattr(args, "query_family", None)
     if isinstance(query_family, str) and query_family.strip():
         cache_args["query_family"] = query_family.strip()
@@ -669,14 +654,11 @@ def _build_path_cache_args(args: argparse.Namespace) -> dict[str, object]:
 def _path_cache_kwargs(
     *,
     base_date: str | None,
-    window_days: int | None,
     query_family: str | None,
 ) -> dict[str, object]:
     kwargs: dict[str, object] = {}
     if base_date is not None:
         kwargs["base_date"] = base_date
-    if window_days is not None:
-        kwargs["window_days"] = window_days
     if query_family is not None:
         kwargs["query_family"] = query_family
     return kwargs

@@ -12,7 +12,7 @@
 
 常用执行方式：
 
-    python scripts/run_similar_user_pipeline.py 40 --base-date 2022-05-22 --window-days 14
+    python scripts/run_similar_user_pipeline.py 40 --base-date 2022-05-22
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ from similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
 )
 from similar_user.utils.logger import get_logger
+from config.settings import load_query_settings
 
 from scripts.build_similar_user_candidates import (
     build_similar_user_candidates,
@@ -98,12 +99,6 @@ def parse_args() -> argparse.Namespace:
         help="Exclusive window end date used to build paths, for example 2022-05-22.",
     )
     parser.add_argument(
-        "--window-days",
-        type=int,
-        required=True,
-        help="Number of days before base_date included in path retrieval.",
-    )
-    parser.add_argument(
         "--output-level",
         choices=("ids", "scores", "full"),
         default="ids",
@@ -116,7 +111,6 @@ def run_similar_user_pipeline(
     patient_id: str,
     *,
     base_date: str,
-    window_days: int,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path | None = None,
     skip_path_build: bool = False,
@@ -125,6 +119,7 @@ def run_similar_user_pipeline(
 ) -> dict[str, Any]:
     """Run path retrieval, scoring, and candidate ranking as one workflow."""
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
+    resolved_window_days = _resolve_patient_path_window_days(resolved_config_path)
     started_at = time.perf_counter()
     LOGGER.info(
         "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, skip_path_scoring=%s, base_date=%s, window_days=%s, config_path=%s",
@@ -133,7 +128,7 @@ def run_similar_user_pipeline(
         skip_path_build,
         skip_path_scoring,
         base_date,
-        window_days,
+        resolved_window_days,
         resolved_config_path,
     )
     path_generation = None
@@ -142,7 +137,6 @@ def run_similar_user_pipeline(
             patient_id,
             config_path=resolved_config_path,
             base_date=base_date,
-            window_days=window_days,
             query_family=query_family or "training_order",
         )
         path_generation = [_summarize_path_result(item) for item in path_results]
@@ -150,7 +144,7 @@ def run_similar_user_pipeline(
             path_generation,
             patient_id=patient_id,
             base_date=base_date,
-            window_days=window_days,
+            window_days=resolved_window_days,
         )
 
     if not skip_path_scoring:
@@ -158,7 +152,6 @@ def run_similar_user_pipeline(
             patient_id,
             config_path=resolved_config_path,
             base_date=base_date,
-            window_days=window_days,
             query_family=query_family or "training_order",
         )
 
@@ -166,7 +159,6 @@ def run_similar_user_pipeline(
         patient_id,
         config_path=resolved_config_path,
         base_date=base_date,
-        window_days=window_days,
         query_family=query_family or "training_order",
     )
     candidate_output_paths = save_similar_user_candidates_result(candidate_result)
@@ -182,7 +174,7 @@ def run_similar_user_pipeline(
         "skip_path_build": skip_path_build,
         "skip_path_scoring": skip_path_scoring,
         "base_date": base_date,
-        "window_days": window_days,
+        "window_days": resolved_window_days,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         "path_generation": path_generation,
         "candidate_result": candidate_result,
@@ -239,6 +231,12 @@ def _raise_if_path_results_empty(
         "path_result does not contain paths: "
         f"patient_id={patient_id}, base_date={base_date}, window_days={window_days}."
     )
+
+
+def _resolve_patient_path_window_days(
+    config_path: str | Path,
+) -> int:
+    return load_query_settings(config_path).patient_path.window_days
 
 
 def summarize_pipeline_result(
@@ -328,7 +326,6 @@ def main() -> int:
             skip_path_build=args.skip_path_build,
             skip_path_scoring=args.skip_path_scoring,
             base_date=args.base_date,
-            window_days=args.window_days,
             query_family=args.query_family,
         )
     except Exception as exc:

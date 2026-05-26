@@ -48,12 +48,6 @@ def parse_args() -> argparse.Namespace:
         help="Path cache base date used to locate the saved pattern result.",
     )
     parser.add_argument(
-        "--window-days",
-        type=int,
-        required=True,
-        help="Path cache window-days value used to locate the saved pattern result.",
-    )
-    parser.add_argument(
         "--query-family",
         default=None,
         choices=("training_order", "date_window"),
@@ -68,7 +62,6 @@ def read_patient_pattern_result(
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     base_date: str,
-    window_days: int,
     query_family: str | None = None,
 ) -> StoredPatternResult:
     """Load one saved patient pattern result from disk."""
@@ -76,7 +69,6 @@ def read_patient_pattern_result(
         pattern,
         patient_id,
         base_date=base_date,
-        window_days=window_days,
         query_family=query_family,
     )
 
@@ -90,7 +82,6 @@ def main() -> int:
             pattern=args.pattern,
             config_path=args.config,
             base_date=args.base_date,
-            window_days=args.window_days,
             query_family=args.query_family,
         )
     except Exception as exc:

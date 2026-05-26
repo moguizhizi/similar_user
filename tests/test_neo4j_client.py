@@ -138,8 +138,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "patient_disease_patient",
             "--base-date",
             "2022-05-22",
-            "--window-days",
-            "14",
         ],
     )
     def test_parse_args_accepts_registered_pattern_alias(self) -> None:
@@ -158,8 +156,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "patient_dis_patient",
             "--base-date",
             "2022-05-22",
-            "--window-days",
-            "14",
         ],
     )
     def test_parse_args_rejects_unregistered_pattern_alias(self) -> None:
@@ -175,8 +171,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "patient_game_patient",
             "--base-date",
             "2022-05-22",
-            "--window-days",
-            "14",
         ],
     )
     def test_parse_args_rejects_positional_source_id(self) -> None:
@@ -191,8 +185,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "30010096",
             "--base-date",
             "2022-05-22",
-            "--window-days",
-            "14",
         ],
     )
     def test_parse_args_requires_pattern_option(self) -> None:
@@ -208,8 +200,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "--patterns-from-config",
             "--base-date",
             "2022-05-22",
-            "--window-days",
-            "14",
         ],
     )
     def test_parse_args_accepts_patterns_from_config(self) -> None:
@@ -230,8 +220,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "--patterns-from-config",
             "--base-date",
             "2022-05-22",
-            "--window-days",
-            "14",
         ],
     )
     def test_parse_args_rejects_pattern_with_patterns_from_config(self) -> None:
@@ -272,7 +260,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             result = run_pattern_path_flow(
                 "30010096",
                 base_date="2022-05-22",
-                window_days=14,
             )
 
         self.assertEqual(
@@ -339,7 +326,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             run_pattern_path_flow(
                 "AU_DIS_0013",
                 base_date="2022-05-22",
-                window_days=14,
                 pattern="disease_patient",
             )
 
@@ -382,7 +368,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
                 "30010096",
                 config_path=config_path,
                 base_date="2022-05-22",
-                window_days=14,
                 query_family="date_window",
             )
 
@@ -398,7 +383,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "30010096",
             config_path=config_path,
             base_date="2022-05-22",
-            window_days=14,
             pattern="patient_game_patient",
             query_family="date_window",
         )
@@ -406,7 +390,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "30010096",
             config_path=config_path,
             base_date="2022-05-22",
-            window_days=14,
             pattern="patient_disease_patient",
             query_family="date_window",
         )
@@ -434,7 +417,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
                     "AU_DIS_0013",
                     config_path=config_path,
                     base_date="2022-05-22",
-                    window_days=14,
                 )
 
     @patch("scripts.build_pattern_paths.LOGGER")
@@ -450,7 +432,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             source_id="30010096",
             config="config/settings.yaml",
             base_date="2022-05-22",
-            window_days=14,
             pattern="patient_game_patient",
             query_family="date_window",
         )
@@ -468,7 +449,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             base_date="2022-05-22",
-            window_days=14,
             pattern="patient_game_patient",
             query_family="date_window",
         )
@@ -487,7 +467,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             source_id="30010096",
             config="config/settings.yaml",
             base_date="2022-05-22",
-            window_days=14,
             pattern=None,
             patterns_from_config=True,
             query_family="date_window",
@@ -500,7 +479,6 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             base_date="2022-05-22",
-            window_days=14,
             query_family="date_window",
         )
         mock_logger.exception.assert_not_called()

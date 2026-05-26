@@ -53,9 +53,8 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         result = predict_training_tasks.run_end_to_end_training_task_prediction(
             "40",
             base_date="2022-05-22",
-            window_days=14,
             pattern="PATTERN",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             skip_path_build=True,
             skip_path_scoring=True,
             query_family="date_window",
@@ -75,17 +74,16 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_run_pipeline.assert_called_once_with(
             "40",
             pattern="PATTERN",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             skip_path_build=True,
             skip_path_scoring=True,
             query_family="date_window",
             base_date="2022-05-22",
-            window_days=14,
         )
         mock_run_prediction.assert_called_once_with(
             pipeline_result,
             base_date="2022-05-22",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             task_top_k=3,
             use_llm=False,
             include_prompt=True,
@@ -123,14 +121,14 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         result = predict_training_tasks.run_training_task_prediction(
             {"patient_id": "40", "candidate_result": {"candidates": []}},
             base_date="2022-05-22",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             task_top_k=3,
             use_llm=False,
             include_prompt=True,
         )
 
         self.assertEqual(result, {"patient_id": "40"})
-        mock_load_query_settings.assert_called_once_with("config/custom.yaml")
+        mock_load_query_settings.assert_called_once_with("config/settings.yaml")
         mock_service_cls.assert_called_once()
         self.assertEqual(
             mock_service_cls.call_args.kwargs["prompt_template_name"],
@@ -181,7 +179,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             predict_training_tasks.run_training_task_prediction(
                 {"patient_id": "40", "candidate_result": {"candidates": []}},
                 base_date="2022-05-22",
-                config_path="config/custom.yaml",
+                config_path="config/settings.yaml",
                 use_llm=False,
             )
 
@@ -253,7 +251,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_parse_args.return_value = Mock(
             patient_id="40",
             base_date="2022-05-22",
-            window_days=14,
             pattern="PATTERN",
             config="config/settings.yaml",
             skip_path_build=True,
@@ -274,7 +271,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_run_end_to_end.assert_called_once_with(
             "40",
             base_date="2022-05-22",
-            window_days=14,
             pattern="PATTERN",
             config_path="config/settings.yaml",
             skip_path_build=True,
@@ -317,7 +313,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_parse_args.return_value = Mock(
             patient_id="40",
             base_date="2022-05-22",
-            window_days=14,
             pattern="PATTERN",
             config="config/settings.yaml",
             skip_path_build=True,
@@ -347,7 +342,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_run_end_to_end.assert_called_once_with(
             "40",
             base_date="2022-05-22",
-            window_days=14,
             pattern="PATTERN",
             config_path="config/settings.yaml",
             skip_path_build=True,

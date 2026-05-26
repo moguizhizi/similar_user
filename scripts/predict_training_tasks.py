@@ -12,10 +12,11 @@
 
 常用执行方式：
 
-    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14
-    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --window-days 14 --no-save-prompt
+    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22
+    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --no-save-prompt
 
-其中 `--window-days` 只控制相似用户 path 构建窗口；预测阶段的相似用户任务窗口来自配置。
+相似用户 path 构建窗口来自配置中的 `query.patient_path.window_days`；
+预测阶段的相似用户任务窗口来自配置。
 """
 
 from __future__ import annotations
@@ -97,12 +98,6 @@ def parse_args() -> argparse.Namespace:
         help="Prediction base date; target tasks use the two days before this date.",
     )
     parser.add_argument(
-        "--window-days",
-        type=int,
-        required=True,
-        help="Number of days before base_date used to build similar-user paths.",
-    )
-    parser.add_argument(
         "--task-top-k",
         type=int,
         default=DEFAULT_TASK_TOP_K,
@@ -141,7 +136,6 @@ def run_end_to_end_training_task_prediction(
     patient_id: str,
     *,
     base_date: str,
-    window_days: int,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     skip_path_build: bool = False,
@@ -160,7 +154,6 @@ def run_end_to_end_training_task_prediction(
         skip_path_scoring=skip_path_scoring,
         query_family=query_family,
         base_date=base_date,
-        window_days=window_days,
     )
     prediction_result = run_training_task_prediction(
         pipeline_result,
@@ -351,7 +344,6 @@ def main() -> int:
         result = run_end_to_end_training_task_prediction(
             args.patient_id,
             base_date=args.base_date,
-            window_days=args.window_days,
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,

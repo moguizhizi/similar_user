@@ -2,7 +2,7 @@
 
 这个脚本是路径生成流程的统一入口：
 
-1. 按 `source_id`、日期窗口和路径模式从 Neo4j 查询 paths。
+1. 按 `source_id`、配置中的日期窗口和路径模式从 Neo4j 查询 paths。
 2. 将查询结果组装为带 `retrieval_context` 的离线结果。
 3. 把结果保存到配置中的 pattern path 存储目录，供后续流程继续使用。
 
@@ -16,7 +16,8 @@
 - `--patterns-from-config` 从 YAML 的 `candidate_ranking.patterns` 读取多个 patient 起点模式并依次构建。
 - `--query-family` 只适用于带 statistics 的 patient 系列模式。默认 `training_order`。
   `training_order` 会要求 s1/s2 满足训练日期顺序；`date_window` 只按 s1 的训练日期窗口取路径。
-- `--base-date` 是右开窗口的结束日期，`--window-days` 决定向前回看多少天。
+- `--base-date` 是右开窗口的结束日期，向前回看的天数来自
+  `query.patient_path.window_days`。
 
 常用执行方式：
 
@@ -24,20 +25,17 @@
         --source-id 30010096 \
         --pattern patient_game_patient \
         --base-date 2022-05-22 \
-        --window-days 14 \
         --query-family training_order
 
     python scripts/build_pattern_paths.py \
         --source-id AU_DIS_0013 \
         --pattern disease_patient \
-        --base-date 2022-05-22 \
-        --window-days 14
+        --base-date 2022-05-22
 
     python scripts/build_pattern_paths.py \
         --source-id 30010096 \
         --patterns-from-config \
-        --base-date 2022-05-22 \
-        --window-days 14
+        --base-date 2022-05-22
 """
 
 from __future__ import annotations
@@ -95,12 +93,6 @@ def parse_args() -> argparse.Namespace:
         help="Exclusive end date of the path window, for example 2022-05-22.",
     )
     parser.add_argument(
-        "--window-days",
-        type=int,
-        required=True,
-        help="Number of days before base_date included in the left-closed window.",
-    )
-    parser.add_argument(
         "--pattern",
         default=None,
         choices=available_path_pattern_aliases(),
@@ -140,12 +132,12 @@ def run_pattern_path_flow(
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     *,
     base_date: str,
-    window_days: int,
     pattern: str = DEFAULT_PATTERN,
     query_family: str | None = None,
 ) -> dict[str, object]:
     """Build one source's pattern paths from Neo4j and persist the result."""
     started_at = time.perf_counter()
+    resolved_window_days = _resolve_patient_path_window_days(config_path)
     effective_query_family = _resolve_effective_query_family(pattern, query_family)
     LOGGER.info(
         "Starting pattern path build: source_id=%s, pattern=%s, query_family=%s, base_date=%s, window_days=%s, config_path=%s",
@@ -153,7 +145,7 @@ def run_pattern_path_flow(
         pattern,
         effective_query_family,
         base_date,
-        window_days,
+        resolved_window_days,
         config_path,
     )
     with Neo4jClient.from_config(config_path) as client:
@@ -162,7 +154,7 @@ def run_pattern_path_flow(
         result = service.get_pattern_paths(
             source_id,
             base_date=base_date,
-            window_days=window_days,
+            window_days=resolved_window_days,
             pattern=pattern,
             query_family=effective_query_family,
         )
@@ -187,12 +179,13 @@ def run_configured_pattern_path_flows(
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     *,
     base_date: str,
-    window_days: int,
     query_family: str | None = None,
 ) -> list[dict[str, object]]:
     """Build all configured patient-source pattern paths for one source patient."""
     started_at = time.perf_counter()
-    ranking_settings = load_query_settings(config_path).candidate_ranking
+    query_settings = load_query_settings(config_path)
+    ranking_settings = query_settings.candidate_ranking
+    resolved_window_days = _resolve_patient_path_window_days(config_path)
     selected_patterns = tuple(ranking_settings.patterns)
     _validate_patient_source_patterns(selected_patterns)
     effective_query_family = query_family or DEFAULT_QUERY_FAMILY
@@ -202,7 +195,7 @@ def run_configured_pattern_path_flows(
         selected_patterns,
         effective_query_family,
         base_date,
-        window_days,
+        resolved_window_days,
         config_path,
     )
     results = [
@@ -210,7 +203,6 @@ def run_configured_pattern_path_flows(
             source_id,
             config_path=config_path,
             base_date=base_date,
-            window_days=window_days,
             pattern=pattern,
             query_family=effective_query_family,
         )
@@ -260,6 +252,13 @@ def _resolve_effective_query_family(
     return query_family
 
 
+def _resolve_patient_path_window_days(
+    config_path: str | Path,
+) -> int:
+    """Return patient path window-days from args or YAML config."""
+    return load_query_settings(config_path).patient_path.window_days
+
+
 def main() -> int:
     """CLI entrypoint for building and saving one source's pattern paths."""
     args = parse_args()
@@ -269,7 +268,6 @@ def main() -> int:
                 args.source_id,
                 config_path=args.config,
                 base_date=args.base_date,
-                window_days=args.window_days,
                 query_family=getattr(args, "query_family", None),
             )
         else:
@@ -277,7 +275,6 @@ def main() -> int:
                 args.source_id,
                 config_path=args.config,
                 base_date=args.base_date,
-                window_days=args.window_days,
                 pattern=getattr(args, "pattern", DEFAULT_PATTERN),
                 query_family=getattr(args, "query_family", None),
             )

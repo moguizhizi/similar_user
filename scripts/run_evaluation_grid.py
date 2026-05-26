@@ -35,7 +35,6 @@ LOGGER = get_logger(__name__)
 DEFAULT_EXPERIMENT_CONFIG_PATH = Path("config/experiments/evaluation_grid.yaml")
 DEFAULT_OUTPUT_ROOT = Path("data/evaluation_grid")
 DEFAULT_GENERATED_CONFIG_DIR = DEFAULT_OUTPUT_ROOT / "generated_configs"
-DEFAULT_WINDOW_DAYS = 14
 DEFAULT_TASK_TOP_K = 7
 DEFAULT_RANK_BY = "micro_recall"
 LEADERBOARD_FIELDS = (
@@ -313,7 +312,6 @@ def build_evaluation_command(
     base_date = base_options.get("base_date")
     if not isinstance(base_date, str) or not base_date.strip():
         raise ValueError("base.base_date must be a non-empty string.")
-    window_days = base_options.get("window_days", DEFAULT_WINDOW_DAYS)
     task_top_k = base_options.get("task_top_k", DEFAULT_TASK_TOP_K)
     use_llm = bool(base_options.get("use_llm", True))
     command = [
@@ -321,8 +319,6 @@ def build_evaluation_command(
         "scripts/evaluate_predict_training_tasks.py",
         "--base-date",
         base_date,
-        "--window-days",
-        str(window_days),
         "--config",
         str(config_path),
         "--task-top-k",
@@ -378,7 +374,10 @@ def build_grid_runs(
             if name is not None
             else build_run_name(index, overrides)
         )
-        generated_config = build_config_for_overrides(base_config, overrides)
+        generated_config = build_config_for_overrides(
+            base_config,
+            _with_base_patient_path_window_override(base_options, overrides),
+        )
         config_path = write_generated_config(
             generated_config,
             output_dir=generated_config_dir,
@@ -401,6 +400,19 @@ def build_grid_runs(
             )
         )
     return runs
+
+
+def _with_base_patient_path_window_override(
+    base_options: dict[str, Any],
+    overrides: dict[str, Any],
+) -> dict[str, Any]:
+    """Carry legacy base.window_days into the generated YAML config."""
+    merged_overrides = dict(overrides)
+    if "query.patient_path.window_days" not in merged_overrides:
+        window_days = base_options.get("window_days")
+        if window_days is not None:
+            merged_overrides["query.patient_path.window_days"] = window_days
+    return merged_overrides
 
 
 def run_evaluation_grid(

@@ -67,7 +67,6 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
 
@@ -76,7 +75,6 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
 
@@ -131,7 +129,6 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
             mock_parse_args.return_value = Mock(
@@ -139,7 +136,6 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config=str(config_path),
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
 

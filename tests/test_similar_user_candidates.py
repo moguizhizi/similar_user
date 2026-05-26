@@ -49,7 +49,6 @@ def _scored_cache_context(output_dir: str | Path) -> dict[str, object]:
     path_key = build_path_key(
         config_path,
         base_date="2024-01-31",
-        window_days=14,
         query_family="training_order",
     )
     return {
@@ -71,7 +70,6 @@ def save_scored_pattern_result(
 
 def build_similar_user_candidates(*args: object, **kwargs: object) -> dict[str, object]:
     kwargs.setdefault("base_date", "2024-01-31")
-    kwargs.setdefault("window_days", 14)
     kwargs.setdefault("query_family", "training_order")
     return _build_similar_user_candidates(*args, **kwargs)
 
@@ -1439,7 +1437,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
             scored_key = build_scored_key(path_key, 150)
@@ -1641,7 +1638,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                window_days=14,
                 query_family="training_order",
             )
             scored_key = build_scored_key(path_key, 150)
@@ -1776,8 +1772,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         result = run_similar_user_pipeline(
             "30010096",
             base_date="2022-01-17",
-            window_days=14,
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             query_family="date_window",
         )
 
@@ -1811,23 +1806,20 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["elapsed_seconds"], 2.345)
         mock_run_path_flows.assert_called_once_with(
             "30010096",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             base_date="2022-01-17",
-            window_days=14,
             query_family="date_window",
         )
         mock_build_candidates.assert_called_once_with(
             "30010096",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             base_date="2022-01-17",
-            window_days=14,
             query_family="date_window",
         )
         mock_score_and_save.assert_called_once_with(
             "30010096",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             base_date="2022-01-17",
-            window_days=14,
             query_family="date_window",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
@@ -1867,8 +1859,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             run_similar_user_pipeline(
                 "30010096",
                 base_date="2022-01-17",
-                window_days=14,
-                config_path="config/custom.yaml",
+                config_path="config/settings.yaml",
             )
 
         mock_build_candidates.assert_not_called()
@@ -1906,8 +1897,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         result = run_similar_user_pipeline(
             "30010096",
             base_date="2022-01-17",
-            window_days=14,
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             skip_path_build=True,
         )
 
@@ -1925,16 +1915,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_run_path_flows.assert_not_called()
         mock_score_and_save.assert_called_once_with(
             "30010096",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             base_date="2022-01-17",
-            window_days=14,
             query_family="training_order",
         )
         mock_build_candidates.assert_called_once_with(
             "30010096",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             base_date="2022-01-17",
-            window_days=14,
             query_family="training_order",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
@@ -1970,8 +1958,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         result = run_similar_user_pipeline(
             "30010096",
             base_date="2022-01-17",
-            window_days=14,
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             skip_path_scoring=True,
         )
 
@@ -1979,9 +1966,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_score_and_save.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
-            config_path="config/custom.yaml",
+            config_path="config/settings.yaml",
             base_date="2022-01-17",
-            window_days=14,
             query_family="training_order",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
@@ -2030,7 +2016,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             skip_path_scoring=False,
             query_family="date_window",
             base_date="2022-05-22",
-            window_days=14,
             output_level="ids",
         )
         mock_run_pipeline.return_value = expected
@@ -2046,7 +2031,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             skip_path_scoring=False,
             query_family="date_window",
             base_date="2022-05-22",
-            window_days=14,
         )
         mock_logger.info.assert_called_once_with(
             json.dumps(
@@ -2078,7 +2062,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             skip_path_scoring=False,
             query_family=None,
             base_date="2022-05-22",
-            window_days=14,
             output_level="full",
         )
         mock_run_pipeline.return_value = expected
@@ -2116,7 +2099,6 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             skip_path_scoring=False,
             query_family=None,
             base_date="2022-05-22",
-            window_days=14,
             output_level="scores",
         )
         mock_run_pipeline.return_value = expected

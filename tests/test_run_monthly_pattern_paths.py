@@ -35,7 +35,6 @@ class RunMonthlyPatternPathsTest(unittest.TestCase):
         command = run_monthly_pattern_paths.build_pattern_path_command(
             patient_id="20102686",
             base_date="2024-02-23",
-            window_days=14,
             config_path="config/settings.yaml",
             query_family="training_order",
         )
@@ -49,8 +48,6 @@ class RunMonthlyPatternPathsTest(unittest.TestCase):
                 "--patterns-from-config",
                 "--base-date",
                 "2024-02-23",
-                "--window-days",
-                "14",
                 "--config",
                 "config/settings.yaml",
                 "--query-family",
@@ -73,7 +70,6 @@ class RunMonthlyPatternPathsTest(unittest.TestCase):
             runs = run_monthly_pattern_paths.build_monthly_pattern_path_runs(
                 selected_dates=["2024-02-23"],
                 patient_list_dir=temp_dir,
-                window_days=14,
                 config_path="config/settings.yaml",
                 log_dir="logs/monthly_pattern_paths",
                 query_family=None,

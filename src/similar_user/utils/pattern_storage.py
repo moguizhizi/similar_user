@@ -382,14 +382,12 @@ class PatternResultStore:
         source_id: str,
         *,
         base_date: str | None = None,
-        window_days: int | None = None,
         query_family: str | None = None,
     ) -> StoredPatternResult:
         """Load one saved result by source ID."""
         path_key = build_path_key(
             self.config_path,
             base_date=base_date,
-            window_days=window_days,
             query_family=query_family,
         )
         output_path = get_pattern_result_output_path(
@@ -464,20 +462,18 @@ def build_path_key(
     config_path: str | Path,
     *,
     base_date: str | None,
-    window_days: int | None,
     query_family: str | None,
 ) -> str:
     """Build a filesystem-safe cache key for raw pattern path results."""
     normalized_base_date = _normalize_required_string(base_date, "base_date")
-    if window_days is None or isinstance(window_days, bool) or window_days <= 0:
-        raise ValueError("window_days must be a positive integer.")
+    resolved_window_days = _resolve_patient_path_window_days(config_path)
     graph_path_limit_hash = _short_hash(
         {"graph_path_limit": _graph_path_limit_config_payload(config_path)}
     )
     normalized_query_family = _normalize_query_family_for_key(query_family)
     return (
         f"base_{_slug_part(normalized_base_date)}"
-        f"_window_{window_days}"
+        f"_window_{resolved_window_days}"
         f"_qf_{normalized_query_family}"
         f"_pathcfg_{graph_path_limit_hash}"
     )
@@ -537,7 +533,6 @@ def build_path_cache_context(
     path_key = build_path_key(
         config_path,
         base_date=base_date,
-        window_days=window_days,
         query_family=query_family,
     )
     return {
@@ -670,6 +665,12 @@ def _extract_window_days(path_window: object) -> int | None:
         return None
     delta = end_date - start_date
     return delta.days if delta.days > 0 else None
+
+
+def _resolve_patient_path_window_days(
+    config_path: str | Path,
+) -> int:
+    return load_query_settings(config_path).patient_path.window_days
 
 
 def _parse_iso_date(value: object) -> date | None:

@@ -48,6 +48,13 @@ class PatternPathStorageSettings:
 
 
 @dataclass(frozen=True)
+class PatientPathSettings:
+    """Configuration for patient-start pattern path retrieval."""
+
+    window_days: int = 14
+
+
+@dataclass(frozen=True)
 class ScorePatternPathsSettings:
     """Configuration for scoring and retaining saved pattern paths."""
 
@@ -137,6 +144,7 @@ class QuerySettings:
 
     graph_path_limit: GraphPathLimitSettings
     pattern_path_storage: PatternPathStorageSettings
+    patient_path: PatientPathSettings
     score_pattern_paths: ScorePatternPathsSettings
     candidate_ranking: CandidateRankingSettings
     training_task_prediction: TrainingTaskPredictionSettings
@@ -240,6 +248,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
 
     graph_path_limit_data = data.get("graph_path_limit") or {}
     pattern_path_storage_data = data.get("pattern_path_storage") or {}
+    patient_path_data = data.get("patient_path") or {}
     score_pattern_paths_data = data.get("score_pattern_paths") or {}
     candidate_ranking_data = data.get("candidate_ranking") or {}
     training_task_prediction_data = data.get("training_task_prediction") or {}
@@ -271,6 +280,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     output_dir = pattern_path_storage_data.get("output_dir", "data/pattern_paths")
     if not isinstance(output_dir, str) or not output_dir.strip():
         raise ValueError("pattern_path_storage output_dir must be a non-empty string.")
+
+    patient_path_window_days = patient_path_data.get("window_days", 14)
+    if (
+        not isinstance(patient_path_window_days, int)
+        or isinstance(patient_path_window_days, bool)
+        or patient_path_window_days <= 0
+    ):
+        raise ValueError("patient_path window_days must be a positive integer.")
 
     scored_path_top_k = score_pattern_paths_data.get("top_k")
     if scored_path_top_k is not None and (
@@ -403,6 +420,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             ),
         ),
         pattern_path_storage=PatternPathStorageSettings(output_dir=output_dir.strip()),
+        patient_path=PatientPathSettings(window_days=patient_path_window_days),
         score_pattern_paths=ScorePatternPathsSettings(top_k=scored_path_top_k),
         candidate_ranking=CandidateRankingSettings(
             candidate_top_k=candidate_top_k,
