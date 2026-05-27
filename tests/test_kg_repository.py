@@ -82,6 +82,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
@@ -89,6 +90,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
@@ -98,6 +100,8 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
@@ -3417,6 +3421,122 @@ class KgRepositoryTest(unittest.TestCase):
             query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_QUERY,
             parameters={
                 "patient_id": "30010096",
+                "per_g": 3,
+                "limit": 100,
+            },
+        )
+
+    def test_get_pattern_randomized_paths_selects_training_order_local_sampling_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"p": {"id": "30010096"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_randomized_paths(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            query_family=PatternQueryFamily.TRAINING_ORDER_LOCAL_SAMPLING,
+            patient_id=" 30010096 ",
+            start_date=" 2026-05-11 ",
+            end_date=" 2026-05-25 ",
+            per_group=3,
+            limit=100,
+        )
+
+        self.assertEqual(result, [{"row": {"p": {"id": "30010096"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2026-05-11",
+                "end_date": "2026-05-25",
+                "per_g": 3,
+                "limit": 100,
+            },
+        )
+
+    def test_get_pattern_randomized_paths_selects_training_order_age_only_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"p": {"id": "30010096"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_randomized_paths(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            query_family=PatternQueryFamily.TRAINING_ORDER_AGE_ONLY,
+            patient_id=" 30010096 ",
+            start_date=" 2026-05-11 ",
+            end_date=" 2026-05-25 ",
+            per_group=3,
+            limit=100,
+        )
+
+        self.assertEqual(result, [{"row": {"p": {"id": "30010096"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2026-05-11",
+                "end_date": "2026-05-25",
+                "per_g": 3,
+                "limit": 100,
+            },
+        )
+
+    def test_get_pattern_randomized_paths_maps_entity_layer1_to_age_only_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"dis": {"id": "D1"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_randomized_paths(
+            pattern=PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
+            query_family="training_order_layer1_age_completion",
+            patient_id="30010096",
+            start_date="2026-05-11",
+            end_date="2026-05-25",
+            per_group=3,
+            limit=100,
+        )
+
+        self.assertEqual(result, [{"row": {"dis": {"id": "D1"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2026-05-11",
+                "end_date": "2026-05-25",
+                "per_g": 3,
+                "limit": 100,
+            },
+        )
+
+    def test_get_pattern_randomized_paths_maps_unknown_layer3_to_age_education_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"un": {"id": "U1"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_randomized_paths(
+            pattern=PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
+            query_family="training_order_layer3_activity_task_type",
+            patient_id="30010096",
+            start_date="2026-05-11",
+            end_date="2026-05-25",
+            per_group=3,
+            limit=100,
+        )
+
+        self.assertEqual(result, [{"row": {"un": {"id": "U1"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2026-05-11",
+                "end_date": "2026-05-25",
                 "per_g": 3,
                 "limit": 100,
             },

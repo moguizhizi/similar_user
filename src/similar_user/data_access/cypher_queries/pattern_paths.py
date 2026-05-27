@@ -262,6 +262,323 @@ RETURN row
 LIMIT $limit
 """.strip()
 
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH DISTINCT p, g
+
+CALL {
+    WITH p, g
+
+    MATCH (p)
+    --(s1:TaskInstanceSet)
+    --(i1:TaskInstance)
+    --(g)
+    --(i2:TaskInstance)
+    --(s2:TaskInstanceSet)
+    --(p2:Patient)
+
+    WHERE
+        p <> p2 AND
+        s1.`训练日期` IS NOT NULL AND
+        s2.`训练日期` IS NOT NULL AND
+        date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+        date(s1.`训练日期`) >= date($start_date) AND
+        date(s1.`训练日期`) < date($end_date)
+
+    WITH p, s1, i1, g, i2, s2, p2, rand() AS r
+    ORDER BY r
+
+    WITH g, p2, collect({
+        p: p,
+        s1: s1,
+        i1: i1,
+        g: g,
+        i2: i2,
+        s2: s2,
+        p2: p2
+    })[0] AS row
+
+    WITH row, rand() AS r
+    ORDER BY r
+    LIMIT $per_g
+
+    RETURN collect(row) AS rows
+}
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH DISTINCT p, g
+
+CALL {
+    WITH p, g
+
+    MATCH (p)
+    --(s1:TaskInstanceSet)
+    --(i1:TaskInstance)
+    --(g)
+    --(i2:TaskInstance)
+    --(s2:TaskInstanceSet)
+    --(p2:Patient)
+
+    WHERE
+        p <> p2 AND
+        s1.`训练日期` IS NOT NULL AND
+        s2.`训练日期` IS NOT NULL AND
+        date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+        date(s1.`训练日期`) >= date($start_date) AND
+        date(s1.`训练日期`) < date($end_date) AND
+        s1.`执行年龄` IS NOT NULL AND
+        s2.`执行年龄` IS NOT NULL AND
+        abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5
+
+    WITH p, s1, i1, g, i2, s2, p2, rand() AS r
+    ORDER BY r
+
+    WITH g, p2, collect({
+        p: p,
+        s1: s1,
+        i1: i1,
+        g: g,
+        i2: i2,
+        s2: s2,
+        p2: p2
+    })[0] AS row
+
+    WITH row, rand() AS r
+    ORDER BY r
+    LIMIT $per_g
+
+    RETURN collect(row) AS rows
+}
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH DISTINCT p, g
+
+CALL {
+    WITH p, g
+
+    MATCH (p)
+    --(s1:TaskInstanceSet)
+    --(i1:TaskInstance)
+    --(g)
+    --(i2:TaskInstance)
+    --(s2:TaskInstanceSet)
+    --(p2:Patient)
+
+    WHERE
+        p <> p2 AND
+        s1.`训练日期` IS NOT NULL AND
+        s2.`训练日期` IS NOT NULL AND
+        date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+        date(s1.`训练日期`) >= date($start_date) AND
+        date(s1.`训练日期`) < date($end_date) AND
+        s1.`执行年龄` IS NOT NULL AND
+        s2.`执行年龄` IS NOT NULL AND
+        abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5 AND
+        i1.`结果` = "完成" AND
+        i2.`结果` = "完成"
+
+    WITH p, s1, i1, g, i2, s2, p2, rand() AS r
+    ORDER BY r
+
+    WITH g, p2, collect({
+        p: p,
+        s1: s1,
+        i1: i1,
+        g: g,
+        i2: i2,
+        s2: s2,
+        p2: p2
+    })[0] AS row
+
+    WITH row, rand() AS r
+    ORDER BY r
+    LIMIT $per_g
+
+    RETURN collect(row) AS rows
+}
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER2_EDUCATION_EXACT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH DISTINCT p, g
+
+CALL {
+    WITH p, g
+
+    MATCH (p)
+    --(s1:TaskInstanceSet)
+    --(i1:TaskInstance)
+    --(g)
+    --(i2:TaskInstance)
+    --(s2:TaskInstanceSet)
+    --(p2:Patient)
+
+    WHERE
+        p <> p2 AND
+        s1.`训练日期` IS NOT NULL AND
+        s2.`训练日期` IS NOT NULL AND
+        date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+        date(s1.`训练日期`) >= date($start_date) AND
+        date(s1.`训练日期`) < date($end_date) AND
+        s1.`执行年龄` IS NOT NULL AND
+        s2.`执行年龄` IS NOT NULL AND
+        abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5 AND
+        s1.`执行学历` IS NOT NULL AND
+        s2.`执行学历` IS NOT NULL AND
+        s1.`执行学历` = s2.`执行学历` AND
+        i1.`结果` = "完成" AND
+        i2.`结果` = "完成"
+
+    WITH p, s1, i1, g, i2, s2, p2, rand() AS r
+    ORDER BY r
+
+    WITH g, p2, collect({
+        p: p,
+        s1: s1,
+        i1: i1,
+        g: g,
+        i2: i2,
+        s2: s2,
+        p2: p2
+    })[0] AS row
+
+    WITH row, rand() AS r
+    ORDER BY r
+    LIMIT $per_g
+
+    RETURN collect(row) AS rows
+}
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH DISTINCT p, g
+
+CALL {
+    WITH p, g
+
+    MATCH (p)
+    --(s1:TaskInstanceSet)
+    --(i1:TaskInstance)
+    --(g)
+    --(i2:TaskInstance)
+    --(s2:TaskInstanceSet)
+    --(p2:Patient)
+
+    WHERE
+        p <> p2 AND
+        s1.`训练日期` IS NOT NULL AND
+        s2.`训练日期` IS NOT NULL AND
+        date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+        date(s1.`训练日期`) >= date($start_date) AND
+        date(s1.`训练日期`) < date($end_date) AND
+        s1.`执行年龄` IS NOT NULL AND
+        s2.`执行年龄` IS NOT NULL AND
+        abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5 AND
+        s1.`执行学历` IS NOT NULL AND
+        s2.`执行学历` IS NOT NULL AND
+        s1.`执行学历` = s2.`执行学历` AND
+        i1.`结果` = "完成" AND
+        i2.`结果` = "完成" AND
+        i1.`活跃` = "是" AND
+        i2.`活跃` = "是" AND
+        i1.`任务类型` = i2.`任务类型`
+
+    WITH p, s1, i1, g, i2, s2, p2, rand() AS r
+    ORDER BY r
+
+    WITH g, p2, collect({
+        p: p,
+        s1: s1,
+        i1: i1,
+        g: g,
+        i2: i2,
+        s2: s2,
+        p2: p2
+    })[0] AS row
+
+    WITH row, rand() AS r
+    ORDER BY r
+    LIMIT $per_g
+
+    RETURN collect(row) AS rows
+}
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY = """
 MATCH path =
 (p:Patient {id: $patient_id})
@@ -299,6 +616,127 @@ UNWIND rows AS row
 RETURN row
 LIMIT $limit
 """.strip()
+
+
+def _entity_training_order_variant_query(
+    *,
+    entity_label: str,
+    entity_var: str,
+    extra_where: tuple[str, ...] = (),
+) -> str:
+    """Build a local-sampling training-order query for entity patient paths."""
+    extra_conditions = ""
+    if extra_where:
+        extra_conditions = " AND\n        " + " AND\n        ".join(extra_where)
+    return f"""
+MATCH (p:Patient {{id: $patient_id}})
+--(s1:TaskInstanceSet)
+--({entity_var}:{entity_label})
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+WITH DISTINCT p, {entity_var}
+
+CALL {{
+    WITH p, {entity_var}
+
+    MATCH (p)
+    --(s1:TaskInstanceSet)
+    --({entity_var})
+    --(s2:TaskInstanceSet)
+    --(p2:Patient)
+
+    WHERE
+        p <> p2 AND
+        s1.`训练日期` IS NOT NULL AND
+        s2.`训练日期` IS NOT NULL AND
+        date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+        date(s1.`训练日期`) >= date($start_date) AND
+        date(s1.`训练日期`) < date($end_date){extra_conditions}
+
+    WITH p, s1, {entity_var}, s2, p2, rand() AS r
+    ORDER BY r
+
+    WITH {entity_var}, p2, collect({{
+        p: p,
+        s1: s1,
+        {entity_var}: {entity_var},
+        s2: s2,
+        p2: p2
+    }})[0] AS row
+
+    WITH row, rand() AS r
+    ORDER BY r
+    LIMIT $per_g
+
+    RETURN collect(row) AS rows
+}}
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
+
+_ENTITY_AGE_FILTERS = (
+    "s1.`执行年龄` IS NOT NULL",
+    "s2.`执行年龄` IS NOT NULL",
+    "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+)
+
+_ENTITY_EDUCATION_FILTERS = (
+    *_ENTITY_AGE_FILTERS,
+    "s1.`执行学历` IS NOT NULL",
+    "s2.`执行学历` IS NOT NULL",
+    "s1.`执行学历` = s2.`执行学历`",
+)
+
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _entity_training_order_variant_query(
+    entity_label="Disease",
+    entity_var="dis",
+)
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _entity_training_order_variant_query(
+    entity_label="Disease",
+    entity_var="dis",
+    extra_where=_ENTITY_AGE_FILTERS,
+)
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _entity_training_order_variant_query(
+    entity_label="Disease",
+    entity_var="dis",
+    extra_where=_ENTITY_EDUCATION_FILTERS,
+)
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _entity_training_order_variant_query(
+    entity_label="Symptom",
+    entity_var="sym",
+)
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _entity_training_order_variant_query(
+    entity_label="Symptom",
+    entity_var="sym",
+    extra_where=_ENTITY_AGE_FILTERS,
+)
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _entity_training_order_variant_query(
+    entity_label="Symptom",
+    entity_var="sym",
+    extra_where=_ENTITY_EDUCATION_FILTERS,
+)
+PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _entity_training_order_variant_query(
+    entity_label="Unknown",
+    entity_var="un",
+)
+PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _entity_training_order_variant_query(
+    entity_label="Unknown",
+    entity_var="un",
+    extra_where=_ENTITY_AGE_FILTERS,
+)
+PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _entity_training_order_variant_query(
+    entity_label="Unknown",
+    entity_var="un",
+    extra_where=_ENTITY_EDUCATION_FILTERS,
+)
 
 PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY = """
 MATCH path =

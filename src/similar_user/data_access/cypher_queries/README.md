@@ -121,6 +121,11 @@ Disease -- TaskInstanceSet -- Patient
 | 按训练日期顺序，并按 s1 从某日期开始随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 早于 end_date 随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 左闭右开日期区间随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序，并按游戏局部采样随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序和年龄接近随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序、年龄接近和完成状态随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序、年龄接近、完成状态和学历一致随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER2_EDUCATION_EXACT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序、年龄接近、完成状态、学历一致、活跃和任务类型一致随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
 | 仅要求两侧训练日期非空，随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `patient_id`, `per_g`, `limit` | `row` |
 | 按 s1 从某日期开始随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | 按 s1 早于 end_date 随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
@@ -129,6 +134,9 @@ Disease -- TaskInstanceSet -- Patient
 | 按训练日期顺序，并按 s1 从某日期开始随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 早于 end_date 随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 左闭右开日期区间随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序和局部采样随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序和年龄接近随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序、年龄接近和学历一致随机抽取疾病固定模式 path | `PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
 | 仅要求两侧训练日期非空，随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `patient_id`, `per_g`, `limit` | `row` |
 | 按 s1 从某日期开始随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | 按 s1 早于 end_date 随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
@@ -137,6 +145,9 @@ Disease -- TaskInstanceSet -- Patient
 | 按训练日期顺序，并按 s1 从某日期开始随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 早于 end_date 随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 左闭右开日期区间随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序和局部采样随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序和年龄接近随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序、年龄接近和学历一致随机抽取症状固定模式 path | `PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
 | 仅要求两侧训练日期非空，随机抽取未知固定模式 path | `PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `patient_id`, `per_g`, `limit` | `row` |
 | 按 s1 从某日期开始随机抽取未知固定模式 path | `PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | 按 s1 早于 end_date 随机抽取未知固定模式 path | `PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
@@ -145,6 +156,9 @@ Disease -- TaskInstanceSet -- Patient
 | 按训练日期顺序，并按 s1 从某日期开始随机抽取未知固定模式 path | `PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 早于 end_date 随机抽取未知固定模式 path | `PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `patient_id`, `end_date`, `per_g`, `limit` | `row` |
 | 按训练日期顺序，并按 s1 左闭右开日期区间随机抽取未知固定模式 path | `PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序和局部采样随机抽取未知固定模式 path | `PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序和年龄接近随机抽取未知固定模式 path | `PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
+| 按训练日期顺序、年龄接近和学历一致随机抽取未知固定模式 path | `PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY` | `pattern_paths.py` | `patient_id`, `start_date`, `end_date`, `per_g`, `limit` | `row` |
 | 随机抽取疾病到患者路径，每个患者保留一条 | `DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `disease_id` | `row` |
 | 按 s 从某日期开始随机抽取疾病到患者路径，每个患者保留一条 | `DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_START_DATE_QUERY` | `pattern_paths.py` | `disease_id`, `start_date` | `row` |
 | 按 s 早于 end_date 随机抽取疾病到患者路径，每个患者保留一条 | `DISEASE_TASKSET_PATIENT_RANDOMIZED_PATH_BY_END_DATE_QUERY` | `pattern_paths.py` | `disease_id`, `end_date` | `row` |

@@ -123,7 +123,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--query-family",
         default=None,
-        choices=("training_order", "date_window"),
+        choices=(
+            "training_order",
+            "date_window",
+            "training_order_local_sampling",
+            "training_order_age_only",
+            "training_order_layer1_age_completion",
+            "training_order_layer2_education_exact",
+            "training_order_layer3_activity_task_type",
+        ),
         help="Query family passed to build_pattern_paths.py.",
     )
     parser.add_argument(

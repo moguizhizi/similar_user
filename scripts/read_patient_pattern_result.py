@@ -50,7 +50,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--query-family",
         default=None,
-        choices=("training_order", "date_window"),
+        choices=(
+            "training_order",
+            "date_window",
+            "training_order_local_sampling",
+            "training_order_age_only",
+            "training_order_layer1_age_completion",
+            "training_order_layer2_education_exact",
+            "training_order_layer3_activity_task_type",
+        ),
         help="Path cache query family used to locate the saved pattern result.",
     )
     return parser.parse_args()

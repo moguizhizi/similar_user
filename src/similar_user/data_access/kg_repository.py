@@ -54,6 +54,11 @@ class PatternQueryFamily(str, Enum):
 
     DATE_WINDOW = "date_window"
     TRAINING_ORDER = "training_order"
+    TRAINING_ORDER_LOCAL_SAMPLING = "training_order_local_sampling"
+    TRAINING_ORDER_AGE_ONLY = "training_order_age_only"
+    TRAINING_ORDER_LAYER1_AGE_COMPLETION = "training_order_layer1_age_completion"
+    TRAINING_ORDER_LAYER2_EDUCATION_EXACT = "training_order_layer2_education_exact"
+    TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE = "training_order_layer3_activity_task_type"
 
 
 @dataclass
