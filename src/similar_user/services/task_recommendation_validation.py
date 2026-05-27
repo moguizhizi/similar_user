@@ -1,4 +1,4 @@
-"""Validate KG task recommendations with the external task-score service."""
+"""Validation helpers for training-task recommendations."""
 
 from __future__ import annotations
 
@@ -14,6 +14,26 @@ from .training_task_score_client import (
     TrainingTaskScoreClient,
     TrainingTaskScoreError,
 )
+
+
+def evaluate_prediction_sets(
+    predicted_game_ids: list[str],
+    actual_game_ids: list[str],
+) -> dict[str, Any]:
+    """Calculate set-based task metrics for one patient."""
+    predicted = normalize_task_ids(predicted_game_ids)
+    actual = normalize_task_ids(actual_game_ids)
+    actual_set = set(actual)
+    matched = [game_id for game_id in predicted if game_id in actual_set]
+    precision = safe_divide(len(matched), len(predicted))
+    recall = safe_divide(len(matched), len(actual))
+    return {
+        "matched_game_ids": matched,
+        "task_hit": bool(matched),
+        "precision": round(precision, 4),
+        "recall": round(recall, 4),
+        "f1": round(calculate_f1(precision, recall), 4),
+    }
 
 
 def build_training_task_score_validation(
@@ -103,6 +123,7 @@ def build_training_task_score_validation(
 
     kg_avg_score = _average_score(kg_scored_tasks)
     csv_avg_score = _average_score(csv_scored_tasks)
+    csv_task_id_set = set(csv_task_ids)
     return {
         "status": "ok",
         "patient_id": normalized_patient_id,
@@ -112,7 +133,9 @@ def build_training_task_score_validation(
         "score_url": score_url,
         "kg_task_ids": kg_task_ids,
         "csv_task_ids": csv_task_ids,
-        "overlap_task_ids": [task_id for task_id in kg_task_ids if task_id in set(csv_task_ids)],
+        "overlap_task_ids": [
+            task_id for task_id in kg_task_ids if task_id in csv_task_id_set
+        ],
         "kg_avg_score": kg_avg_score,
         "csv_avg_score": csv_avg_score,
         "score_delta": _score_delta(kg_avg_score, csv_avg_score),
@@ -159,6 +182,20 @@ def normalize_task_ids(raw_task_ids: object) -> list[str]:
         normalized.append(text)
         seen.add(text)
     return normalized
+
+
+def safe_divide(numerator: int | float, denominator: int | float) -> float:
+    """Divide with a zero fallback."""
+    return float(numerator) / float(denominator) if denominator else 0.0
+
+
+def calculate_f1(precision: float, recall: float) -> float:
+    """Calculate F1 from precision and recall."""
+    return (
+        2 * precision * recall / (precision + recall)
+        if precision + recall > 0
+        else 0.0
+    )
 
 
 def _skipped_payload(

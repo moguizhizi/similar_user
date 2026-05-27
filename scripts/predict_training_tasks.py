@@ -42,18 +42,12 @@ from similar_user.services.task_prediction import (
     DEFAULT_TASK_TOP_K,
     TrainingTaskPredictionService,
 )
-from similar_user.services.training_task_score_validation import (
-    build_training_task_score_validation,
-)
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 from config.settings import load_query_settings
 
 from scripts.run_similar_user_pipeline import run_similar_user_pipeline
 from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
-from similar_user.data_access.algorithm_request_results import (
-    DEFAULT_ALGORITHM_REQUEST_RESULTS_PATH,
-)
 from similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
 )
@@ -135,30 +129,6 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_PROMPT_OUTPUT_DIR),
         help="Directory used to store generated prompt text files.",
     )
-    parser.add_argument(
-        "--enable-score-validation",
-        action="store_true",
-        help=(
-            "Call the external training-task score service to compare KG tasks "
-            "with CSV snapshot tasks."
-        ),
-    )
-    parser.add_argument(
-        "--score-validation-url",
-        default="http://172.21.133.142:5008/training_task_score",
-        help="External training-task score service URL.",
-    )
-    parser.add_argument(
-        "--algorithm-request-results-csv",
-        default=str(DEFAULT_ALGORITHM_REQUEST_RESULTS_PATH),
-        help="CSV snapshot path used for score validation.",
-    )
-    parser.add_argument(
-        "--score-validation-timeout",
-        type=float,
-        default=10.0,
-        help="Timeout in seconds for the external score validation request.",
-    )
     return parser.parse_args()
 
 
@@ -174,10 +144,6 @@ def run_end_to_end_training_task_prediction(
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     include_prompt: bool = False,
-    enable_score_validation: bool = False,
-    score_validation_url: str = "http://172.21.133.142:5008/training_task_score",
-    algorithm_request_results_csv: str | Path = DEFAULT_ALGORITHM_REQUEST_RESULTS_PATH,
-    score_validation_timeout: float = 10.0,
 ) -> dict[str, Any]:
     """Run similar-user generation and training-task prediction in one workflow."""
     pipeline_result = run_similar_user_pipeline(
@@ -197,35 +163,11 @@ def run_end_to_end_training_task_prediction(
         use_llm=use_llm,
         include_prompt=include_prompt,
     )
-    result = {
+    return {
         "patient_id": prediction_result.get("patient_id", patient_id),
         "similar_user_pipeline": pipeline_result,
         "training_task_prediction": prediction_result,
     }
-    if enable_score_validation:
-        try:
-            result["training_task_score_validation"] = (
-                build_training_task_score_validation(
-                    result,
-                    patient_id=str(result["patient_id"]),
-                    score_url=score_validation_url,
-                    csv_path=algorithm_request_results_csv,
-                    timeout_seconds=score_validation_timeout,
-                )
-            )
-        except Exception as exc:
-            LOGGER.warning(
-                "Training task score validation failed: patient_id=%s, error=%s",
-                result["patient_id"],
-                exc,
-            )
-            result["training_task_score_validation"] = {
-                "status": "failed",
-                "reason": "validation_error",
-                "detail": str(exc),
-                "patient_id": result["patient_id"],
-            }
-    return result
 
 
 def run_training_task_prediction(
@@ -331,7 +273,6 @@ def summarize_prediction_result(
     output_level: str,
 ) -> dict[str, Any]:
     """Build compact CLI output."""
-    full_result = result
     if output_level == "full":
         return result
 
@@ -343,7 +284,7 @@ def summarize_prediction_result(
     if not isinstance(predictions, list):
         predictions = []
     if output_level == "ids":
-        output = {
+        return {
             "patient_id": result.get("patient_id"),
             "predicted_training_task_ids": [
                 prediction.get("game_id")
@@ -351,10 +292,8 @@ def summarize_prediction_result(
                 if isinstance(prediction, dict)
             ],
         }
-        _append_score_validation_summary(output, full_result)
-        return output
     if output_level == "scores":
-        output = {
+        return {
             "patient_id": result.get("patient_id"),
             "predicted_training_tasks": [
                 {
@@ -366,28 +305,7 @@ def summarize_prediction_result(
                 if isinstance(prediction, dict)
             ],
         }
-        _append_score_validation_summary(output, full_result)
-        return output
     raise ValueError(f"Unsupported output level: {output_level}.")
-
-
-def _append_score_validation_summary(
-    output: dict[str, Any],
-    result: dict[str, Any],
-) -> None:
-    validation = result.get("training_task_score_validation")
-    if not isinstance(validation, dict):
-        return
-    output["training_task_score_validation"] = {
-        "status": validation.get("status"),
-        "kg_avg_score": validation.get("kg_avg_score"),
-        "csv_avg_score": validation.get("csv_avg_score"),
-        "score_delta": validation.get("score_delta"),
-        "kg_task_ids": validation.get("kg_task_ids"),
-        "csv_task_ids": validation.get("csv_task_ids"),
-        "overlap_task_ids": validation.get("overlap_task_ids"),
-        "reason": validation.get("reason"),
-    }
 
 
 def write_prompt_to_file(
@@ -434,10 +352,6 @@ def main() -> int:
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             include_prompt=(args.include_prompt or not args.no_save_prompt),
-            enable_score_validation=args.enable_score_validation,
-            score_validation_url=args.score_validation_url,
-            algorithm_request_results_csv=args.algorithm_request_results_csv,
-            score_validation_timeout=args.score_validation_timeout,
         )
         output = summarize_prediction_result(result, output_level=args.output_level)
         prompt_path = None

@@ -43,6 +43,11 @@ from similar_user.services.task_prediction import (
     build_game_counts_from_history,
     parse_date_value,
 )
+from similar_user.services.task_recommendation_validation import (
+    calculate_f1,
+    evaluate_prediction_sets,
+    safe_divide,
+)
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 
@@ -550,26 +555,6 @@ def get_actual_game_ids_on_base_date(
         if game_id is not None:
             game_ids.append(game_id)
     return game_ids
-
-
-def evaluate_prediction_sets(
-    predicted_game_ids: list[str],
-    actual_game_ids: list[str],
-) -> dict[str, Any]:
-    """Calculate set-based task metrics for one patient."""
-    predicted = dedupe_texts(predicted_game_ids)
-    actual = dedupe_texts(actual_game_ids)
-    actual_set = set(actual)
-    matched = [game_id for game_id in predicted if game_id in actual_set]
-    precision = safe_divide(len(matched), len(predicted))
-    recall = safe_divide(len(matched), len(actual))
-    return {
-        "matched_game_ids": matched,
-        "task_hit": bool(matched),
-        "precision": round(precision, 4),
-        "recall": round(recall, 4),
-        "f1": round(calculate_f1(precision, recall), 4),
-    }
 
 
 def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1186,20 +1171,6 @@ def normalize_text(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
-
-
-def safe_divide(numerator: int | float, denominator: int | float) -> float:
-    """Divide with a zero fallback."""
-    return float(numerator) / float(denominator) if denominator else 0.0
-
-
-def calculate_f1(precision: float, recall: float) -> float:
-    """Calculate F1 from precision and recall."""
-    return (
-        2 * precision * recall / (precision + recall)
-        if precision + recall > 0
-        else 0.0
-    )
 
 
 def average_metric(details: list[dict[str, Any]], field_name: str) -> float:

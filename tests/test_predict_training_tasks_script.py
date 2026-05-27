@@ -223,41 +223,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
 
         self.assertIs(result, payload)
 
-    def test_summarize_prediction_result_includes_score_validation_summary(self) -> None:
-        result = predict_training_tasks.summarize_prediction_result(
-            {
-                "patient_id": "40",
-                "training_task_prediction": {
-                    "patient_id": "40",
-                    "predicted_training_tasks": [{"game_id": "1"}],
-                },
-                "training_task_score_validation": {
-                    "status": "ok",
-                    "kg_avg_score": 65.0,
-                    "csv_avg_score": 60.0,
-                    "score_delta": 5.0,
-                    "kg_task_ids": ["1"],
-                    "csv_task_ids": ["2"],
-                    "overlap_task_ids": [],
-                },
-            },
-            output_level="ids",
-        )
-
-        self.assertEqual(
-            result["training_task_score_validation"],
-            {
-                "status": "ok",
-                "kg_avg_score": 65.0,
-                "csv_avg_score": 60.0,
-                "score_delta": 5.0,
-                "kg_task_ids": ["1"],
-                "csv_task_ids": ["2"],
-                "overlap_task_ids": [],
-                "reason": None,
-            },
-        )
-
     @patch("scripts.predict_training_tasks.LOGGER")
     @patch("scripts.predict_training_tasks.parse_args")
     @patch("scripts.predict_training_tasks.run_end_to_end_training_task_prediction")
@@ -297,10 +262,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             no_save_prompt=True,
             prompt_output_dir="data/prompts",
             output_level="scores",
-            enable_score_validation=True,
-            score_validation_url="http://score.test/training_task_score",
-            algorithm_request_results_csv="/tmp/request_results.csv",
-            score_validation_timeout=3.0,
         )
         mock_run_end_to_end.return_value = end_to_end_result
 
@@ -318,10 +279,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             task_top_k=5,
             use_llm=False,
             include_prompt=False,
-            enable_score_validation=True,
-            score_validation_url="http://score.test/training_task_score",
-            algorithm_request_results_csv="/tmp/request_results.csv",
-            score_validation_timeout=3.0,
         )
         mock_write_prompt_to_file.assert_not_called()
         mock_logger.info.assert_called_once_with(
@@ -367,10 +324,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             no_save_prompt=False,
             prompt_output_dir="data/custom-prompts",
             output_level="full",
-            enable_score_validation=False,
-            score_validation_url="http://score.test/training_task_score",
-            algorithm_request_results_csv="/tmp/request_results.csv",
-            score_validation_timeout=10.0,
         )
         mock_run_end_to_end.return_value = {
             "patient_id": "40",
@@ -397,10 +350,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             task_top_k=5,
             use_llm=False,
             include_prompt=True,
-            enable_score_validation=False,
-            score_validation_url="http://score.test/training_task_score",
-            algorithm_request_results_csv="/tmp/request_results.csv",
-            score_validation_timeout=10.0,
         )
         mock_write_prompt_to_file.assert_called_once_with(
             mock_run_end_to_end.return_value,

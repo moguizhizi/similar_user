@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.similar_user.services.training_task_score_validation import (
+from src.similar_user.services.task_recommendation_validation import (
     build_training_task_score_validation,
 )
 
