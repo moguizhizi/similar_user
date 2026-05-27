@@ -15,6 +15,7 @@ from config.settings import (
 )
 from scripts.build_similar_user_candidates import (
     build_candidate_cache_context,
+    build_direct_entity_scored_key,
     build_similar_user_candidate_summary,
     build_similar_user_candidates as _build_similar_user_candidates,
     load_saved_scored_pattern_result,
@@ -75,6 +76,15 @@ def build_similar_user_candidates(*args: object, **kwargs: object) -> dict[str, 
 
 
 class SimilarUserCandidatesTest(unittest.TestCase):
+    def test_build_direct_entity_scored_key_slugs_base_date(self) -> None:
+        self.assertEqual(
+            build_direct_entity_scored_key(
+                base_date="2024/01/31",
+                score_top_k=50,
+            ),
+            "base_2024-01-31_qf_direct_entity_scoretopk_50",
+        )
+
     @patch("similar_user.services.similarity.candidate_service.LOGGER")
     def test_aggregate_candidates_from_scored_paths_deduplicates_and_sorts(
         self,

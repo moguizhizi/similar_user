@@ -307,6 +307,19 @@ def build_direct_entity_scored_key(
     )
 
 
+def _slug_part(value: object) -> str:
+    text = str(value).strip().lower()
+    slug = []
+    for char in text:
+        if char.isalnum():
+            slug.append(char)
+        elif char in ("-", "_"):
+            slug.append(char)
+        else:
+            slug.append("-")
+    return "".join(slug).strip("-") or "none"
+
+
 def build_expected_scored_key(
     config_path: str | Path,
     *,
