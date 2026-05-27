@@ -109,6 +109,13 @@ class TrainingTaskPredictionSettings:
 
 
 @dataclass(frozen=True)
+class DirectEntityTaskPredictionSettings:
+    """Configuration for predicting training tasks from direct-entity paths."""
+
+    prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1"
+
+
+@dataclass(frozen=True)
 class DirectPathCacheSettings:
     """Configuration for local direct-pattern path cache reads and sync."""
 
@@ -156,6 +163,7 @@ class QuerySettings:
     score_pattern_paths: ScorePatternPathsSettings
     candidate_ranking: CandidateRankingSettings
     training_task_prediction: TrainingTaskPredictionSettings
+    direct_entity_task_prediction: DirectEntityTaskPredictionSettings
     direct_entity_path: DirectEntityPathSettings
     direct_entity_path_scoring: DirectEntityPathScoringSettings
 
@@ -261,6 +269,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     score_pattern_paths_data = data.get("score_pattern_paths") or {}
     candidate_ranking_data = data.get("candidate_ranking") or {}
     training_task_prediction_data = data.get("training_task_prediction") or {}
+    direct_entity_task_prediction_data = data.get("direct_entity_task_prediction") or {}
     direct_entity_path_data = data.get("direct_entity_path") or {}
     direct_entity_path_scoring_data = data.get("direct_entity_path_scoring") or {}
     bands_data = graph_path_limit_data.get("bands") or []
@@ -402,6 +411,17 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction similar_user_game_counts_weighted_sort_enabled must be a boolean."
         )
+    direct_entity_prompt_template_name = direct_entity_task_prediction_data.get(
+        "prompt_template_name",
+        "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1",
+    )
+    if (
+        not isinstance(direct_entity_prompt_template_name, str)
+        or not direct_entity_prompt_template_name.strip()
+    ):
+        raise ValueError(
+            "direct_entity_task_prediction prompt_template_name must be a non-empty string."
+        )
     direct_entity_window_days = direct_entity_path_data.get("window_days", 180)
     if (
         not isinstance(direct_entity_window_days, int)
@@ -461,6 +481,9 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             profile_candidate_training_window_days=profile_candidate_training_window_days,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
+        ),
+        direct_entity_task_prediction=DirectEntityTaskPredictionSettings(
+            prompt_template_name=direct_entity_prompt_template_name.strip(),
         ),
         direct_entity_path=DirectEntityPathSettings(
             window_days=direct_entity_window_days,

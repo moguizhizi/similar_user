@@ -222,7 +222,7 @@ def predict_training_tasks_from_direct_entity(
                 query_settings.training_task_prediction.prompt_candidate_compression_enabled
             ),
             prompt_template_name=(
-                query_settings.training_task_prediction.prompt_template_name
+                query_settings.direct_entity_task_prediction.prompt_template_name
             ),
             similar_user_game_counts_weighting_enabled=(
                 query_settings.training_task_prediction.similar_user_game_counts_weighting_enabled
@@ -236,6 +236,16 @@ def predict_training_tasks_from_direct_entity(
             candidate_result=candidate_result,
             base_date=base_date,
             window_days=candidate_window_days,
+            target_profile={
+                "age": age,
+                "education": education,
+                "gender": gender,
+            },
+            target_entities={
+                "disease_ids": disease_ids or [],
+                "symptom_ids": symptom_ids or [],
+                "unknown_ids": unknown_ids or [],
+            },
             task_top_k=task_top_k,
             use_llm=use_llm,
             include_prompt=include_prompt,

@@ -2374,6 +2374,10 @@ class KgRepositoryTest(unittest.TestCase):
             settings.training_task_prediction.prompt_template_name,
             "TASK_PREDICTION_PROMPT_TEMPLATE_V2",
         )
+        self.assertEqual(
+            settings.direct_entity_task_prediction.prompt_template_name,
+            "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1",
+        )
         self.assertIsNone(
             settings.training_task_prediction.profile_candidate_training_window_days,
         )
@@ -2395,7 +2399,7 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertFalse(settings.candidate_ranking.scoring.set_same.disease)
         self.assertFalse(settings.candidate_ranking.scoring.set_same.symptom)
         self.assertFalse(settings.candidate_ranking.scoring.set_same.unknown)
-        self.assertFalse(
+        self.assertTrue(
             settings.direct_entity_path_scoring.use_when_patient_exists
         )
         self.assertEqual(

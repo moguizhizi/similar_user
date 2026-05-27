@@ -67,12 +67,30 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V3 = (
     "返回 JSON 对象，不要添加 Markdown。\n\n"
 )
 
+TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1 = (
+    "请根据以下 JSON 数据，为一个不一定存在于知识图谱中的目标用户预测下一阶段更可能适合的训练任务。"
+    "字段含义：target_profile 是目标用户画像；target_entities 是目标用户输入的疾病、症状、未知实体；"
+    "candidate_training_tasks 是唯一允许选择的候选任务池；"
+    "similar_user_candidates 是通过 direct entity paths 匹配出的候选相似用户及其相似度分数；"
+    "similar_user_game_counts 是这些候选相似用户在时间窗口内的训练任务汇总；"
+    "similar_user_task_evidence 是按候选相似用户拆分的任务证据；"
+    "candidate_score 越大表示该候选用户与目标画像和实体越相似。"
+    "目标用户可能不是 KG 中已有患者，不要假设存在目标用户历史训练记录。"
+    "请综合总体出现次数和高相似用户证据，不要只按 similar_user_game_counts 的总次数排名选择。"
+    "只允许从 candidate_training_tasks 中选择，不要重复 game_id。"
+    "必须返回 output_requirement.top_k 个任务；如果候选任务不足 top_k，则返回全部候选任务。"
+    "返回 JSON 对象，不要添加 Markdown。\n\n"
+)
+
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE = TASK_PREDICTION_PROMPT_TEMPLATE_V2
 TASK_PREDICTION_PROMPT_TEMPLATES = {
     "TASK_PREDICTION_PROMPT_TEMPLATE_V1": TASK_PREDICTION_PROMPT_TEMPLATE_V1,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V2": TASK_PREDICTION_PROMPT_TEMPLATE_V2,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V3": TASK_PREDICTION_PROMPT_TEMPLATE_V3,
+    "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1": (
+        TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1
+    ),
 }
 WEIGHTED_GAME_COUNTS_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V3"
 
@@ -319,6 +337,8 @@ class TrainingTaskPredictionService:
         candidate_result: dict[str, Any],
         base_date: str,
         window_days: int,
+        target_profile: dict[str, Any] | None = None,
+        target_entities: dict[str, Any] | None = None,
         task_top_k: int = DEFAULT_TASK_TOP_K,
         use_llm: bool = True,
         include_prompt: bool = False,
@@ -418,6 +438,9 @@ class TrainingTaskPredictionService:
         )
         prompt = build_task_prediction_prompt(
             patient_id=resolved_patient_id,
+            target_profile=target_profile,
+            target_entities=target_entities,
+            candidate_source="direct_entity_paths",
             similar_user_candidates=build_prompt_similar_user_candidates(candidates),
             similar_user_task_evidence=prompt_similar_user_task_evidence,
             similar_user_game_counts=prompt_similar_user_game_counts,
@@ -451,6 +474,8 @@ class TrainingTaskPredictionService:
                 "candidate_ids": [candidate.patient_id for candidate in candidates],
                 "candidate_task_windows": candidate_task_windows,
             },
+            "target_profile": target_profile or {},
+            "target_entities": target_entities or {},
             "prompt_candidate_selection": {
                 "enabled": self.prompt_candidate_compression_enabled,
                 "selected_candidate_count": len(prompt_candidate_game_ids),
@@ -1081,6 +1106,9 @@ def build_task_prediction_prompt(
     similar_user_game_counts: list[dict[str, Any]],
     candidate_training_tasks: list[dict[str, Any]],
     task_top_k: int,
+    target_profile: dict[str, Any] | None = None,
+    target_entities: dict[str, Any] | None = None,
+    candidate_source: str | None = None,
     similar_user_candidates: list[dict[str, Any]] | None = None,
     similar_user_task_evidence: list[dict[str, Any]] | None = None,
     prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
@@ -1117,7 +1145,14 @@ def build_task_prediction_prompt(
         },
     }
     normalized_prompt_template_name = prompt_template_name.strip()
-    if normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_V2":
+    if candidate_source is not None:
+        payload["candidate_source"] = candidate_source
+    if normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1":
+        payload["target_profile"] = target_profile or {}
+        payload["target_entities"] = target_entities or {}
+        payload["similar_user_candidates"] = similar_user_candidates or []
+        payload["similar_user_task_evidence"] = similar_user_task_evidence or []
+    elif normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_V2":
         payload["similar_user_candidates"] = similar_user_candidates or []
         payload["similar_user_task_evidence"] = similar_user_task_evidence or []
     prompt_template = get_task_prediction_prompt_template(normalized_prompt_template_name)
