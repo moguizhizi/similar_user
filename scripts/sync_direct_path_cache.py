@@ -1,4 +1,12 @@
-"""Sync direct source-taskset-patient paths from Neo4j into SQLite cache."""
+"""Sync direct source-taskset-patient paths from Neo4j into SQLite cache.
+
+Examples:
+    python scripts/sync_direct_path_cache.py
+    python scripts/sync_direct_path_cache.py --pattern disease_patient
+    python scripts/sync_direct_path_cache.py --pattern symptom_patient
+    python scripts/sync_direct_path_cache.py --pattern unknown_patient
+    python scripts/sync_direct_path_cache.py --pattern disease_patient --force-full-refresh
+"""
 
 from __future__ import annotations
 

@@ -6,6 +6,11 @@ RETURN p.id AS patient_id
 ORDER BY patient_id
 """.strip()
 
+PATIENT_EXISTS_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+RETURN count(p) > 0 AS exists
+""".strip()
+
 PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY = """
 MATCH (p:Patient)
 --(s:TaskInstanceSet)

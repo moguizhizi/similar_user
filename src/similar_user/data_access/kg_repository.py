@@ -73,6 +73,21 @@ class KgRepository:
         )
         return self._extract_patient_ids(rows)
 
+    def patient_exists(self, patient_id: str) -> bool:
+        """Return whether a Patient node exists for the given ID."""
+        normalized_patient_id = self._normalize_required_string(
+            patient_id,
+            "patient_id",
+        )
+        spec = get_graph_query_spec("patient_exists")
+        rows = self.client.run_query(
+            query=spec.query,
+            parameters={"patient_id": normalized_patient_id},
+        )
+        if not rows:
+            return False
+        return bool(rows[0].get("exists"))
+
     def get_patient_ids_with_training_on_date(
         self,
         base_date: str,
@@ -801,6 +816,27 @@ class KgRepository:
             raise ValueError("patient_id must be a non-empty string.")
 
         spec = get_graph_query_spec("patient_profile_entities_by_effective_date")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "patient_id": normalized_patient_id,
+                "base_date": normalized_base_date,
+            },
+        )
+
+    def get_patient_direct_entity_scoring_profile(
+        self,
+        patient_id: str,
+        base_date: str,
+    ) -> list[dict[str, object]]:
+        """Return the profile fields needed before direct-entity path scoring."""
+        normalized_patient_id = self._normalize_required_string(
+            patient_id,
+            "patient_id",
+        )
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+
+        spec = get_graph_query_spec("patient_direct_entity_scoring_profile")
         return self.client.run_query(
             query=spec.query,
             parameters={

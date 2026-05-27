@@ -13,6 +13,7 @@ from .cypher_queries import (
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
+    PATIENT_DIRECT_ENTITY_SCORING_PROFILE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_DATE_RANGE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_DISEASES_BY_START_DATE_QUERY,
@@ -29,10 +30,12 @@ from .cypher_queries import (
     PATIENT_DISTINCT_UNKNOWNS_BY_END_DATE_QUERY,
     PATIENT_DISTINCT_UNKNOWNS_BY_START_DATE_QUERY,
     PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
+    PATIENT_PROFILE_GENDER_EDUCATION_AGE_WINDOWED_EXCLUSIVE_TASK_GAME_QUERY,
     PATIENT_PROFILE_ENTITIES_BY_EFFECTIVE_DATE_QUERY,
     PATIENT_GAMES_BY_DATE_RANGE_QUERY,
     PATIENT_GAMES_BY_END_DATE_QUERY,
     PATIENT_GAMES_BY_START_DATE_QUERY,
+    PATIENT_EXISTS_QUERY,
     PATIENT_GAME_NORM_SCORE_SERIES_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_GAME_SET_COMPARISON_BY_END_DATE_QUERY,
@@ -250,6 +253,16 @@ UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_SPEC = _spec(
 
 PATIENT_IDENTITY_SPECS = (
     _spec(
+        name="patient_exists",
+        category=GraphQueryCategory.PATIENT_IDENTITY,
+        description="判断指定 Patient 节点是否存在",
+        source_label="Patient",
+        source_parameters=("patient_id",),
+        path_shape="(p:Patient)",
+        row_fields=("exists",),
+        query=PATIENT_EXISTS_QUERY,
+    ),
+    _spec(
         name="patient_ids",
         category=GraphQueryCategory.PATIENT_IDENTITY,
         description="查询全库患者 ID",
@@ -452,6 +465,7 @@ PATIENT_GAME_COLLECTION_SPECS = (
         row_fields=(
             "g",
             "profile_age",
+            "age_at_base_date",
             "profile_gender",
             "profile_education",
             "support_sources",
@@ -460,9 +474,57 @@ PATIENT_GAME_COLLECTION_SPECS = (
         group_field="g",
         query=PATIENT_PROFILE_GENDER_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     ),
+    _spec(
+        name="patient_profile_gender_education_age_windowed_exclusive_task_game",
+        category=GraphQueryCategory.PATIENT_GAME_COLLECTION,
+        description="按患者最近画像实体、性别、执行学历、执行年龄范围和候选训练日期窗口查询专属任务相关游戏",
+        source_label="Patient",
+        source_parameters=(
+            "patient_id",
+            "base_date",
+            "age_window",
+            "profile_candidate_training_window_days",
+        ),
+        path_shape=(
+            "(p:Patient)--(profile_s:TaskInstanceSet)--"
+            "(Disease|Symptom|Unknown)--(s:TaskInstanceSet)--"
+            "(i:TaskInstance {任务类型: '专属'})--(g:Game)"
+        ),
+        row_fields=(
+            "g",
+            "profile_age",
+            "age_at_base_date",
+            "profile_gender",
+            "profile_education",
+            "support_sources",
+            "support_count",
+        ),
+        group_field="g",
+        query=PATIENT_PROFILE_GENDER_EDUCATION_AGE_WINDOWED_EXCLUSIVE_TASK_GAME_QUERY,
+    ),
 )
 
 PATIENT_ENTITY_COLLECTION_SPECS = (
+    _spec(
+        name="patient_direct_entity_scoring_profile",
+        category=GraphQueryCategory.PATIENT_ENTITY_COLLECTION,
+        description="查询患者用于 direct entity path 评分的最近画像、校准年龄和疾病/症状/未知实体列表",
+        source_label="Patient",
+        source_parameters=("patient_id", "base_date"),
+        path_shape="(p:Patient)--(s:TaskInstanceSet)--(Disease|Symptom|Unknown)",
+        row_fields=(
+            "patient_id",
+            "effective_date",
+            "gender",
+            "education",
+            "profile_age",
+            "age_at_base_date",
+            "disease_ids",
+            "symptom_ids",
+            "unknown_ids",
+        ),
+        query=PATIENT_DIRECT_ENTITY_SCORING_PROFILE_QUERY,
+    ),
     _spec(
         name="patient_profile_entities_by_effective_date",
         category=GraphQueryCategory.PATIENT_ENTITY_COLLECTION,

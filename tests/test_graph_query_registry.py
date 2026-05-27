@@ -115,10 +115,13 @@ class GraphQueryRegistryTest(unittest.TestCase):
         self.assertEqual(
             tuple(spec.name for spec in specs),
             (
+                "disease_education_age_exclusive_task_game",
                 "disease_taskset_exclusive_task_game_sampled_per_game",
                 "disease_taskset_task_game_sampled_per_game",
+                "symptom_education_age_exclusive_task_game",
                 "symptom_taskset_exclusive_task_game_sampled_per_game",
                 "symptom_taskset_task_game_sampled_per_game",
+                "unknown_education_age_exclusive_task_game",
                 "unknown_taskset_exclusive_task_game_sampled_per_game",
                 "unknown_taskset_task_game_sampled_per_game",
             ),
@@ -130,10 +133,13 @@ class GraphQueryRegistryTest(unittest.TestCase):
         self.assertEqual(
             tuple(spec.name for spec in specs),
             (
+                "disease_education_age_exclusive_task_game",
                 "disease_taskset_exclusive_task_game_sampled_per_game",
                 "disease_taskset_task_game_sampled_per_game",
+                "symptom_education_age_exclusive_task_game",
                 "symptom_taskset_exclusive_task_game_sampled_per_game",
                 "symptom_taskset_task_game_sampled_per_game",
+                "unknown_education_age_exclusive_task_game",
                 "unknown_taskset_exclusive_task_game_sampled_per_game",
                 "unknown_taskset_task_game_sampled_per_game",
             ),
@@ -344,7 +350,7 @@ class GraphQueryRegistryTest(unittest.TestCase):
     def test_list_graph_query_specs_can_filter_patient_categories(self) -> None:
         self.assertEqual(
             len(list_graph_query_specs(category=GraphQueryCategory.PATIENT_IDENTITY)),
-            3,
+            5,
         )
         self.assertEqual(
             len(
@@ -356,7 +362,7 @@ class GraphQueryRegistryTest(unittest.TestCase):
         )
         self.assertEqual(
             len(list_graph_query_specs(category=GraphQueryCategory.PATIENT_GAME_COLLECTION)),
-            7,
+            9,
         )
         self.assertEqual(
             len(
@@ -364,7 +370,7 @@ class GraphQueryRegistryTest(unittest.TestCase):
                     category=GraphQueryCategory.PATIENT_ENTITY_COLLECTION
                 )
             ),
-            13,
+            14,
         )
         self.assertEqual(
             len(list_graph_query_specs(category=GraphQueryCategory.PATIENT_SET_COMPARISON)),

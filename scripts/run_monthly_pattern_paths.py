@@ -4,7 +4,7 @@
 当天最多 100 个训练患者列表，再逐个调用：
 
     python scripts/build_pattern_paths.py --source-id PATIENT_ID --patterns-from-config \
-        --base-date BASE_DATE --window-days WINDOW_DAYS --query-family training_order
+        --base-date BASE_DATE --query-family training_order
 
 默认 keep-going：某个患者或日期失败后记录失败并继续后续任务。
 """
@@ -34,7 +34,6 @@ from scripts.run_monthly_evaluation_dates import (
     DEFAULT_END_YEAR,
     DEFAULT_SELECTED_DATES_OUTPUT,
     DEFAULT_START_YEAR,
-    DEFAULT_WINDOW_DAYS,
     read_training_dates,
     select_latest_training_date_per_month,
     write_selected_training_dates,
@@ -70,6 +69,26 @@ def parse_args() -> argparse.Namespace:
         help="File containing one training date per line.",
     )
     parser.add_argument(
+        "--base-date",
+        help=(
+            "Single base date used with --patient-ids-file. "
+            "When set, monthly date selection is skipped."
+        ),
+    )
+    parser.add_argument(
+        "--patient-ids-file",
+        help=(
+            "Optional patient ID file. When set, the script reads this file "
+            "instead of refreshing monthly patient files."
+        ),
+    )
+    parser.add_argument(
+        "--patient-limit",
+        type=int,
+        default=100,
+        help="Maximum number of patient IDs read from --patient-ids-file.",
+    )
+    parser.add_argument(
         "--start-year",
         type=int,
         default=DEFAULT_START_YEAR,
@@ -80,12 +99,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_END_YEAR,
         help="Last year included in monthly date selection.",
-    )
-    parser.add_argument(
-        "--window-days",
-        type=int,
-        default=DEFAULT_WINDOW_DAYS,
-        help="Window-days argument passed to build_pattern_paths.py.",
     )
     parser.add_argument(
         "--config",
@@ -135,11 +148,20 @@ def read_patient_ids(path: str | Path) -> list[str]:
     ]
 
 
+def read_limited_patient_ids(path: str | Path, limit: int | None) -> list[str]:
+    """Read patient IDs and optionally keep only the first N."""
+    patient_ids = read_patient_ids(path)
+    if limit is None:
+        return patient_ids
+    if limit <= 0:
+        raise ValueError("patient_limit must be a positive integer.")
+    return patient_ids[:limit]
+
+
 def build_pattern_path_command(
     *,
     patient_id: str,
     base_date: str,
-    window_days: int,
     config_path: str | Path,
     query_family: str | None,
 ) -> list[str]:
@@ -152,8 +174,6 @@ def build_pattern_path_command(
         "--patterns-from-config",
         "--base-date",
         base_date,
-        "--window-days",
-        str(window_days),
         "--config",
         str(config_path),
     ]
@@ -185,7 +205,6 @@ def build_monthly_pattern_path_runs(
     *,
     selected_dates: list[str],
     patient_list_dir: str | Path,
-    window_days: int,
     config_path: str | Path,
     log_dir: str | Path,
     query_family: str | None,
@@ -202,7 +221,6 @@ def build_monthly_pattern_path_runs(
             command = build_pattern_path_command(
                 patient_id=patient_id,
                 base_date=selected_date,
-                window_days=window_days,
                 config_path=config_path,
                 query_family=query_family,
             )
@@ -217,6 +235,37 @@ def build_monthly_pattern_path_runs(
                     ),
                 )
             )
+    return runs
+
+
+def build_patient_file_pattern_path_runs(
+    *,
+    patient_ids_file: str | Path,
+    patient_limit: int | None,
+    base_date: str,
+    config_path: str | Path,
+    log_dir: str | Path,
+    query_family: str | None,
+) -> list[MonthlyPatternPathRun]:
+    """Build pattern path run descriptors from an explicit patient ID file."""
+    resolved_log_dir = Path(log_dir)
+    runs: list[MonthlyPatternPathRun] = []
+    for patient_id in read_limited_patient_ids(patient_ids_file, patient_limit):
+        command = build_pattern_path_command(
+            patient_id=patient_id,
+            base_date=base_date,
+            config_path=config_path,
+            query_family=query_family,
+        )
+        runs.append(
+            MonthlyPatternPathRun(
+                month=base_date[:7],
+                base_date=base_date,
+                patient_id=patient_id,
+                command=command,
+                log_path=str(resolved_log_dir / base_date / f"{patient_id}.log"),
+            )
+        )
     return runs
 
 
@@ -317,44 +366,64 @@ def main() -> int:
     """Run monthly pattern path workflow."""
     args = parse_args()
     try:
-        training_dates = read_training_dates(args.training_dates_file)
-        selected_dates = select_latest_training_date_per_month(
-            training_dates,
-            start_year=args.start_year,
-            end_year=args.end_year,
-        )
-        selected_dates_path = write_selected_training_dates(
-            selected_dates,
-            args.selected_dates_output,
-        )
         keep_going = not args.stop_on_failure
-        patient_export_failures = refresh_patient_lists(
-            selected_dates=selected_dates,
-            config_path=args.config,
-            patient_list_dir=args.patient_list_dir,
-            dry_run=args.dry_run,
-            keep_going=keep_going,
-            log_dir=args.log_dir,
-        )
-        runs = (
-            []
-            if patient_export_failures and not keep_going
-            else build_monthly_pattern_path_runs(
-                selected_dates=selected_dates,
-                patient_list_dir=args.patient_list_dir,
-                window_days=args.window_days,
+
+        if args.patient_ids_file:
+            if not args.base_date:
+                raise ValueError("--base-date is required when --patient-ids-file is set.")
+            selected_dates_path = None
+            patient_export_failures: list[dict[str, Any]] = []
+            runs = build_patient_file_pattern_path_runs(
+                patient_ids_file=args.patient_ids_file,
+                patient_limit=args.patient_limit,
+                base_date=args.base_date,
                 config_path=args.config,
                 log_dir=args.log_dir,
                 query_family=args.query_family,
             )
-        )
+        else:
+            training_dates = read_training_dates(args.training_dates_file)
+            selected_dates = select_latest_training_date_per_month(
+                training_dates,
+                start_year=args.start_year,
+                end_year=args.end_year,
+            )
+            selected_dates_path = write_selected_training_dates(
+                selected_dates,
+                args.selected_dates_output,
+            )
+            patient_export_failures = refresh_patient_lists(
+                selected_dates=selected_dates,
+                config_path=args.config,
+                patient_list_dir=args.patient_list_dir,
+                dry_run=args.dry_run,
+                keep_going=keep_going,
+                log_dir=args.log_dir,
+            )
+            runs = (
+                []
+                if patient_export_failures and not keep_going
+                else build_monthly_pattern_path_runs(
+                    selected_dates=selected_dates,
+                    patient_list_dir=args.patient_list_dir,
+                    config_path=args.config,
+                    log_dir=args.log_dir,
+                    query_family=args.query_family,
+                )
+            )
+
         result = run_monthly_pattern_paths(
             runs,
             dry_run=args.dry_run,
             keep_going=keep_going,
         )
         result["patient_export_failures"] = patient_export_failures
-        result["selected_dates_output_path"] = str(selected_dates_path)
+        result["selected_dates_output_path"] = (
+            str(selected_dates_path) if selected_dates_path is not None else None
+        )
+        if args.patient_ids_file:
+            result["patient_ids_file"] = args.patient_ids_file
+            result["patient_limit"] = args.patient_limit
     except Exception as exc:
         LOGGER.exception("Monthly pattern path workflow failed: %s", exc)
         return 1

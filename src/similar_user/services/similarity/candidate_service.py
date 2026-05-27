@@ -29,6 +29,14 @@ from .utils import (
 LOGGER = get_logger(__name__)
 
 
+DIRECT_ENTITY_SCORING_PATTERN = "DIRECT_ENTITY_PATHS"
+DIRECT_ENTITY_CANDIDATE_PATTERNS = {
+    PathPattern.DISEASE_TASKSET_PATIENT.value,
+    PathPattern.SYMPTOM_TASKSET_PATIENT.value,
+    PathPattern.UNKNOWN_TASKSET_PATIENT.value,
+}
+
+
 @dataclass(frozen=True)
 class ScoredDomainPath:
     """One scored raw path paired with its typed domain path."""
@@ -37,6 +45,17 @@ class ScoredDomainPath:
     total_score: float | None
     pattern: PathPattern
     path: Any
+
+
+@dataclass(frozen=True)
+class ScoredCandidatePath:
+    """One scored path normalized to a candidate patient."""
+
+    path_index: int | None
+    total_score: float | None
+    pattern: str
+    candidate_id: str
+    source_type: str
 
 
 @dataclass
@@ -52,6 +71,7 @@ class SimilarUserCandidateService:
         candidate_top_k: int,
         scoring_settings: CandidateScoringSettings | None = None,
         disease_course_window_days: int | None = None,
+        include_direct_entity_paths: bool = True,
     ) -> dict[str, Any]:
         """Deduplicate candidate users from typed scored paths and rank by candidate_score."""
         return self.aggregate_candidates_from_multiple_scored_results(
@@ -59,6 +79,7 @@ class SimilarUserCandidateService:
             candidate_top_k=candidate_top_k,
             scoring_settings=scoring_settings,
             disease_course_window_days=disease_course_window_days,
+            include_direct_entity_paths=include_direct_entity_paths,
         )
 
     def aggregate_candidates_from_multiple_scored_results(
@@ -68,6 +89,7 @@ class SimilarUserCandidateService:
         candidate_top_k: int,
         scoring_settings: CandidateScoringSettings | None = None,
         disease_course_window_days: int | None = None,
+        include_direct_entity_paths: bool = True,
     ) -> dict[str, Any]:
         """Deduplicate candidate users across multiple scored pattern results."""
         if candidate_top_k <= 0:
@@ -78,9 +100,14 @@ class SimilarUserCandidateService:
             raise ValueError("scored_results must contain at least one result.")
         resolved_scoring_settings = scoring_settings or CandidateScoringSettings()
 
-        scored_domain_paths: list[ScoredDomainPath] = []
+        scored_candidate_paths: list[ScoredCandidatePath] = []
         for scored_result in scored_results:
-            scored_domain_paths.extend(_build_scored_domain_paths(scored_result))
+            scored_candidate_paths.extend(
+                _build_scored_candidate_paths(
+                    scored_result,
+                    include_direct_entity_paths=include_direct_entity_paths,
+                )
+            )
 
         first_result = scored_results[0]
         score_end_date = _extract_score_end_date(first_result)
@@ -102,7 +129,7 @@ class SimilarUserCandidateService:
             source_id,
             source_parameter,
             patterns,
-            len(scored_domain_paths),
+            len(scored_candidate_paths),
             candidate_top_k,
             score_end_date,
         )
@@ -120,9 +147,9 @@ class SimilarUserCandidateService:
             }
         )
 
-        for scored_path in scored_domain_paths:
-            candidate_id = scored_path.path.p2.id
-            pattern_key = scored_path.pattern.value
+        for scored_path in scored_candidate_paths:
+            candidate_id = scored_path.candidate_id
+            pattern_key = scored_path.pattern
             bucket = candidate_buckets[candidate_id]
             bucket["patient_id"] = candidate_id
             bucket["match_count"] += 1
@@ -140,6 +167,7 @@ class SimilarUserCandidateService:
                     "path_indices": [],
                     "best_score": None,
                     "avg_score": 0.0,
+                    "source_type": scored_path.source_type,
                     "_score_sum": 0.0,
                 },
             )
@@ -158,7 +186,7 @@ class SimilarUserCandidateService:
             "Prepared similar-user candidate buckets before scoring: source_id=%s, source_parameter=%s, scored_path_count=%s, pre_score_candidate_count=%s, candidate_top_k=%s",
             source_id,
             source_parameter,
-            len(scored_domain_paths),
+            len(scored_candidate_paths),
             len(candidate_buckets),
             candidate_top_k,
         )
@@ -252,6 +280,134 @@ class SimilarUserCandidateService:
             "pre_score_candidate_count": len(candidate_buckets),
             "disease_course_available_count": disease_course_stats["available_count"],
             "disease_course_missing_count": disease_course_stats["missing_count"],
+            "candidates": candidates,
+        }
+
+    def aggregate_candidates_from_direct_entity_scored_result(
+        self,
+        scored_result: dict[str, Any],
+        *,
+        candidate_top_k: int,
+    ) -> dict[str, Any]:
+        """Aggregate direct-entity scored paths into candidate users."""
+        if candidate_top_k <= 0:
+            raise ValueError(
+                f"candidate_top_k must be greater than 0, got {candidate_top_k}."
+            )
+
+        buckets: dict[str, dict[str, Any]] = {}
+        scores = scored_result.get("scores") if isinstance(scored_result, dict) else None
+        if not isinstance(scores, list):
+            scores = []
+        for item in scores:
+            if not isinstance(item, dict):
+                continue
+            candidate_id = _extract_direct_entity_candidate_id(item)
+            if candidate_id is None:
+                continue
+            total_score = _extract_total_score(item)
+            pattern = (
+                _normalize_optional_text(item.get("pattern"))
+                or DIRECT_ENTITY_SCORING_PATTERN
+            )
+            bucket = buckets.setdefault(
+                candidate_id,
+                {
+                    "patient_id": candidate_id,
+                    "match_count": 0,
+                    "best_score": None,
+                    "avg_score": 0.0,
+                    "candidate_score": None,
+                    "pattern_breakdown": {},
+                    "_score_sum": 0.0,
+                },
+            )
+            bucket["match_count"] += 1
+            if total_score is not None:
+                bucket["_score_sum"] += total_score
+                if bucket["best_score"] is None or total_score > bucket["best_score"]:
+                    bucket["best_score"] = total_score
+                    bucket["candidate_score"] = total_score
+
+            pattern_bucket = bucket["pattern_breakdown"].setdefault(
+                pattern,
+                {
+                    "match_count": 0,
+                    "path_indices": [],
+                    "best_score": None,
+                    "avg_score": 0.0,
+                    "source_type": "direct_entity_path",
+                    "_score_sum": 0.0,
+                },
+            )
+            pattern_bucket["match_count"] += 1
+            path_index = _extract_path_index(item)
+            if isinstance(path_index, int):
+                pattern_bucket["path_indices"].append(path_index)
+            if total_score is not None:
+                pattern_bucket["_score_sum"] += total_score
+                if (
+                    pattern_bucket["best_score"] is None
+                    or total_score > pattern_bucket["best_score"]
+                ):
+                    pattern_bucket["best_score"] = total_score
+
+        candidates: list[dict[str, Any]] = []
+        for bucket in buckets.values():
+            match_count = int(bucket["match_count"])
+            score_sum = float(bucket.pop("_score_sum"))
+            bucket["avg_score"] = (
+                round(score_sum / match_count, 2) if match_count else 0.0
+            )
+            if bucket["best_score"] is not None:
+                bucket["best_score"] = round(float(bucket["best_score"]), 2)
+            if bucket["candidate_score"] is not None:
+                bucket["candidate_score"] = round(float(bucket["candidate_score"]), 2)
+            for pattern_bucket in bucket["pattern_breakdown"].values():
+                pattern_match_count = int(pattern_bucket["match_count"])
+                pattern_score_sum = float(pattern_bucket.pop("_score_sum"))
+                pattern_bucket["path_indices"] = sorted(
+                    set(pattern_bucket["path_indices"])
+                )
+                pattern_bucket["avg_score"] = (
+                    round(pattern_score_sum / pattern_match_count, 2)
+                    if pattern_match_count
+                    else 0.0
+                )
+                if pattern_bucket["best_score"] is not None:
+                    pattern_bucket["best_score"] = round(
+                        float(pattern_bucket["best_score"]),
+                        2,
+                    )
+            candidates.append(bucket)
+
+        candidates.sort(
+            key=lambda item: (
+                _direct_candidate_sort_value(item.get("best_score")),
+                _direct_candidate_sort_value(item.get("avg_score")),
+                int(item.get("match_count") or 0),
+                str(item.get("patient_id") or ""),
+            ),
+            reverse=True,
+        )
+        candidates = candidates[:candidate_top_k]
+        LOGGER.info(
+            "Aggregated direct entity candidates: source_id=%s, source_parameter=%s, pre_score_candidate_count=%s, candidate_count=%s, candidate_top_k=%s",
+            scored_result.get("source_id"),
+            scored_result.get("source_parameter"),
+            len(buckets),
+            len(candidates),
+            candidate_top_k,
+        )
+        return {
+            "source_id": scored_result.get("source_id"),
+            "source_parameter": scored_result.get("source_parameter"),
+            "candidate_top_k": candidate_top_k,
+            "path_count": scored_result.get("path_count"),
+            "scored_path_count": scored_result.get("scored_path_count"),
+            "candidate_count": len(candidates),
+            "pre_score_candidate_count": len(buckets),
+            "ranking": "direct_entity_best_score_avg_score_match_count",
             "candidates": candidates,
         }
 
@@ -701,6 +857,85 @@ def _build_scored_domain_paths(scored_result: dict[str, Any]) -> list[ScoredDoma
     return scored_domain_paths
 
 
+def _build_scored_candidate_paths(
+    scored_result: dict[str, Any],
+    *,
+    include_direct_entity_paths: bool,
+) -> list[ScoredCandidatePath]:
+    """Convert supported scored path payloads to candidate evidence rows."""
+    pattern = scored_result.get("pattern")
+    if (
+        pattern == DIRECT_ENTITY_SCORING_PATTERN
+        or pattern in DIRECT_ENTITY_CANDIDATE_PATTERNS
+    ):
+        if not include_direct_entity_paths:
+            return []
+        return _build_direct_entity_scored_candidate_paths(scored_result)
+
+    return [
+        ScoredCandidatePath(
+            path_index=scored_path.path_index,
+            total_score=scored_path.total_score,
+            pattern=scored_path.pattern.value,
+            candidate_id=scored_path.path.p2.id,
+            source_type="patient_path",
+        )
+        for scored_path in _build_scored_domain_paths(scored_result)
+        if isinstance(getattr(scored_path.path.p2, "id", None), str)
+        and scored_path.path.p2.id.strip()
+    ]
+
+
+def _build_direct_entity_scored_candidate_paths(
+    scored_result: dict[str, Any],
+) -> list[ScoredCandidatePath]:
+    """Convert direct entity scored paths to candidate evidence rows."""
+    scored_candidate_paths: list[ScoredCandidatePath] = []
+    top_level_pattern = scored_result.get("pattern")
+
+    for scored_path in scored_result.get("scores", []):
+        if not isinstance(scored_path, dict):
+            continue
+        candidate_id = _extract_direct_entity_candidate_id(scored_path)
+        if candidate_id is None:
+            continue
+        pattern = scored_path.get("pattern") or top_level_pattern
+        if pattern not in DIRECT_ENTITY_CANDIDATE_PATTERNS:
+            continue
+        scored_candidate_paths.append(
+            ScoredCandidatePath(
+                path_index=_extract_path_index(scored_path),
+                total_score=_extract_total_score(scored_path),
+                pattern=str(pattern),
+                candidate_id=candidate_id,
+                source_type="direct_entity_path",
+            )
+        )
+
+    return scored_candidate_paths
+
+
+def _extract_direct_entity_candidate_id(scored_path: dict[str, Any]) -> str | None:
+    """Extract the candidate patient id from one direct entity scored path."""
+    raw_patient_id = scored_path.get("patient_id")
+    if isinstance(raw_patient_id, str) and raw_patient_id.strip():
+        return raw_patient_id.strip()
+
+    path = scored_path.get("path")
+    if not isinstance(path, dict):
+        return None
+    row = path.get("row")
+    if not isinstance(row, dict):
+        return None
+    patient = row.get("p")
+    if not isinstance(patient, dict):
+        return None
+    raw_row_patient_id = patient.get("id")
+    if isinstance(raw_row_patient_id, str) and raw_row_patient_id.strip():
+        return raw_row_patient_id.strip()
+    return None
+
+
 def _build_candidate_scoring_context(
     scoring_settings: CandidateScoringSettings,
 ) -> dict[str, Any]:
@@ -742,6 +977,18 @@ def _coerce_optional_float(value: object) -> float | None:
     else:
         return None
     return numeric_value if math.isfinite(numeric_value) else None
+
+
+def _direct_candidate_sort_value(value: object) -> float:
+    parsed = _coerce_optional_float(value)
+    return parsed if parsed is not None else float("-inf")
+
+
+def _normalize_optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _normalize_candidate_base_dates(values: list[str | None] | None) -> list[str]:

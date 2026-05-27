@@ -3,7 +3,8 @@
 这个脚本处在“path 打分”和“训练任务推荐”之间：
 
 1. `scripts/score_pattern_paths.py` 会保存各模式的 scored paths。
-2. 本脚本读取已保存的 scored detail，把 path 中出现的 `p2` 患者去重成候选相似用户。
+2. 本脚本读取已保存的 scored detail，把患者 path 中的 `p2` 和 direct entity
+   path 中的 `patient_id` 去重成候选相似用户。
 3. 对每个候选用户继续查询 Neo4j 中的历史画像/游戏表现，计算 candidate_score。
 4. 下游推荐任务流程会使用这里输出的候选用户历史数据。
 
@@ -11,7 +12,7 @@
 
 常用执行方式：
 
-    python scripts/build_similar_user_candidates.py 40
+    python scripts/build_similar_user_candidates.py 40 --base-date 2022-05-22
 
 默认从 `config/settings.yaml` 的 `candidate_ranking.patterns` 读取多模式列表。
 """
@@ -40,6 +41,11 @@ from config.settings import load_query_settings
 from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.data_access.pattern_registry import resolve_path_pattern
+from similar_user.domain.graph_schema import (
+    DISEASE_TASKSET_PATIENT,
+    SYMPTOM_TASKSET_PATIENT,
+    UNKNOWN_TASKSET_PATIENT,
+)
 from similar_user.services.similarity.candidate_service import SimilarUserCandidateService
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
@@ -55,6 +61,11 @@ from similar_user.utils.pattern_storage import build_path_key
 
 LOGGER = get_logger(__name__)
 DEFAULT_CANDIDATES_DIR = Path("data/similar_user_candidates")
+DIRECT_ENTITY_PATTERNS = (
+    DISEASE_TASKSET_PATIENT,
+    SYMPTOM_TASKSET_PATIENT,
+    UNKNOWN_TASKSET_PATIENT,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -84,12 +95,6 @@ def parse_args() -> argparse.Namespace:
         help="Path/scored cache base date used to locate saved scored paths.",
     )
     parser.add_argument(
-        "--window-days",
-        type=int,
-        required=True,
-        help="Path/scored cache window-days value used to locate saved scored paths.",
-    )
-    parser.add_argument(
         "--query-family",
         default=None,
         choices=("training_order", "date_window"),
@@ -105,17 +110,16 @@ def build_similar_user_candidates(
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
     disease_course_window_days: int | None = None,
     base_date: str | None = None,
-    window_days: int | None = None,
     query_family: str | None = None,
 ) -> dict[str, Any]:
     """Aggregate ranked candidate users from top-k scored paths."""
     started_at = time.perf_counter()
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
-    ranking_settings = load_query_settings(resolved_config_path).candidate_ranking
+    query_settings = load_query_settings(resolved_config_path)
+    ranking_settings = query_settings.candidate_ranking
     scored_key = build_expected_scored_key(
         resolved_config_path,
         base_date=base_date,
-        window_days=window_days,
         query_family=query_family,
     )
     resolved_disease_course_window_days = (
@@ -161,6 +165,21 @@ def build_similar_user_candidates(
                 loaded_patterns.append(scored_result.get("pattern", item))
             else:
                 skipped_patterns.append(item)
+        if query_settings.direct_entity_path_scoring.use_when_patient_exists:
+            direct_scored_results = load_saved_direct_entity_scored_results(
+                patient_id,
+                scored_paths_dir=scored_paths_dir,
+                direct_scored_key=build_direct_entity_scored_key(
+                    base_date=base_date,
+                    score_top_k=query_settings.score_pattern_paths.top_k,
+                ),
+            )
+            scored_results.extend(direct_scored_results)
+            loaded_patterns.extend(
+                result.get("pattern")
+                for result in direct_scored_results
+                if isinstance(result.get("pattern"), str)
+            )
         LOGGER.info(
             "Loaded scored pattern results: patient_id=%s, loaded_count=%s, skipped_count=%s, loaded_patterns=%s, skipped_patterns=%s",
             patient_id,
@@ -179,6 +198,9 @@ def build_similar_user_candidates(
             candidate_top_k=ranking_settings.candidate_top_k,
             scoring_settings=ranking_settings.scoring,
             disease_course_window_days=resolved_disease_course_window_days,
+            include_direct_entity_paths=(
+                query_settings.direct_entity_path_scoring.use_when_patient_exists
+            ),
         )
         result.setdefault("retrieval_context", {})[
             "disease_course_window_days"
@@ -234,11 +256,61 @@ def load_saved_scored_pattern_result(
     return data
 
 
+def load_saved_direct_entity_scored_results(
+    source_id: str,
+    *,
+    scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    direct_scored_key: str,
+) -> list[dict[str, Any]]:
+    """Load saved direct-entity scored detail files for one patient."""
+    normalized_source_id = _normalize_required_string(source_id, "source_id")
+    normalized_scored_key = _normalize_required_string(
+        direct_scored_key,
+        "direct_scored_key",
+    )
+    bucket = normalized_source_id[:2] or "unknown"
+    scored_results: list[dict[str, Any]] = []
+    for pattern in DIRECT_ENTITY_PATTERNS:
+        pattern_dir = Path(scored_paths_dir) / normalized_scored_key / pattern
+        detail_paths = sorted(
+            pattern_dir.glob(f"*/{bucket}/{normalized_source_id}.detail.json")
+        )
+        if not detail_paths:
+            LOGGER.warning(
+                "Saved direct entity scored detail not found for pattern %s: %s",
+                pattern,
+                pattern_dir,
+            )
+            continue
+        for detail_path in detail_paths:
+            with detail_path.open("r", encoding="utf-8") as file:
+                data = json.load(file)
+            if not isinstance(data, dict):
+                raise ValueError(
+                    f"Saved direct entity scored detail must contain a JSON object: {detail_path}"
+                )
+            scored_results.append(data)
+    return scored_results
+
+
+def build_direct_entity_scored_key(
+    *,
+    base_date: str | None,
+    score_top_k: int | None,
+) -> str:
+    """Build the scored cache key produced by score_direct_entity_paths.py."""
+    resolved_base_date = _normalize_required_string(base_date, "base_date")
+    return (
+        f"base_{_slug_part(resolved_base_date)}"
+        f"_qf_direct_entity"
+        f"_scoretopk_{score_top_k if score_top_k is not None else 'all'}"
+    )
+
+
 def build_expected_scored_key(
     config_path: str | Path,
     *,
     base_date: str | None,
-    window_days: int | None,
     query_family: str | None,
 ) -> str:
     """Build the scored path cache key expected by candidate aggregation."""
@@ -246,7 +318,6 @@ def build_expected_scored_key(
     path_key = build_path_key(
         config_path,
         base_date=base_date,
-        window_days=window_days,
         query_family=query_family,
     )
     return build_scored_key(path_key, query_settings.score_pattern_paths.top_k)
@@ -447,12 +518,18 @@ def _candidate_config_payload(
     *,
     disease_course_window_days: int | None,
 ) -> dict[str, Any]:
-    ranking_settings = load_query_settings(config_path).candidate_ranking
+    query_settings = load_query_settings(config_path)
+    ranking_settings = query_settings.candidate_ranking
     return {
         "patterns": list(ranking_settings.patterns),
         "candidate_top_k": ranking_settings.candidate_top_k,
         "total_score_match_top_k": ranking_settings.total_score_match_top_k,
         "disease_course_window_days": disease_course_window_days,
+        "direct_entity_path_scoring": {
+            "use_when_patient_exists": (
+                query_settings.direct_entity_path_scoring.use_when_patient_exists
+            )
+        },
         "scoring": _to_plain_data(ranking_settings.scoring),
     }
 
@@ -533,9 +610,6 @@ def _scored_cache_kwargs(args: argparse.Namespace) -> dict[str, object]:
     base_date = getattr(args, "base_date", None)
     if isinstance(base_date, str) and base_date.strip():
         kwargs["base_date"] = base_date.strip()
-    window_days = getattr(args, "window_days", None)
-    if isinstance(window_days, int) and not isinstance(window_days, bool):
-        kwargs["window_days"] = window_days
     query_family = getattr(args, "query_family", None)
     if isinstance(query_family, str) and query_family.strip():
         kwargs["query_family"] = query_family.strip()

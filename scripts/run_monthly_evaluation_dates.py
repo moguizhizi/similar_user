@@ -2,7 +2,7 @@
 
 默认从训练日期文件中选择 2024 到 2026 年每个月最新的一天，并依次调用：
 
-    python scripts/evaluate_predict_training_tasks.py --base-date YYYY-MM-DD --window-days 14
+    python scripts/evaluate_predict_training_tasks.py --base-date YYYY-MM-DD
 
 默认 keep-going：某个月失败后记录失败并继续执行后续月份。
 """
@@ -39,7 +39,6 @@ DEFAULT_SELECTED_DATES_OUTPUT = Path(
 )
 DEFAULT_START_YEAR = 2024
 DEFAULT_END_YEAR = 2026
-DEFAULT_WINDOW_DAYS = 14
 
 
 @dataclass(frozen=True)
@@ -74,12 +73,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_END_YEAR,
         help="Last year included in monthly date selection.",
-    )
-    parser.add_argument(
-        "--window-days",
-        type=int,
-        default=DEFAULT_WINDOW_DAYS,
-        help="Window-days argument passed to evaluate_predict_training_tasks.py.",
     )
     parser.add_argument(
         "--config",
@@ -164,7 +157,6 @@ def select_latest_training_date_per_month(
 def build_evaluation_command(
     *,
     base_date: str,
-    window_days: int,
     config_path: str | Path,
     use_llm: bool,
     skip_path_build: bool,
@@ -176,8 +168,6 @@ def build_evaluation_command(
         "scripts/evaluate_predict_training_tasks.py",
         "--base-date",
         base_date,
-        "--window-days",
-        str(window_days),
         "--config",
         str(config_path),
     ]
@@ -223,7 +213,6 @@ def write_selected_training_dates(
 def build_monthly_evaluation_runs(
     *,
     selected_dates: list[str],
-    window_days: int,
     config_path: str | Path,
     log_dir: str | Path,
     use_llm: bool,
@@ -241,7 +230,6 @@ def build_monthly_evaluation_runs(
         )
         command = build_evaluation_command(
             base_date=selected_date,
-            window_days=window_days,
             config_path=config_path,
             use_llm=use_llm,
             skip_path_build=skip_path_build,
@@ -356,7 +344,6 @@ def main() -> int:
         )
         runs = build_monthly_evaluation_runs(
             selected_dates=selected_dates,
-            window_days=args.window_days,
             config_path=args.config,
             log_dir=args.log_dir,
             use_llm=args.use_llm,

@@ -37,6 +37,8 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V2 = (
     "请根据以下 JSON 数据预测目标用户下一阶段更可能适合的训练任务。"
     "字段含义：candidate_training_tasks 是唯一允许选择的候选任务池；"
     "similar_user_game_counts 是相似用户时间窗口内各任务出现的总次数；"
+    "similar_user_candidates 是候选相似用户及其相似度分数；"
+    "similar_user_task_evidence 是按候选相似用户拆分的任务证据；"
     "candidate_score 越大表示该候选用户与目标用户越相似。"
     "请综合总体出现次数和高相似用户证据，不要只按 similar_user_game_counts 的总次数排名选择。"
     "如果某任务总体次数中等，但由 candidate_score 较高的相似用户反复支持，也应考虑推荐。"
@@ -65,12 +67,30 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V3 = (
     "返回 JSON 对象，不要添加 Markdown。\n\n"
 )
 
+TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1 = (
+    "请根据以下 JSON 数据，为一个不一定存在于知识图谱中的目标用户预测下一阶段更可能适合的训练任务。"
+    "字段含义：target_profile 是目标用户画像；target_entities 是目标用户输入的疾病、症状、未知实体；"
+    "candidate_training_tasks 是唯一允许选择的候选任务池；"
+    "similar_user_candidates 是通过 direct entity paths 匹配出的候选相似用户及其相似度分数；"
+    "similar_user_game_counts 是这些候选相似用户在时间窗口内的训练任务汇总；"
+    "similar_user_task_evidence 是按候选相似用户拆分的任务证据；"
+    "candidate_score 越大表示该候选用户与目标画像和实体越相似。"
+    "目标用户可能不是 KG 中已有患者，不要假设存在目标用户历史训练记录。"
+    "请综合总体出现次数和高相似用户证据，不要只按 similar_user_game_counts 的总次数排名选择。"
+    "只允许从 candidate_training_tasks 中选择，不要重复 game_id。"
+    "必须返回 output_requirement.top_k 个任务；如果候选任务不足 top_k，则返回全部候选任务。"
+    "返回 JSON 对象，不要添加 Markdown。\n\n"
+)
+
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE = TASK_PREDICTION_PROMPT_TEMPLATE_V2
 TASK_PREDICTION_PROMPT_TEMPLATES = {
     "TASK_PREDICTION_PROMPT_TEMPLATE_V1": TASK_PREDICTION_PROMPT_TEMPLATE_V1,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V2": TASK_PREDICTION_PROMPT_TEMPLATE_V2,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V3": TASK_PREDICTION_PROMPT_TEMPLATE_V3,
+    "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1": (
+        TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1
+    ),
 }
 WEIGHTED_GAME_COUNTS_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V3"
 
@@ -248,6 +268,8 @@ class TrainingTaskPredictionService:
         )
         prompt = build_task_prediction_prompt(
             patient_id=resolved_patient_id,
+            similar_user_candidates=build_prompt_similar_user_candidates(candidates),
+            similar_user_task_evidence=prompt_similar_user_task_evidence,
             similar_user_game_counts=prompt_similar_user_game_counts,
             candidate_training_tasks=prompt_candidate_tasks,
             task_top_k=task_top_k,
@@ -308,6 +330,187 @@ class TrainingTaskPredictionService:
         )
         return result
 
+    def predict_from_direct_entity_candidates(
+        self,
+        *,
+        patient_id: str,
+        candidate_result: dict[str, Any],
+        base_date: str,
+        window_days: int,
+        target_profile: dict[str, Any] | None = None,
+        target_entities: dict[str, Any] | None = None,
+        task_top_k: int = DEFAULT_TASK_TOP_K,
+        use_llm: bool = True,
+        include_prompt: bool = False,
+    ) -> dict[str, Any]:
+        """Predict tasks from direct-entity candidate users without source-patient history."""
+        resolved_patient_id = str(patient_id or "").strip()
+        if not resolved_patient_id:
+            raise ValueError("patient_id is required for direct entity task prediction.")
+        candidates = _extract_direct_entity_candidates(candidate_result)
+        if not candidates:
+            raise ValueError("direct entity candidate result does not contain candidates.")
+
+        candidate_task_windows = {
+            candidate.patient_id: build_candidate_task_window(base_date, window_days)
+            for candidate in candidates
+        }
+        similar_user_histories = {
+            candidate.patient_id: self.user_service.get_patient_exclusive_training_task_history_by_date_window(
+                candidate.patient_id,
+                candidate_task_windows[candidate.patient_id]["start_date"],
+                candidate_task_windows[candidate.patient_id]["end_date"],
+            )
+            for candidate in candidates
+        }
+        LOGGER.info(
+            "Loaded direct entity candidate histories: patient_id=%s, candidate_count=%s, history_row_count=%s, window_days=%s",
+            resolved_patient_id,
+            len(candidates),
+            sum(len(rows) for rows in similar_user_histories.values()),
+            window_days,
+        )
+        candidate_tasks = build_candidate_training_tasks(
+            candidates,
+            similar_user_histories,
+            top_k=max(task_top_k, PROMPT_MAX_CANDIDATES),
+        )
+        LOGGER.info(
+            "Built direct entity task evidence: patient_id=%s, candidate_task_count=%s, task_top_k=%s",
+            resolved_patient_id,
+            len(candidate_tasks),
+            task_top_k,
+        )
+        allowed_candidate_game_ids = _extract_candidate_task_game_ids(candidate_tasks)
+        similar_user_game_counts = build_similar_user_game_counts(
+            candidates,
+            similar_user_histories,
+            weighting_enabled=self.similar_user_game_counts_weighting_enabled,
+            weighted_sort_enabled=self.similar_user_game_counts_weighted_sort_enabled,
+        )
+        similar_user_game_counts = filter_game_counts_to_ids(
+            similar_user_game_counts,
+            allowed_candidate_game_ids,
+        )
+        similar_user_task_evidence = build_similar_user_task_evidence(
+            candidates,
+            similar_user_histories,
+        )
+        similar_user_task_evidence = filter_task_evidence_to_ids(
+            similar_user_task_evidence,
+            allowed_candidate_game_ids,
+        )
+        if self.prompt_candidate_compression_enabled:
+            prompt_candidate_game_ids = select_prompt_candidate_game_ids(
+                similar_user_game_counts,
+                similar_user_task_evidence,
+                overall_top_n=PROMPT_OVERALL_TOP_N,
+                high_score_user_count=PROMPT_HIGH_SCORE_USER_COUNT,
+                per_high_score_user_top_k=PROMPT_PER_HIGH_SCORE_USER_TOP_K,
+                max_prompt_candidates=PROMPT_MAX_CANDIDATES,
+            )
+            prompt_similar_user_game_counts = filter_game_counts_to_ids(
+                similar_user_game_counts,
+                prompt_candidate_game_ids,
+            )
+            prompt_similar_user_task_evidence = filter_task_evidence_to_ids(
+                similar_user_task_evidence,
+                prompt_candidate_game_ids,
+            )
+            prompt_candidate_tasks = filter_candidate_tasks_to_ids(
+                candidate_tasks,
+                prompt_candidate_game_ids,
+            )
+            if not prompt_candidate_tasks and candidate_tasks:
+                prompt_candidate_game_ids = set(allowed_candidate_game_ids)
+                prompt_similar_user_game_counts = similar_user_game_counts
+                prompt_similar_user_task_evidence = similar_user_task_evidence
+                prompt_candidate_tasks = candidate_tasks
+        else:
+            prompt_candidate_game_ids = set(allowed_candidate_game_ids)
+            prompt_similar_user_game_counts = similar_user_game_counts
+            prompt_similar_user_task_evidence = similar_user_task_evidence
+            prompt_candidate_tasks = candidate_tasks
+
+        rule_based_tasks = build_rule_based_predictions(
+            prompt_candidate_tasks,
+            top_k=task_top_k,
+        )
+        prompt = build_task_prediction_prompt(
+            patient_id=resolved_patient_id,
+            target_profile=target_profile,
+            target_entities=target_entities,
+            candidate_source="direct_entity_paths",
+            similar_user_candidates=build_prompt_similar_user_candidates(candidates),
+            similar_user_task_evidence=prompt_similar_user_task_evidence,
+            similar_user_game_counts=prompt_similar_user_game_counts,
+            candidate_training_tasks=prompt_candidate_tasks,
+            task_top_k=task_top_k,
+            prompt_template_name=self.prompt_template_name,
+        )
+
+        llm_prediction: dict[str, Any] | None = None
+        raw_llm_output: str | None = None
+        if use_llm:
+            if self.llm_client is None:
+                raise ValueError("llm_client is required when use_llm is true.")
+            try:
+                raw_llm_output = self.llm_client.chat(
+                    prompt,
+                    system_prompt=SYSTEM_PROMPT,
+                    temperature=0.2,
+                )
+                llm_prediction = parse_json_object_from_text(raw_llm_output)
+            except Exception as exc:
+                setattr(exc, "llm_prompt", prompt)
+                setattr(exc, "patient_id", resolved_patient_id)
+                raise
+
+        result: dict[str, Any] = {
+            "patient_id": resolved_patient_id,
+            "candidate_source": {
+                "source": "direct_entity_paths",
+                "candidate_count": len(candidates),
+                "candidate_ids": [candidate.patient_id for candidate in candidates],
+                "candidate_task_windows": candidate_task_windows,
+            },
+            "target_profile": target_profile or {},
+            "target_entities": target_entities or {},
+            "prompt_candidate_selection": {
+                "enabled": self.prompt_candidate_compression_enabled,
+                "selected_candidate_count": len(prompt_candidate_game_ids),
+                "source_similar_user_game_count": len(similar_user_game_counts),
+                "source_candidate_task_count": len(candidate_tasks),
+                "similar_user_game_counts_weighting_enabled": (
+                    self.similar_user_game_counts_weighting_enabled
+                ),
+                "similar_user_game_counts_weighted_sort_enabled": (
+                    self.similar_user_game_counts_weighted_sort_enabled
+                ),
+            },
+            "similar_user_game_counts": prompt_similar_user_game_counts,
+            "similar_user_task_evidence": prompt_similar_user_task_evidence,
+            "candidate_training_tasks": prompt_candidate_tasks,
+            "prompt_template": self.prompt_template_name,
+            "predicted_training_tasks": _resolve_predicted_tasks(
+                llm_prediction,
+                rule_based_tasks,
+            ),
+            "llm_prediction": llm_prediction,
+        }
+        if include_prompt:
+            result["llm_prompt"] = prompt
+        if raw_llm_output is not None:
+            result["raw_llm_output"] = raw_llm_output
+        LOGGER.info(
+            "Built direct entity training-task prediction: patient_id=%s, candidate_count=%s, predicted_task_count=%s, used_llm=%s",
+            resolved_patient_id,
+            len(candidates),
+            len(result["predicted_training_tasks"]),
+            use_llm,
+        )
+        return result
+
     @staticmethod
     def _resolve_patient_id(pipeline_result: dict[str, Any]) -> str:
         raw_patient_id = pipeline_result.get("patient_id")
@@ -333,6 +536,23 @@ def extract_similar_user_candidates(
 ) -> list[SimilarUserCandidate]:
     """Extract candidate users from ids, scores, or full pipeline output."""
     raw_candidates = _find_raw_candidate_items(pipeline_result)
+    candidates: list[SimilarUserCandidate] = []
+    seen_patient_ids: set[str] = set()
+    for raw_candidate in raw_candidates:
+        candidate = _parse_candidate(raw_candidate)
+        if candidate is None or candidate.patient_id in seen_patient_ids:
+            continue
+        candidates.append(candidate)
+        seen_patient_ids.add(candidate.patient_id)
+    return candidates
+
+
+def _extract_direct_entity_candidates(
+    candidate_result: dict[str, Any],
+) -> list[SimilarUserCandidate]:
+    raw_candidates = candidate_result.get("candidates")
+    if not isinstance(raw_candidates, list):
+        return []
     candidates: list[SimilarUserCandidate] = []
     seen_patient_ids: set[str] = set()
     for raw_candidate in raw_candidates:
@@ -650,6 +870,22 @@ def build_similar_user_task_evidence(
     return evidence
 
 
+def build_prompt_similar_user_candidates(
+    candidates: list[SimilarUserCandidate],
+) -> list[dict[str, Any]]:
+    """Build compact candidate-score context for the LLM prompt."""
+    prompt_candidates: list[dict[str, Any]] = []
+    for candidate in candidates:
+        item: dict[str, Any] = {
+            "patient_id": candidate.patient_id,
+            "candidate_score": candidate.candidate_score,
+        }
+        if candidate.candidate_base_date is not None:
+            item["candidate_base_date"] = candidate.candidate_base_date
+        prompt_candidates.append(item)
+    return prompt_candidates
+
+
 def build_game_counts_from_history(
     history_rows: list[dict[str, Any]],
     *,
@@ -870,6 +1106,11 @@ def build_task_prediction_prompt(
     similar_user_game_counts: list[dict[str, Any]],
     candidate_training_tasks: list[dict[str, Any]],
     task_top_k: int,
+    target_profile: dict[str, Any] | None = None,
+    target_entities: dict[str, Any] | None = None,
+    candidate_source: str | None = None,
+    similar_user_candidates: list[dict[str, Any]] | None = None,
+    similar_user_task_evidence: list[dict[str, Any]] | None = None,
     prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
 ) -> str:
     """构建用于 LLM 训练任务预测的 JSON 优先提示词。
@@ -903,7 +1144,18 @@ def build_task_prediction_prompt(
             },
         },
     }
-    prompt_template = get_task_prediction_prompt_template(prompt_template_name)
+    normalized_prompt_template_name = prompt_template_name.strip()
+    if candidate_source is not None:
+        payload["candidate_source"] = candidate_source
+    if normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1":
+        payload["target_profile"] = target_profile or {}
+        payload["target_entities"] = target_entities or {}
+        payload["similar_user_candidates"] = similar_user_candidates or []
+        payload["similar_user_task_evidence"] = similar_user_task_evidence or []
+    elif normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_V2":
+        payload["similar_user_candidates"] = similar_user_candidates or []
+        payload["similar_user_task_evidence"] = similar_user_task_evidence or []
+    prompt_template = get_task_prediction_prompt_template(normalized_prompt_template_name)
     return prompt_template + f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
 
 

@@ -48,6 +48,13 @@ class PatternPathStorageSettings:
 
 
 @dataclass(frozen=True)
+class PatientPathSettings:
+    """Configuration for patient-start pattern path retrieval."""
+
+    window_days: int = 14
+
+
+@dataclass(frozen=True)
 class ScorePatternPathsSettings:
     """Configuration for scoring and retaining saved pattern paths."""
 
@@ -93,11 +100,19 @@ class CandidateRankingSettings:
 class TrainingTaskPredictionSettings:
     """Configuration for predicting training tasks from similar-user histories."""
 
+    task_top_k: int = 7
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
     profile_candidate_training_window_days: int | None = None
     similar_user_game_counts_weighting_enabled: bool = False
     similar_user_game_counts_weighted_sort_enabled: bool = False
+
+
+@dataclass(frozen=True)
+class DirectEntityTaskPredictionSettings:
+    """Configuration for predicting training tasks from direct-entity paths."""
+
+    prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1"
 
 
 @dataclass(frozen=True)
@@ -120,6 +135,13 @@ class DirectEntityPathSettings:
 
 
 @dataclass(frozen=True)
+class DirectEntityPathScoringSettings:
+    """Configuration for direct entity-start path scoring input resolution."""
+
+    use_when_patient_exists: bool = False
+
+
+@dataclass(frozen=True)
 class LlmSettings:
     """Connection settings for an OpenAI-compatible chat-completions service."""
 
@@ -137,10 +159,13 @@ class QuerySettings:
 
     graph_path_limit: GraphPathLimitSettings
     pattern_path_storage: PatternPathStorageSettings
+    patient_path: PatientPathSettings
     score_pattern_paths: ScorePatternPathsSettings
     candidate_ranking: CandidateRankingSettings
     training_task_prediction: TrainingTaskPredictionSettings
+    direct_entity_task_prediction: DirectEntityTaskPredictionSettings
     direct_entity_path: DirectEntityPathSettings
+    direct_entity_path_scoring: DirectEntityPathScoringSettings
 
 
 def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
@@ -240,10 +265,13 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
 
     graph_path_limit_data = data.get("graph_path_limit") or {}
     pattern_path_storage_data = data.get("pattern_path_storage") or {}
+    patient_path_data = data.get("patient_path") or {}
     score_pattern_paths_data = data.get("score_pattern_paths") or {}
     candidate_ranking_data = data.get("candidate_ranking") or {}
     training_task_prediction_data = data.get("training_task_prediction") or {}
+    direct_entity_task_prediction_data = data.get("direct_entity_task_prediction") or {}
     direct_entity_path_data = data.get("direct_entity_path") or {}
+    direct_entity_path_scoring_data = data.get("direct_entity_path_scoring") or {}
     bands_data = graph_path_limit_data.get("bands") or []
 
     bands: list[QueryLimitBandSettings] = []
@@ -271,6 +299,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     output_dir = pattern_path_storage_data.get("output_dir", "data/pattern_paths")
     if not isinstance(output_dir, str) or not output_dir.strip():
         raise ValueError("pattern_path_storage output_dir must be a non-empty string.")
+
+    patient_path_window_days = patient_path_data.get("window_days", 14)
+    if (
+        not isinstance(patient_path_window_days, int)
+        or isinstance(patient_path_window_days, bool)
+        or patient_path_window_days <= 0
+    ):
+        raise ValueError("patient_path window_days must be a positive integer.")
 
     scored_path_top_k = score_pattern_paths_data.get("top_k")
     if scored_path_top_k is not None and (
@@ -324,6 +360,13 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             raise ValueError("candidate_ranking patterns must contain non-empty strings.")
         normalized_patterns.append(pattern.strip())
     scoring = _parse_candidate_scoring_settings(candidate_ranking_data.get("scoring"))
+    task_top_k = training_task_prediction_data.get("task_top_k", 7)
+    if (
+        not isinstance(task_top_k, int)
+        or isinstance(task_top_k, bool)
+        or task_top_k <= 0
+    ):
+        raise ValueError("training_task_prediction task_top_k must be a positive integer.")
     prompt_candidate_compression_enabled = training_task_prediction_data.get(
         "prompt_candidate_compression_enabled",
         True,
@@ -368,6 +411,17 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction similar_user_game_counts_weighted_sort_enabled must be a boolean."
         )
+    direct_entity_prompt_template_name = direct_entity_task_prediction_data.get(
+        "prompt_template_name",
+        "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1",
+    )
+    if (
+        not isinstance(direct_entity_prompt_template_name, str)
+        or not direct_entity_prompt_template_name.strip()
+    ):
+        raise ValueError(
+            "direct_entity_task_prediction prompt_template_name must be a non-empty string."
+        )
     direct_entity_window_days = direct_entity_path_data.get("window_days", 180)
     if (
         not isinstance(direct_entity_window_days, int)
@@ -393,6 +447,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         or not direct_entity_index_path.strip()
     ):
         raise ValueError("direct_entity_path index_path must be a non-empty string.")
+    direct_entity_use_when_patient_exists = direct_entity_path_scoring_data.get(
+        "use_when_patient_exists",
+        False,
+    )
+    if not isinstance(direct_entity_use_when_patient_exists, bool):
+        raise ValueError(
+            "direct_entity_path_scoring use_when_patient_exists must be a boolean."
+        )
 
     return QuerySettings(
         graph_path_limit=GraphPathLimitSettings(
@@ -403,6 +465,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             ),
         ),
         pattern_path_storage=PatternPathStorageSettings(output_dir=output_dir.strip()),
+        patient_path=PatientPathSettings(window_days=patient_path_window_days),
         score_pattern_paths=ScorePatternPathsSettings(top_k=scored_path_top_k),
         candidate_ranking=CandidateRankingSettings(
             candidate_top_k=candidate_top_k,
@@ -412,16 +475,23 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             scoring=scoring,
         ),
         training_task_prediction=TrainingTaskPredictionSettings(
+            task_top_k=task_top_k,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name.strip(),
             profile_candidate_training_window_days=profile_candidate_training_window_days,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
         ),
+        direct_entity_task_prediction=DirectEntityTaskPredictionSettings(
+            prompt_template_name=direct_entity_prompt_template_name.strip(),
+        ),
         direct_entity_path=DirectEntityPathSettings(
             window_days=direct_entity_window_days,
             direct_path_limit=direct_path_limit,
             index_path=direct_entity_index_path.strip(),
+        ),
+        direct_entity_path_scoring=DirectEntityPathScoringSettings(
+            use_when_patient_exists=direct_entity_use_when_patient_exists,
         ),
     )
 

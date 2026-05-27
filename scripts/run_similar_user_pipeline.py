@@ -4,6 +4,7 @@
 
 1. 默认先调用 `scripts/build_pattern_paths.py`，按配置中的多个模式构建并保存 paths。
 2. 调用 path 评分逻辑，读取已保存 paths 并保存多个模式的 scored paths。
+   如果配置开启 direct entity path scoring，也会给离线 direct path 打分。
 3. 再调用候选构建逻辑，读取已保存 scored paths 并聚合候选相似用户。
 4. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
 
@@ -12,7 +13,7 @@
 
 常用执行方式：
 
-    python scripts/run_similar_user_pipeline.py 40 --base-date 2022-05-22 --window-days 14
+    python scripts/run_similar_user_pipeline.py 40 --base-date 2022-05-22
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ from similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
 )
 from similar_user.utils.logger import get_logger
+from config.settings import load_query_settings
 
 from scripts.build_similar_user_candidates import (
     build_similar_user_candidates,
@@ -44,6 +46,10 @@ from scripts.build_pattern_paths import run_configured_pattern_path_flows
 from scripts.score_pattern_paths import (
     DEFAULT_CONFIG_PATH,
     score_and_save_configured_pattern_paths,
+)
+from scripts.score_direct_entity_paths import (
+    save_scored_direct_entity_result,
+    score_direct_entity_paths,
 )
 
 
@@ -98,12 +104,6 @@ def parse_args() -> argparse.Namespace:
         help="Exclusive window end date used to build paths, for example 2022-05-22.",
     )
     parser.add_argument(
-        "--window-days",
-        type=int,
-        required=True,
-        help="Number of days before base_date included in path retrieval.",
-    )
-    parser.add_argument(
         "--output-level",
         choices=("ids", "scores", "full"),
         default="ids",
@@ -116,7 +116,6 @@ def run_similar_user_pipeline(
     patient_id: str,
     *,
     base_date: str,
-    window_days: int,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path | None = None,
     skip_path_build: bool = False,
@@ -125,6 +124,7 @@ def run_similar_user_pipeline(
 ) -> dict[str, Any]:
     """Run path retrieval, scoring, and candidate ranking as one workflow."""
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
+    resolved_window_days = _resolve_patient_path_window_days(resolved_config_path)
     started_at = time.perf_counter()
     LOGGER.info(
         "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, skip_path_scoring=%s, base_date=%s, window_days=%s, config_path=%s",
@@ -133,7 +133,7 @@ def run_similar_user_pipeline(
         skip_path_build,
         skip_path_scoring,
         base_date,
-        window_days,
+        resolved_window_days,
         resolved_config_path,
     )
     path_generation = None
@@ -142,7 +142,6 @@ def run_similar_user_pipeline(
             patient_id,
             config_path=resolved_config_path,
             base_date=base_date,
-            window_days=window_days,
             query_family=query_family or "training_order",
         )
         path_generation = [_summarize_path_result(item) for item in path_results]
@@ -150,7 +149,7 @@ def run_similar_user_pipeline(
             path_generation,
             patient_id=patient_id,
             base_date=base_date,
-            window_days=window_days,
+            window_days=resolved_window_days,
         )
 
     if not skip_path_scoring:
@@ -158,15 +157,20 @@ def run_similar_user_pipeline(
             patient_id,
             config_path=resolved_config_path,
             base_date=base_date,
-            window_days=window_days,
             query_family=query_family or "training_order",
         )
+        direct_entity_scoring = _score_direct_entity_paths_if_enabled(
+            patient_id,
+            config_path=resolved_config_path,
+            base_date=base_date,
+        )
+    else:
+        direct_entity_scoring = None
 
     candidate_result = build_similar_user_candidates(
         patient_id,
         config_path=resolved_config_path,
         base_date=base_date,
-        window_days=window_days,
         query_family=query_family or "training_order",
     )
     candidate_output_paths = save_similar_user_candidates_result(candidate_result)
@@ -182,9 +186,10 @@ def run_similar_user_pipeline(
         "skip_path_build": skip_path_build,
         "skip_path_scoring": skip_path_scoring,
         "base_date": base_date,
-        "window_days": window_days,
+        "window_days": resolved_window_days,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         "path_generation": path_generation,
+        "direct_entity_scoring": direct_entity_scoring,
         "candidate_result": candidate_result,
         "candidate_output_paths": {
             key: str(value) for key, value in candidate_output_paths.items()
@@ -239,6 +244,52 @@ def _raise_if_path_results_empty(
         "path_result does not contain paths: "
         f"patient_id={patient_id}, base_date={base_date}, window_days={window_days}."
     )
+
+
+def _resolve_patient_path_window_days(
+    config_path: str | Path,
+) -> int:
+    return load_query_settings(config_path).patient_path.window_days
+
+
+def _score_direct_entity_paths_if_enabled(
+    patient_id: str,
+    *,
+    config_path: str | Path,
+    base_date: str,
+) -> dict[str, Any] | None:
+    """Score direct entity paths for an existing patient when enabled."""
+    query_settings = load_query_settings(config_path)
+    if not query_settings.direct_entity_path_scoring.use_when_patient_exists:
+        LOGGER.info(
+            "Skipped direct entity path scoring because use_when_patient_exists=false: patient_id=%s",
+            patient_id,
+        )
+        return None
+
+    result = score_direct_entity_paths(
+        patient_id=patient_id,
+        base_date=base_date,
+        config_path=config_path,
+    )
+    output_paths = save_scored_direct_entity_result(result)
+    LOGGER.info(
+        "Completed direct entity path scoring: patient_id=%s, should_score=%s, scored_path_count=%s, saved_file_count=%s",
+        patient_id,
+        result.get("should_score"),
+        result.get("scored_path_count"),
+        len(output_paths),
+    )
+    return {
+        "should_score": result.get("should_score"),
+        "reason": result.get("reason"),
+        "path_count": result.get("path_count"),
+        "scored_path_count": result.get("scored_path_count"),
+        "output_paths": [
+            {key: str(value) for key, value in item.items()}
+            for item in output_paths
+        ],
+    }
 
 
 def summarize_pipeline_result(
@@ -328,7 +379,6 @@ def main() -> int:
             skip_path_build=args.skip_path_build,
             skip_path_scoring=args.skip_path_scoring,
             base_date=args.base_date,
-            window_days=args.window_days,
             query_family=args.query_family,
         )
     except Exception as exc:

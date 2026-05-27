@@ -2,6 +2,12 @@
 
 This script saves Disease/Symptom/Unknown -> TaskInstanceSet -> Patient paths.
 When no source ID is supplied it processes all available direct sources.
+
+Examples:
+    python scripts/build_direct_entity_paths.py
+    python scripts/build_direct_entity_paths.py --disease-id AU_DIS_0029
+    python scripts/build_direct_entity_paths.py --symptom-id <symptom_id>
+    python scripts/build_direct_entity_paths.py --unknown-id <unknown_id>
 """
 
 from __future__ import annotations

@@ -23,8 +23,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 "40",
                 "--base-date",
                 "2022-05-22",
-                "--window-days",
-                "14",
                 "--query-family",
                 "date_window",
             ],
@@ -33,7 +31,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
 
         self.assertEqual(args.patient_id, "40")
         self.assertEqual(args.base_date, "2022-05-22")
-        self.assertEqual(args.window_days, 14)
         self.assertEqual(args.query_family, "date_window")
         self.assertEqual(
             args.analysis_file,
@@ -362,7 +359,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
 
         config = evaluate_predict_training_tasks.build_experiment_config(
             base_date="2022-05-22",
-            window_days=14,
             pattern="PATTERN",
             config_path="config/settings.yaml",
             skip_path_build=True,
@@ -444,7 +440,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         detail = evaluate_predict_training_tasks.evaluate_patient(
             "40",
             base_date="2022-05-22",
-            window_days=14,
             user_service=user_service,
             pattern="PATTERN",
             config_path="config/settings.yaml",
@@ -530,7 +525,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         mock_predict.assert_called_once_with(
             "40",
             base_date="2022-05-22",
-            window_days=14,
             pattern="PATTERN",
             config_path="config/settings.yaml",
             skip_path_build=True,
@@ -564,7 +558,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         detail = evaluate_predict_training_tasks.evaluate_patient(
             "40",
             base_date="2022-05-22",
-            window_days=14,
             user_service=user_service,
             use_llm=False,
         )
@@ -599,7 +592,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         detail = evaluate_predict_training_tasks.evaluate_patient(
             "40",
             base_date="2022-05-22",
-            window_days=14,
             user_service=user_service,
             use_llm=False,
         )
@@ -632,7 +624,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         detail = evaluate_predict_training_tasks.evaluate_patient(
             "40",
             base_date="2022-05-22",
-            window_days=14,
             user_service=user_service,
             use_llm=True,
         )
@@ -677,7 +668,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         details = evaluate_predict_training_tasks.run_batch_evaluation(
             ["40", "41", "42"],
             base_date="2022-05-22",
-            window_days=14,
             config_path="config/settings.yaml",
             use_llm=False,
             query_family="date_window",
@@ -732,7 +722,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             evaluate_predict_training_tasks.run_batch_evaluation(
                 ["40"],
                 base_date="2022-05-22",
-                window_days=14,
                 limit=0,
             )
 
@@ -744,7 +733,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             evaluate_predict_training_tasks.run_batch_evaluation(
                 [],
                 base_date="2022-05-22",
-                window_days=14,
             )
 
     @patch("scripts.evaluate_predict_training_tasks.write_analysis_output")
@@ -806,8 +794,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                     temp_dir,
                     "--base-date",
                     "2023-10-15",
-                    "--window-days",
-                    "14",
                     "--dry-run",
                 ],
             ):
@@ -881,8 +867,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                     temp_dir,
                     "--base-date",
                     "2023-10-15",
-                    "--window-days",
-                    "14",
                     "--config",
                     "config/settings.yaml",
                     "--dry-run",

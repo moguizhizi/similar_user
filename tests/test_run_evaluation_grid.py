@@ -213,8 +213,6 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "scripts/evaluate_predict_training_tasks.py",
                 "--base-date",
                 "2023-10-15",
-                "--window-days",
-                "14",
                 "--config",
                 "data/evaluation_grid/generated_configs/exp_001.yaml",
                 "--task-top-k",

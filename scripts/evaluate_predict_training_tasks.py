@@ -8,8 +8,8 @@
 
 常用执行方式：
 
-    python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --window-days 14
-    python scripts/evaluate_predict_training_tasks.py --patient-id 40 --base-date 2022-05-22 --window-days 14
+    python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22
+    python scripts/evaluate_predict_training_tasks.py --patient-id 40 --base-date 2022-05-22
 """
 
 from __future__ import annotations
@@ -85,12 +85,6 @@ def parse_args() -> argparse.Namespace:
         "--base-date",
         required=True,
         help="Prediction date; actual labels are tasks on this date.",
-    )
-    parser.add_argument(
-        "--window-days",
-        type=int,
-        required=True,
-        help="Number of days before base_date used to build similar-user paths.",
     )
     parser.add_argument(
         "--pattern",
@@ -200,7 +194,6 @@ def evaluate_patient(
     patient_id: str,
     *,
     base_date: str,
-    window_days: int,
     user_service: UserService,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
@@ -230,7 +223,6 @@ def evaluate_patient(
         prediction_result = run_end_to_end_training_task_prediction(
             patient_id,
             base_date=base_date,
-            window_days=window_days,
             pattern=pattern,
             config_path=config_path,
             skip_path_build=skip_path_build,
@@ -1006,7 +998,6 @@ def write_analysis_output(
 def build_experiment_config(
     *,
     base_date: str,
-    window_days: int,
     pattern: str,
     config_path: str | Path,
     skip_path_build: bool,
@@ -1021,6 +1012,7 @@ def build_experiment_config(
         query_settings.candidate_ranking.disease_course_window_days
     )
     scored_path_top_k = query_settings.score_pattern_paths.top_k
+    patient_path_window_days = query_settings.patient_path.window_days
     prompt_template_name = getattr(
         query_settings.training_task_prediction,
         "prompt_template_name",
@@ -1044,7 +1036,7 @@ def build_experiment_config(
         similar_user_game_counts_weighted_sort_enabled = False
     return {
         "base_date": base_date,
-        "window_days": window_days,
+        "window_days": patient_path_window_days,
         "pattern": pattern,
         "config_path": str(config_path),
         "skip_path_build": skip_path_build,
@@ -1089,7 +1081,6 @@ def run_batch_evaluation(
     patient_ids: list[str] | None,
     *,
     base_date: str,
-    window_days: int,
     pattern: str = PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     skip_path_build: bool = False,
@@ -1103,6 +1094,7 @@ def run_batch_evaluation(
 ) -> list[dict[str, Any]]:
     """Evaluate every patient and return per-patient details."""
     started_at = time.perf_counter()
+    patient_path_window_days = load_query_settings(config_path).patient_path.window_days
     if limit is not None and limit <= 0:
         raise ValueError(f"limit must be a positive integer, got {limit}.")
     if not patient_ids:
@@ -1122,7 +1114,7 @@ def run_batch_evaluation(
             "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s",
             len(resolved_patient_ids),
             base_date,
-            window_days,
+            patient_path_window_days,
             query_family,
             task_top_k,
             use_llm,
@@ -1131,7 +1123,6 @@ def run_batch_evaluation(
             detail = evaluate_patient(
                 patient_id,
                 base_date=base_date,
-                window_days=window_days,
                 user_service=user_service,
                 pattern=pattern,
                 config_path=config_path,
@@ -1248,12 +1239,13 @@ def percentile(values: list[float], ratio: float) -> float:
 def main() -> int:
     """Run same-day prediction evaluation and write metrics outputs."""
     args = parse_args()
+    patient_path_window_days = load_query_settings(args.config).patient_path.window_days
     started_at = time.perf_counter()
     LOGGER.info(
         "Starting prediction evaluation: patient_id=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, output_dir=%s",
         args.patient_id,
         args.base_date,
-        args.window_days,
+        patient_path_window_days,
         args.query_family,
         args.task_top_k,
         not args.dry_run,
@@ -1282,7 +1274,6 @@ def main() -> int:
         details = run_batch_evaluation(
             patient_ids,
             base_date=args.base_date,
-            window_days=args.window_days,
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,
@@ -1298,7 +1289,6 @@ def main() -> int:
         analysis = analyze_evaluation_details(details)
         experiment_config = build_experiment_config(
             base_date=args.base_date,
-            window_days=args.window_days,
             pattern=args.pattern,
             config_path=args.config,
             skip_path_build=args.skip_path_build,
