@@ -83,6 +83,48 @@ class RunMonthlyPatternPathsTest(unittest.TestCase):
             "logs/monthly_pattern_paths/2024-02-23/20102686.log",
         )
 
+    def test_build_patient_file_pattern_path_runs_reads_limited_ids(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            patient_file = Path(temp_dir) / "patients.txt"
+            patient_file.write_text(
+                "# comment\n20102686\n20104662\n20123188\n",
+                encoding="utf-8",
+            )
+
+            runs = run_monthly_pattern_paths.build_patient_file_pattern_path_runs(
+                patient_ids_file=patient_file,
+                patient_limit=2,
+                base_date="2026-05-25",
+                config_path="config/settings.yaml",
+                log_dir="logs/monthly_pattern_paths",
+                query_family="training_order",
+            )
+
+        self.assertEqual([run.patient_id for run in runs], ["20102686", "20104662"])
+        self.assertEqual(runs[0].base_date, "2026-05-25")
+        self.assertEqual(runs[0].month, "2026-05")
+        self.assertEqual(
+            runs[0].command[1:],
+            [
+                "scripts/build_pattern_paths.py",
+                "--source-id",
+                "20102686",
+                "--patterns-from-config",
+                "--base-date",
+                "2026-05-25",
+                "--config",
+                "config/settings.yaml",
+                "--query-family",
+                "training_order",
+            ],
+        )
+        self.assertEqual(
+            runs[0].log_path,
+            "logs/monthly_pattern_paths/2026-05-25/20102686.log",
+        )
+
     def test_refresh_patient_lists_keeps_going_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch("scripts.run_monthly_pattern_paths.subprocess.run") as mock_run:
