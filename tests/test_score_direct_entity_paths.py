@@ -98,6 +98,7 @@ class ScoreDirectEntityPathsTest(unittest.TestCase):
 
             result = score_direct_entity_paths(
                 config_path=config_path,
+                base_date="2026-05-26",
                 age=66,
                 education="本科",
                 gender="男",

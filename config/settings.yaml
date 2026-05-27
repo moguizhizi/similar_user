@@ -46,6 +46,7 @@ query:
         symptom: false
         unknown: false
   training_task_prediction:
+    task_top_k: 7
     prompt_candidate_compression_enabled: false
     profile_candidate_training_window_days: null
     similar_user_game_counts_weighting_enabled: false

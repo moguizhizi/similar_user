@@ -122,6 +122,26 @@ class DirectEntityScoringInputTest(unittest.TestCase):
         self.assertEqual(result.scoring_input.symptom_ids, ("AU_SYM_0001",))
         repository.patient_exists.assert_not_called()
 
+    def test_resolve_can_force_manual_input_with_patient_id(self) -> None:
+        repository = Mock()
+
+        result = resolve_scoring_input(
+            kg_repository=repository,
+            patient_id="201231885555",
+            age=66,
+            education="本科",
+            gender="男",
+            disease_ids=["AU_DIS_0029"],
+            force_manual_input=True,
+        )
+
+        self.assertTrue(result.should_score)
+        self.assertEqual(result.reason, "manual_input_forced")
+        assert result.scoring_input is not None
+        self.assertEqual(result.scoring_input.patient_id, "201231885555")
+        self.assertEqual(result.scoring_input.source, "manual_cli_forced")
+        repository.patient_exists.assert_not_called()
+
     def test_resolve_rejects_manual_input_without_entities(self) -> None:
         repository = Mock()
 

@@ -149,6 +149,7 @@ def score_direct_entity_paths(
     unknown_ids: list[str] | None = None,
     top_k: int | None = None,
     kg_repository: KgRepository | None = None,
+    force_manual_input: bool = False,
 ) -> dict[str, Any]:
     """Resolve scoring input, load saved direct paths, and score them."""
     resolved_config_path = Path(config_path)
@@ -156,7 +157,7 @@ def score_direct_entity_paths(
     resolved_base_date = base_date or date.today().isoformat()
     resolved_top_k = _resolve_top_k(top_k, query_settings.score_pattern_paths.top_k)
 
-    if patient_id is not None and kg_repository is None:
+    if patient_id is not None and kg_repository is None and not force_manual_input:
         with Neo4jClient.from_config(resolved_config_path) as client:
             return score_direct_entity_paths(
                 config_path=resolved_config_path,
@@ -188,6 +189,7 @@ def score_direct_entity_paths(
         use_when_patient_exists=(
             query_settings.direct_entity_path_scoring.use_when_patient_exists
         ),
+        force_manual_input=force_manual_input,
     )
     if not resolution.should_score:
         return {
@@ -229,7 +231,12 @@ def score_direct_entity_paths(
         top_k=resolved_top_k,
     )
     result["source_id"] = _scored_source_id(resolution.scoring_input)
-    result["source_parameter"] = "patient_id" if resolution.scoring_input.patient_id else "manual_profile"
+    result["source_parameter"] = (
+        "patient_id"
+        if resolution.scoring_input.patient_id
+        and not resolution.scoring_input.source.startswith("manual_")
+        else "manual_profile"
+    )
     result["pattern"] = "DIRECT_ENTITY_PATHS"
     return result
 

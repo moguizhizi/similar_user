@@ -100,6 +100,7 @@ class CandidateRankingSettings:
 class TrainingTaskPredictionSettings:
     """Configuration for predicting training tasks from similar-user histories."""
 
+    task_top_k: int = 7
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
     profile_candidate_training_window_days: int | None = None
@@ -350,6 +351,13 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             raise ValueError("candidate_ranking patterns must contain non-empty strings.")
         normalized_patterns.append(pattern.strip())
     scoring = _parse_candidate_scoring_settings(candidate_ranking_data.get("scoring"))
+    task_top_k = training_task_prediction_data.get("task_top_k", 7)
+    if (
+        not isinstance(task_top_k, int)
+        or isinstance(task_top_k, bool)
+        or task_top_k <= 0
+    ):
+        raise ValueError("training_task_prediction task_top_k must be a positive integer.")
     prompt_candidate_compression_enabled = training_task_prediction_data.get(
         "prompt_candidate_compression_enabled",
         True,
@@ -447,6 +455,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             scoring=scoring,
         ),
         training_task_prediction=TrainingTaskPredictionSettings(
+            task_top_k=task_top_k,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name.strip(),
             profile_candidate_training_window_days=profile_candidate_training_window_days,

@@ -68,9 +68,26 @@ def resolve_scoring_input(
     symptom_ids: list[str] | tuple[str, ...] | None = None,
     unknown_ids: list[str] | tuple[str, ...] | None = None,
     use_when_patient_exists: bool = False,
+    force_manual_input: bool = False,
 ) -> DirectEntityScoringInputResolution:
     """Resolve KG-derived or manual CLI input for direct-entity path scoring."""
     normalized_patient_id = _normalize_optional_text(patient_id)
+    if force_manual_input:
+        return DirectEntityScoringInputResolution(
+            should_score=True,
+            reason="manual_input_forced",
+            scoring_input=_build_manual_input(
+                patient_id=normalized_patient_id,
+                age=age,
+                education=education,
+                gender=gender,
+                disease_ids=disease_ids,
+                symptom_ids=symptom_ids,
+                unknown_ids=unknown_ids,
+                source="manual_cli_forced",
+            ),
+        )
+
     if normalized_patient_id is None:
         return DirectEntityScoringInputResolution(
             should_score=True,

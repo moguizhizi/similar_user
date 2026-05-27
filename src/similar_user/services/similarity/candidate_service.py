@@ -283,6 +283,134 @@ class SimilarUserCandidateService:
             "candidates": candidates,
         }
 
+    def aggregate_candidates_from_direct_entity_scored_result(
+        self,
+        scored_result: dict[str, Any],
+        *,
+        candidate_top_k: int,
+    ) -> dict[str, Any]:
+        """Aggregate direct-entity scored paths into candidate users."""
+        if candidate_top_k <= 0:
+            raise ValueError(
+                f"candidate_top_k must be greater than 0, got {candidate_top_k}."
+            )
+
+        buckets: dict[str, dict[str, Any]] = {}
+        scores = scored_result.get("scores") if isinstance(scored_result, dict) else None
+        if not isinstance(scores, list):
+            scores = []
+        for item in scores:
+            if not isinstance(item, dict):
+                continue
+            candidate_id = _extract_direct_entity_candidate_id(item)
+            if candidate_id is None:
+                continue
+            total_score = _extract_total_score(item)
+            pattern = (
+                _normalize_optional_text(item.get("pattern"))
+                or DIRECT_ENTITY_SCORING_PATTERN
+            )
+            bucket = buckets.setdefault(
+                candidate_id,
+                {
+                    "patient_id": candidate_id,
+                    "match_count": 0,
+                    "best_score": None,
+                    "avg_score": 0.0,
+                    "candidate_score": None,
+                    "pattern_breakdown": {},
+                    "_score_sum": 0.0,
+                },
+            )
+            bucket["match_count"] += 1
+            if total_score is not None:
+                bucket["_score_sum"] += total_score
+                if bucket["best_score"] is None or total_score > bucket["best_score"]:
+                    bucket["best_score"] = total_score
+                    bucket["candidate_score"] = total_score
+
+            pattern_bucket = bucket["pattern_breakdown"].setdefault(
+                pattern,
+                {
+                    "match_count": 0,
+                    "path_indices": [],
+                    "best_score": None,
+                    "avg_score": 0.0,
+                    "source_type": "direct_entity_path",
+                    "_score_sum": 0.0,
+                },
+            )
+            pattern_bucket["match_count"] += 1
+            path_index = _extract_path_index(item)
+            if isinstance(path_index, int):
+                pattern_bucket["path_indices"].append(path_index)
+            if total_score is not None:
+                pattern_bucket["_score_sum"] += total_score
+                if (
+                    pattern_bucket["best_score"] is None
+                    or total_score > pattern_bucket["best_score"]
+                ):
+                    pattern_bucket["best_score"] = total_score
+
+        candidates: list[dict[str, Any]] = []
+        for bucket in buckets.values():
+            match_count = int(bucket["match_count"])
+            score_sum = float(bucket.pop("_score_sum"))
+            bucket["avg_score"] = (
+                round(score_sum / match_count, 2) if match_count else 0.0
+            )
+            if bucket["best_score"] is not None:
+                bucket["best_score"] = round(float(bucket["best_score"]), 2)
+            if bucket["candidate_score"] is not None:
+                bucket["candidate_score"] = round(float(bucket["candidate_score"]), 2)
+            for pattern_bucket in bucket["pattern_breakdown"].values():
+                pattern_match_count = int(pattern_bucket["match_count"])
+                pattern_score_sum = float(pattern_bucket.pop("_score_sum"))
+                pattern_bucket["path_indices"] = sorted(
+                    set(pattern_bucket["path_indices"])
+                )
+                pattern_bucket["avg_score"] = (
+                    round(pattern_score_sum / pattern_match_count, 2)
+                    if pattern_match_count
+                    else 0.0
+                )
+                if pattern_bucket["best_score"] is not None:
+                    pattern_bucket["best_score"] = round(
+                        float(pattern_bucket["best_score"]),
+                        2,
+                    )
+            candidates.append(bucket)
+
+        candidates.sort(
+            key=lambda item: (
+                _direct_candidate_sort_value(item.get("best_score")),
+                _direct_candidate_sort_value(item.get("avg_score")),
+                int(item.get("match_count") or 0),
+                str(item.get("patient_id") or ""),
+            ),
+            reverse=True,
+        )
+        candidates = candidates[:candidate_top_k]
+        LOGGER.info(
+            "Aggregated direct entity candidates: source_id=%s, source_parameter=%s, pre_score_candidate_count=%s, candidate_count=%s, candidate_top_k=%s",
+            scored_result.get("source_id"),
+            scored_result.get("source_parameter"),
+            len(buckets),
+            len(candidates),
+            candidate_top_k,
+        )
+        return {
+            "source_id": scored_result.get("source_id"),
+            "source_parameter": scored_result.get("source_parameter"),
+            "candidate_top_k": candidate_top_k,
+            "path_count": scored_result.get("path_count"),
+            "scored_path_count": scored_result.get("scored_path_count"),
+            "candidate_count": len(candidates),
+            "pre_score_candidate_count": len(buckets),
+            "ranking": "direct_entity_best_score_avg_score_match_count",
+            "candidates": candidates,
+        }
+
     def calculate_candidate_score(
         self,
         *,
@@ -849,6 +977,18 @@ def _coerce_optional_float(value: object) -> float | None:
     else:
         return None
     return numeric_value if math.isfinite(numeric_value) else None
+
+
+def _direct_candidate_sort_value(value: object) -> float:
+    parsed = _coerce_optional_float(value)
+    return parsed if parsed is not None else float("-inf")
+
+
+def _normalize_optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _normalize_candidate_base_dates(values: list[str | None] | None) -> list[str]:
