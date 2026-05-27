@@ -22,6 +22,10 @@ LOGGER = get_logger(__name__)
 DEFAULT_REPORT_JSON = "analysis_report.json"
 DEFAULT_REPORT_MARKDOWN = "analysis_report.md"
 METRIC_FIELDS = (
+    "avg_score_delta",
+    "avg_kg_score",
+    "avg_csv_score",
+    "score_evaluated_count",
     "micro_recall",
     "micro_f1",
     "task_hit_rate",
@@ -283,6 +287,23 @@ def build_recommendation(
         return "未找到 baseline 实验，建议补充 baseline_best 后再比较。"
     if best.get("name") == baseline.get("name"):
         return "当前 baseline 已是排行榜第一，可暂不调整 baseline。"
+    rank_metric = str(best.get("rank_metric") or "")
+    if rank_metric in {"avg_score_delta", "avg_kg_score", "avg_csv_score"}:
+        score_delta = metric_comparison.get("avg_score_delta", {}).get("delta")
+        if isinstance(score_delta, (int, float)) and score_delta > 0:
+            return (
+                f"{best.get('name')} 的 avg_score_delta 相比 baseline 提升 "
+                f"{round(float(score_delta), 4)}，建议进入下一阶段复验。"
+            )
+        kg_score_delta = metric_comparison.get("avg_kg_score", {}).get("delta")
+        if isinstance(kg_score_delta, (int, float)) and kg_score_delta > 0:
+            return (
+                f"{best.get('name')} 的 avg_kg_score 有提升；"
+                "建议结合 avg_score_delta 判断是否继续复验。"
+            )
+        if warnings:
+            return "存在告警项，建议先排查告警再决定是否提升参数。"
+        return "最优实验相对 baseline 的 score 指标提升不明显，建议保留当前 baseline。"
     recall_delta = metric_comparison.get("micro_recall", {}).get("delta")
     f1_delta = metric_comparison.get("micro_f1", {}).get("delta")
     if isinstance(recall_delta, (int, float)) and recall_delta > 0:
@@ -322,6 +343,10 @@ def pick_summary_fields(summary: dict[str, Any]) -> dict[str, Any]:
         "success_count",
         "failed_count",
         "evaluated_count",
+        "score_evaluated_count",
+        "avg_kg_score",
+        "avg_csv_score",
+        "avg_score_delta",
         "task_hit_rate",
         "micro_precision",
         "micro_recall",

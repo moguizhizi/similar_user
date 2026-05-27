@@ -1,0 +1,113 @@
+stage: "coarse_2026_10_users"
+
+base:
+  base_date: "2026-05-25"
+  window_days: 14
+  task_top_k: 7
+  use_llm: true
+  skip_path_build: true
+  skip_path_scoring: false
+  limit: 100
+  query_family: "training_order"
+
+baseline_overrides:
+  query.candidate_ranking.disease_course_window_days: 14
+  query.candidate_ranking.total_score_match_top_k: 1
+  query.score_pattern_paths.top_k: 150
+  query.training_task_prediction.prompt_candidate_compression_enabled: false
+  query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V1"
+
+experiments:
+  - name: baseline_best
+    overrides: {}
+
+  - name: wider_disease_course_window_7
+    overrides:
+      query.candidate_ranking.disease_course_window_days: 7
+
+  - name: wider_disease_course_window_21
+    overrides:
+      query.candidate_ranking.disease_course_window_days: 21
+
+  - name: wider_disease_course_window_30
+    overrides:
+      query.candidate_ranking.disease_course_window_days: 30
+
+  - name: more_path_candidates_3
+    overrides:
+      query.candidate_ranking.total_score_match_top_k: 3
+
+  - name: more_path_candidates_5
+    overrides:
+      query.candidate_ranking.total_score_match_top_k: 5
+
+  - name: more_path_candidates_10
+    overrides:
+      query.candidate_ranking.total_score_match_top_k: 10
+
+  - name: prompt_compression_on
+    overrides:
+      query.training_task_prediction.prompt_candidate_compression_enabled: true
+
+  - name: prompt_template_v2
+    overrides:
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+
+  - name: weighted_game_counts_on_sort_off
+    overrides:
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V3"
+      query.training_task_prediction.similar_user_game_counts_weighting_enabled: true
+      query.training_task_prediction.similar_user_game_counts_weighted_sort_enabled: false
+
+  - name: weighted_game_counts_on_sort_on
+    overrides:
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V3"
+      query.training_task_prediction.similar_user_game_counts_weighting_enabled: true
+      query.training_task_prediction.similar_user_game_counts_weighted_sort_enabled: true
+
+  - name: more_path_candidates_10_disease_course_window_21
+    overrides:
+      query.candidate_ranking.disease_course_window_days: 21
+      query.candidate_ranking.total_score_match_top_k: 10
+
+  - name: candidate_top_k_20
+    overrides:
+      query.candidate_ranking.candidate_top_k: 20
+
+  - name: candidate_top_k_5
+    overrides:
+      query.candidate_ranking.candidate_top_k: 5
+
+  - name: score_common_game_on
+    overrides:
+      query.candidate_ranking.scoring.common_game_score_similarity: true
+
+  - name: score_game_diversity_on
+    overrides:
+      query.candidate_ranking.scoring.game_similarity_with_diversity_score: true
+
+  - name: set_same_all_on
+    overrides:
+      query.candidate_ranking.scoring.set_same.disease: true
+      query.candidate_ranking.scoring.set_same.symptom: true
+      query.candidate_ranking.scoring.set_same.unknown: true
+
+  - name: profile_training_window_80
+    overrides:
+      query.training_task_prediction.profile_candidate_training_window_days: 80
+
+  - name: profile_training_window_10
+    overrides:
+      query.training_task_prediction.profile_candidate_training_window_days: 10
+
+  - name: profile_training_window_20
+    overrides:
+      query.training_task_prediction.profile_candidate_training_window_days: 20
+
+  - name: profile_training_window_40
+    overrides:
+      query.training_task_prediction.profile_candidate_training_window_days: 40
+  
+  - name: direct_entity_path_scoring_on
+    overrides:
+      query.direct_entity_path_scoring.use_when_patient_exists: true
