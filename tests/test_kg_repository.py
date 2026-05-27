@@ -2432,6 +2432,59 @@ class KgRepositoryTest(unittest.TestCase):
 
         self.assertTrue(settings.direct_entity_path_scoring.use_when_patient_exists)
 
+    def test_load_query_settings_reads_training_task_evaluation_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 5",
+                        "training_task_evaluation:",
+                        "  validation_mode: score",
+                        "  score_validation_url: http://score.test/training_task_score",
+                        "  algorithm_request_results_csv: /tmp/request_results.csv",
+                        "  score_validation_timeout: 3.5",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            settings = load_query_settings(config_path)
+
+        self.assertEqual(settings.training_task_evaluation.validation_mode, "score")
+        self.assertEqual(
+            settings.training_task_evaluation.score_validation_url,
+            "http://score.test/training_task_score",
+        )
+        self.assertEqual(
+            settings.training_task_evaluation.algorithm_request_results_csv,
+            "/tmp/request_results.csv",
+        )
+        self.assertEqual(settings.training_task_evaluation.score_validation_timeout, 3.5)
+
+    def test_load_query_settings_rejects_invalid_training_task_evaluation_mode(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 5",
+                        "training_task_evaluation:",
+                        "  validation_mode: other",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "validation_mode"):
+                load_query_settings(config_path)
+
     def test_load_query_settings_rejects_invalid_direct_entity_path_scoring_flag(
         self,
     ) -> None:

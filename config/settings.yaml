@@ -51,6 +51,11 @@ query:
     profile_candidate_training_window_days: null
     similar_user_game_counts_weighting_enabled: false
     similar_user_game_counts_weighted_sort_enabled: false
+  training_task_evaluation:
+    validation_mode: "set"
+    score_validation_url: "http://172.21.133.142:5008/training_task_score"
+    algorithm_request_results_csv: "/home/temp/dataset/20260525_Algorithm_Request_Results/20260525_Algorithm_Request_Results.csv"
+    score_validation_timeout: 10
   direct_entity_task_prediction:
     prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1"
   direct_entity_path:

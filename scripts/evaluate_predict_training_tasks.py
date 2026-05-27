@@ -47,6 +47,7 @@ from similar_user.services.task_recommendation_validation import (
     calculate_f1,
     evaluate_prediction_sets,
     safe_divide,
+    validate_training_task_recommendation,
 )
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
@@ -212,17 +213,28 @@ def evaluate_patient(
 ) -> dict[str, Any]:
     """Run prediction and compare it with the patient's same-day true tasks."""
     started_at = time.perf_counter()
+    evaluation_settings = load_query_settings(config_path).training_task_evaluation
+    validation_mode = evaluation_settings.validation_mode
     try:
-        actual_game_ids = get_actual_game_ids_on_base_date(
-            user_service,
-            patient_id,
-            base_date,
-        )
-        if not actual_game_ids:
-            return build_not_evaluable_detail(
-                patient_id=patient_id,
-                base_date=base_date,
-                elapsed_seconds=round(time.perf_counter() - started_at, 3),
+        if validation_mode == "set":
+            actual_game_ids = get_actual_game_ids_on_base_date(
+                user_service,
+                patient_id,
+                base_date,
+            )
+            if not actual_game_ids:
+                detail = build_not_evaluable_detail(
+                    patient_id=patient_id,
+                    base_date=base_date,
+                    elapsed_seconds=round(time.perf_counter() - started_at, 3),
+                )
+                detail["validation_mode"] = validation_mode
+                return detail
+        elif validation_mode == "score":
+            actual_game_ids = []
+        else:
+            raise ValueError(
+                f"Unsupported training task evaluation validation_mode: {validation_mode}."
             )
 
         prediction_result = run_end_to_end_training_task_prediction(
@@ -264,14 +276,26 @@ def evaluate_patient(
             actual_game_ids,
             prediction_result,
         )
+        validation_result = validate_training_task_recommendation(
+            validation_mode=validation_mode,
+            prediction_result=prediction_result,
+            patient_id=patient_id,
+            predicted_game_ids=predicted_game_ids,
+            actual_game_ids=actual_game_ids,
+            score_url=evaluation_settings.score_validation_url,
+            csv_path=evaluation_settings.algorithm_request_results_csv,
+            timeout_seconds=evaluation_settings.score_validation_timeout,
+        )
     except EmptyPathResultsError as exc:
-        return build_not_evaluable_detail(
+        detail = build_not_evaluable_detail(
             patient_id=patient_id,
             base_date=base_date,
             elapsed_seconds=round(time.perf_counter() - started_at, 3),
             reason="no_pattern_paths",
             error_message=str(exc),
         )
+        detail["validation_mode"] = validation_mode
+        return detail
     except Exception as exc:
         prompt_path = None
         llm_prompt = getattr(exc, "llm_prompt", None)
@@ -299,17 +323,19 @@ def evaluate_patient(
             "patient_id": patient_id,
             "base_date": base_date,
             "status": "failed",
+            "validation_mode": validation_mode,
             "error_type": type(exc).__name__,
             "error_message": str(exc),
             "prompt_path": str(prompt_path) if prompt_path is not None else None,
             "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         }
 
-    metrics = evaluate_prediction_sets(predicted_game_ids, actual_game_ids)
     return {
         "patient_id": patient_id,
         "base_date": base_date,
-        "status": "success_evaluated",
+        "status": validation_result["status"],
+        "validation_mode": validation_result["validation_mode"],
+        "reason": validation_result.get("reason"),
         "predicted_game_ids": predicted_game_ids,
         "predicted_game_similar_user_counts": predicted_game_similar_user_counts,
         "actual_game_ids": actual_game_ids,
@@ -317,14 +343,20 @@ def evaluate_patient(
         "similar_user_game_counts_task_count": similar_user_game_counts_task_count,
         "candidate_training_tasks_count": candidate_training_tasks_count,
         "coverage_diagnostics": coverage_diagnostics,
-        "matched_game_ids": metrics["matched_game_ids"],
-        "task_hit": metrics["task_hit"],
-        "precision": metrics["precision"],
-        "recall": metrics["recall"],
-        "f1": metrics["f1"],
+        "matched_game_ids": validation_result.get("matched_game_ids", []),
+        "task_hit": validation_result.get("task_hit"),
+        "precision": validation_result.get("precision"),
+        "recall": validation_result.get("recall"),
+        "f1": validation_result.get("f1"),
+        "training_task_score_validation": validation_result.get(
+            "training_task_score_validation"
+        ),
+        "kg_avg_score": validation_result.get("kg_avg_score"),
+        "csv_avg_score": validation_result.get("csv_avg_score"),
+        "score_delta": validation_result.get("score_delta"),
         "predicted_task_count": len(predicted_game_ids),
-        "actual_task_count": len(actual_game_ids),
-        "matched_task_count": len(metrics["matched_game_ids"]),
+        "actual_task_count": validation_result["actual_task_count"],
+        "matched_task_count": validation_result["matched_task_count"],
         "prompt_path": str(prompt_path) if prompt_path is not None else None,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
     }
@@ -598,6 +630,12 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         if isinstance(detail.get("candidate_training_tasks_count"), int | float)
     ]
     coverage_diagnostics = aggregate_coverage_diagnostics(evaluated_details)
+    score_evaluated_details = [
+        detail
+        for detail in evaluated_details
+        if detail.get("validation_mode") == "score"
+        and isinstance(detail.get("score_delta"), int | float)
+    ]
 
     return {
         "total_count": total_count,
@@ -666,6 +704,19 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         "candidate_training_tasks_actual_missing_rate": coverage_diagnostics[
             "candidate_training_tasks"
         ]["actual_missing_rate"],
+        "score_evaluated_count": len(score_evaluated_details),
+        "avg_kg_score": round(
+            average_metric(score_evaluated_details, "kg_avg_score"),
+            4,
+        ),
+        "avg_csv_score": round(
+            average_metric(score_evaluated_details, "csv_avg_score"),
+            4,
+        ),
+        "avg_score_delta": round(
+            average_metric(score_evaluated_details, "score_delta"),
+            4,
+        ),
         "avg_elapsed_seconds": round(average_numbers(elapsed_seconds), 4),
         "p95_elapsed_seconds": round(percentile(elapsed_seconds, 0.95), 4),
     }
@@ -1019,6 +1070,19 @@ def build_experiment_config(
     )
     if not isinstance(similar_user_game_counts_weighted_sort_enabled, bool):
         similar_user_game_counts_weighted_sort_enabled = False
+    evaluation_settings = getattr(query_settings, "training_task_evaluation", None)
+    validation_mode = getattr(evaluation_settings, "validation_mode", "set")
+    score_validation_url = getattr(evaluation_settings, "score_validation_url", None)
+    algorithm_request_results_csv = getattr(
+        evaluation_settings,
+        "algorithm_request_results_csv",
+        None,
+    )
+    score_validation_timeout = getattr(
+        evaluation_settings,
+        "score_validation_timeout",
+        None,
+    )
     return {
         "base_date": base_date,
         "window_days": patient_path_window_days,
@@ -1032,6 +1096,10 @@ def build_experiment_config(
         "prompt_template": prompt_template_name,
         "similar_user_game_counts_weighting_enabled": similar_user_game_counts_weighting_enabled,
         "similar_user_game_counts_weighted_sort_enabled": similar_user_game_counts_weighted_sort_enabled,
+        "validation_mode": validation_mode,
+        "score_validation_url": score_validation_url,
+        "algorithm_request_results_csv": algorithm_request_results_csv,
+        "score_validation_timeout": score_validation_timeout,
         "scored_path_top_k": scored_path_top_k,
         "disease_course_window_days": disease_course_window_days,
     }
@@ -1053,6 +1121,8 @@ def build_experiment_output_dir(
         f"qf_{_slug_part(query_family)}",
         use_llm,
     ]
+    if "validation_mode" in experiment_config:
+        parts.insert(-1, f"eval_{_slug_part(experiment_config.get('validation_mode'))}")
     return Path(output_dir) / "_".join(parts)
 
 
@@ -1079,7 +1149,9 @@ def run_batch_evaluation(
 ) -> list[dict[str, Any]]:
     """Evaluate every patient and return per-patient details."""
     started_at = time.perf_counter()
-    patient_path_window_days = load_query_settings(config_path).patient_path.window_days
+    query_settings = load_query_settings(config_path)
+    patient_path_window_days = query_settings.patient_path.window_days
+    validation_mode = query_settings.training_task_evaluation.validation_mode
     if limit is not None and limit <= 0:
         raise ValueError(f"limit must be a positive integer, got {limit}.")
     if not patient_ids:
@@ -1096,13 +1168,14 @@ def run_batch_evaluation(
         if limit is not None:
             resolved_patient_ids = resolved_patient_ids[:limit]
         LOGGER.info(
-            "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s",
+            "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, validation_mode=%s",
             len(resolved_patient_ids),
             base_date,
             patient_path_window_days,
             query_family,
             task_top_k,
             use_llm,
+            validation_mode,
         )
         for index, patient_id in enumerate(resolved_patient_ids, start=1):
             detail = evaluate_patient(

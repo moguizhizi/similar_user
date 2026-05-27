@@ -175,6 +175,71 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(summary["avg_elapsed_seconds"], 2.5)
         self.assertEqual(summary["p95_elapsed_seconds"], 4.0)
 
+    def test_summarize_evaluation_details_calculates_score_metrics(self) -> None:
+        summary = evaluate_predict_training_tasks.summarize_evaluation_details(
+            [
+                {
+                    "status": "success_evaluated",
+                    "validation_mode": "score",
+                    "kg_avg_score": 65.0,
+                    "csv_avg_score": 60.0,
+                    "score_delta": 5.0,
+                    "predicted_task_count": 2,
+                    "actual_task_count": 0,
+                    "matched_task_count": 0,
+                    "similar_user_game_counts_task_count": 3,
+                    "candidate_training_tasks_count": 2,
+                    "coverage_diagnostics": {
+                        "similar_user_game_counts": {
+                            "predicted_missing_count": 0,
+                            "predicted_total_count": 2,
+                            "actual_missing_count": 0,
+                            "actual_total_count": 0,
+                        },
+                        "candidate_training_tasks": {
+                            "predicted_missing_count": 1,
+                            "predicted_total_count": 2,
+                            "actual_missing_count": 0,
+                            "actual_total_count": 0,
+                        },
+                    },
+                    "elapsed_seconds": 1.0,
+                },
+                {
+                    "status": "success_evaluated",
+                    "validation_mode": "score",
+                    "kg_avg_score": 70.0,
+                    "csv_avg_score": 55.0,
+                    "score_delta": 15.0,
+                    "predicted_task_count": 2,
+                    "actual_task_count": 0,
+                    "matched_task_count": 0,
+                    "similar_user_game_counts_task_count": 3,
+                    "candidate_training_tasks_count": 2,
+                    "coverage_diagnostics": {
+                        "similar_user_game_counts": {
+                            "predicted_missing_count": 0,
+                            "predicted_total_count": 2,
+                            "actual_missing_count": 0,
+                            "actual_total_count": 0,
+                        },
+                        "candidate_training_tasks": {
+                            "predicted_missing_count": 0,
+                            "predicted_total_count": 2,
+                            "actual_missing_count": 0,
+                            "actual_total_count": 0,
+                        },
+                    },
+                    "elapsed_seconds": 1.0,
+                },
+            ]
+        )
+
+        self.assertEqual(summary["score_evaluated_count"], 2)
+        self.assertEqual(summary["avg_kg_score"], 67.5)
+        self.assertEqual(summary["avg_csv_score"], 57.5)
+        self.assertEqual(summary["avg_score_delta"], 10.0)
+
     def test_analyze_evaluation_details_summarizes_rank_evidence(self) -> None:
         analysis = evaluate_predict_training_tasks.analyze_evaluation_details(
             [
@@ -354,6 +419,12 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
                 similar_user_game_counts_weighting_enabled=True,
                 similar_user_game_counts_weighted_sort_enabled=False,
+            ),
+            training_task_evaluation=Mock(
+                validation_mode="set",
+                score_validation_url="http://score.test/training_task_score",
+                algorithm_request_results_csv="/tmp/request_results.csv",
+                score_validation_timeout=3.0,
             ),
         )
 
@@ -575,6 +646,74 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             "2022-05-22",
             "2022-05-23",
         )
+
+    @patch("scripts.evaluate_predict_training_tasks.load_query_settings")
+    @patch("scripts.evaluate_predict_training_tasks.validate_training_task_recommendation")
+    @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
+    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
+    def test_evaluate_patient_score_mode_uses_score_validation(
+        self,
+        mock_write_prompt: Mock,
+        mock_predict: Mock,
+        mock_validation: Mock,
+        mock_load_query_settings: Mock,
+    ) -> None:
+        mock_load_query_settings.return_value = Mock(
+            training_task_evaluation=Mock(
+                validation_mode="score",
+                score_validation_url="http://score.test/training_task_score",
+                algorithm_request_results_csv="/tmp/request_results.csv",
+                score_validation_timeout=3.0,
+            )
+        )
+        mock_predict.return_value = {
+            "patient_id": "40",
+            "training_task_prediction": {
+                "patient_id": "40",
+                "predicted_training_tasks": [{"game_id": "1"}, {"game_id": "2"}],
+                "similar_user_game_counts": [{"game_id": "1", "count": 3}],
+                "candidate_training_tasks": [{"game_id": "1"}],
+            },
+        }
+        mock_validation.return_value = {
+            "status": "success_evaluated",
+            "validation_mode": "score",
+            "actual_task_count": 0,
+            "matched_task_count": 0,
+            "kg_avg_score": 65.0,
+            "csv_avg_score": 60.0,
+            "score_delta": 5.0,
+        }
+        user_service = Mock()
+
+        detail = evaluate_predict_training_tasks.evaluate_patient(
+            "40",
+            base_date="2022-05-22",
+            user_service=user_service,
+            use_llm=False,
+            save_prompt=False,
+            config_path="config/settings.yaml",
+        )
+
+        self.assertEqual(detail["status"], "success_evaluated")
+        self.assertEqual(detail["validation_mode"], "score")
+        self.assertEqual(detail["kg_avg_score"], 65.0)
+        self.assertEqual(detail["csv_avg_score"], 60.0)
+        self.assertEqual(detail["score_delta"], 5.0)
+        self.assertEqual(detail["predicted_game_ids"], ["1", "2"])
+        user_service.get_patient_exclusive_training_task_history_by_date_window.assert_not_called()
+        mock_validation.assert_called_once_with(
+            validation_mode="score",
+            prediction_result=mock_predict.return_value,
+            patient_id="40",
+            predicted_game_ids=["1", "2"],
+            actual_game_ids=[],
+            score_url="http://score.test/training_task_score",
+            csv_path="/tmp/request_results.csv",
+            timeout_seconds=3.0,
+        )
+        mock_load_query_settings.assert_called_once_with("config/settings.yaml")
+        mock_write_prompt.assert_not_called()
 
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
     @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
