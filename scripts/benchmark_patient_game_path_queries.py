@@ -38,6 +38,42 @@ DEFAULT_TIMEOUT_SECONDS = 900
 LOGGER = get_logger(__name__)
 
 
+def _require_taskset_total_score(query: str) -> str:
+    """Require source and candidate TaskInstanceSet total scores in a query."""
+    return (
+        query.replace(
+            "    s1.`训练日期` IS NOT NULL AND\n"
+            "    s2.`训练日期` IS NOT NULL AND",
+            "    s1.`训练日期` IS NOT NULL AND\n"
+            "    s2.`训练日期` IS NOT NULL AND\n"
+            "    s1.`总分` IS NOT NULL AND\n"
+            "    s2.`总分` IS NOT NULL AND",
+        )
+        .replace(
+            "        s1.`训练日期` IS NOT NULL AND\n"
+            "        s2.`训练日期` IS NOT NULL AND",
+            "        s1.`训练日期` IS NOT NULL AND\n"
+            "        s2.`训练日期` IS NOT NULL AND\n"
+            "        s1.`总分` IS NOT NULL AND\n"
+            "        s2.`总分` IS NOT NULL AND",
+        )
+        .replace(
+            "    s1.`训练日期` IS NOT NULL AND\n"
+            "    date(s1.`训练日期`)",
+            "    s1.`训练日期` IS NOT NULL AND\n"
+            "    s1.`总分` IS NOT NULL AND\n"
+            "    date(s1.`训练日期`)",
+        )
+        .replace(
+            "        s1.`训练日期` IS NOT NULL AND\n"
+            "        date(s1.`训练日期`)",
+            "        s1.`训练日期` IS NOT NULL AND\n"
+            "        s1.`总分` IS NOT NULL AND\n"
+            "        date(s1.`训练日期`)",
+        )
+    )
+
+
 ORIGINAL_QUERY = """
 MATCH path =
 (p:Patient {id: $patient_id})
@@ -337,6 +373,18 @@ RETURN row
 LIMIT $limit
 """.strip()
 
+ORIGINAL_QUERY = _require_taskset_total_score(ORIGINAL_QUERY)
+LOCAL_SAMPLING_QUERY = _require_taskset_total_score(LOCAL_SAMPLING_QUERY)
+LAYER1_AGE_COMPLETION_QUERY = _require_taskset_total_score(
+    LAYER1_AGE_COMPLETION_QUERY
+)
+LAYER2_EDUCATION_EXACT_QUERY = _require_taskset_total_score(
+    LAYER2_EDUCATION_EXACT_QUERY
+)
+LAYER3_ACTIVITY_TASK_TYPE_QUERY = _require_taskset_total_score(
+    LAYER3_ACTIVITY_TASK_TYPE_QUERY
+)
+
 
 QUERY_VARIANTS = {
     "original": ORIGINAL_QUERY,
@@ -400,6 +448,9 @@ RETURN
     count(DISTINCT g) AS gCount,
     count(DISTINCT p2) AS p2Count
 """.strip()
+
+ORIGINAL_STATISTICS_QUERY = _require_taskset_total_score(ORIGINAL_STATISTICS_QUERY)
+APPROX_STATISTICS_QUERY = _require_taskset_total_score(APPROX_STATISTICS_QUERY)
 
 
 STATISTICS_VARIANTS = {

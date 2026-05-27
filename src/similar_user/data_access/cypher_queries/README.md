@@ -111,6 +111,8 @@ Patient -- TaskInstanceSet -- Unknown -- TaskInstanceSet -- Patient
 Disease -- TaskInstanceSet -- Patient
 ```
 
+`training_order` 系列 path 和统计查询会额外要求两侧 `TaskInstanceSet` 的 `总分` 均非空；`date_window` 系列不加这个约束。
+
 | 场景 | Query | 文件 | 主要参数 | 返回 |
 |---|---|---|---|---|
 | 仅要求两侧训练日期非空，随机抽取固定模式 path | `PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY` | `pattern_paths.py` | `patient_id`, `per_g`, `limit` | `row` |
