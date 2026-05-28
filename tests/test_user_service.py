@@ -1054,7 +1054,7 @@ class UserServiceTest(unittest.TestCase):
             result["retrieval_context"],
             {
                 "base_date": "2022-01-17",
-                "query_family": "training_order",
+                "query_family": "training_order_source_window",
                 "path_window": path_window,
                 "window_statistics": {"totalPaths": 0, "gCount": 0, "p2Count": 0},
                 "limit_recommendation": None,
@@ -1069,7 +1069,7 @@ class UserServiceTest(unittest.TestCase):
         mock_repository.get_pattern_randomized_paths.assert_not_called()
         mock_repository.get_pattern_statistics.assert_called_once_with(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id="30010096",
             start_date="2022-01-03",
             end_date="2022-01-17",
@@ -1125,7 +1125,7 @@ class UserServiceTest(unittest.TestCase):
             result["retrieval_context"],
             {
                 "base_date": "2022-01-17",
-                "query_family": "training_order",
+                "query_family": "training_order_source_window",
                 "path_window": path_window,
                 "window_statistics": {"totalPaths": 20, "gCount": 5, "p2Count": 6},
                 "limit_recommendation": {"per_g": 5, "limit": 10},
@@ -1151,7 +1151,7 @@ class UserServiceTest(unittest.TestCase):
         )
         mock_repository.get_pattern_randomized_paths.assert_called_once_with(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id="30010096",
             start_date="2022-01-03",
             end_date="2022-01-17",

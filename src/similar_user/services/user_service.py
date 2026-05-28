@@ -637,7 +637,7 @@ class UserService:
     ) -> dict[str, Any]:
         """Run a statistics-guided randomized path query for one pattern family."""
         normalized_query_family = (
-            PatternQueryFamily.TRAINING_ORDER
+            PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW
             if query_family is None
             else self._normalize_pattern_query_family(query_family)
         )

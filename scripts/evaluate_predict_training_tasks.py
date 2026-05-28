@@ -116,18 +116,24 @@ def parse_args() -> argparse.Namespace:
         "--query-family",
         default=None,
         choices=(
-            "training_order",
+            "training_order_source_window",
             "date_window",
-            "training_order_local_sampling",
-            "training_order_age_only",
-            "training_order_layer1_age_completion",
-            "training_order_layer2_education_exact",
-            "training_order_layer3_activity_task_type",
+            "training_order_local_sampling_source_window",
+            "training_order_age_only_source_window",
+            "training_order_layer1_age_completion_source_window",
+            "training_order_layer2_education_exact_source_window",
+            "training_order_layer3_activity_task_type_source_window",
+            "training_order_dual_window",
+            "training_order_local_sampling_dual_window",
+            "training_order_age_only_dual_window",
+            "training_order_layer1_age_completion_dual_window",
+            "training_order_layer2_education_exact_dual_window",
+            "training_order_layer3_activity_task_type_dual_window",
         ),
         help=(
-            "Query family for paired-statistics patterns. Defaults to training_order "
+            "Query family for paired-statistics patterns. Defaults to training_order_source_window "
             "for patient-series patterns and is not allowed for direct patterns. "
-            "training_order enforces s1/s2 training-date order; "
+            "training_order_source_window enforces s1/s2 training-date order; "
             "date_window only filters by the s1 date window."
         ),
     )

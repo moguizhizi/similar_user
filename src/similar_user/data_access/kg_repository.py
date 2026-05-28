@@ -53,12 +53,32 @@ class PatternQueryFamily(str, Enum):
     """Named query families for a path pattern candidate space."""
 
     DATE_WINDOW = "date_window"
-    TRAINING_ORDER = "training_order"
-    TRAINING_ORDER_LOCAL_SAMPLING = "training_order_local_sampling"
-    TRAINING_ORDER_AGE_ONLY = "training_order_age_only"
-    TRAINING_ORDER_LAYER1_AGE_COMPLETION = "training_order_layer1_age_completion"
-    TRAINING_ORDER_LAYER2_EDUCATION_EXACT = "training_order_layer2_education_exact"
-    TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE = "training_order_layer3_activity_task_type"
+    TRAINING_ORDER_SOURCE_WINDOW = "training_order_source_window"
+    TRAINING_ORDER_LOCAL_SAMPLING_SOURCE_WINDOW = (
+        "training_order_local_sampling_source_window"
+    )
+    TRAINING_ORDER_AGE_ONLY_SOURCE_WINDOW = "training_order_age_only_source_window"
+    TRAINING_ORDER_LAYER1_AGE_COMPLETION_SOURCE_WINDOW = (
+        "training_order_layer1_age_completion_source_window"
+    )
+    TRAINING_ORDER_LAYER2_EDUCATION_EXACT_SOURCE_WINDOW = (
+        "training_order_layer2_education_exact_source_window"
+    )
+    TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE_SOURCE_WINDOW = (
+        "training_order_layer3_activity_task_type_source_window"
+    )
+    TRAINING_ORDER_DUAL_WINDOW = "training_order_dual_window"
+    TRAINING_ORDER_LOCAL_SAMPLING_DUAL_WINDOW = "training_order_local_sampling_dual_window"
+    TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW = "training_order_age_only_dual_window"
+    TRAINING_ORDER_LAYER1_AGE_COMPLETION_DUAL_WINDOW = (
+        "training_order_layer1_age_completion_dual_window"
+    )
+    TRAINING_ORDER_LAYER2_EDUCATION_EXACT_DUAL_WINDOW = (
+        "training_order_layer2_education_exact_dual_window"
+    )
+    TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE_DUAL_WINDOW = (
+        "training_order_layer3_activity_task_type_dual_window"
+    )
 
 
 @dataclass
@@ -1494,7 +1514,7 @@ class KgRepository:
         """Return statistics for rows constrained by s1/s2 training-date order."""
         return self.get_pattern_statistics(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
         )
 
@@ -1508,7 +1528,7 @@ class KgRepository:
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         return self.get_pattern_statistics(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             end_date=normalized_end_date,
         )
@@ -1523,7 +1543,7 @@ class KgRepository:
         normalized_start_date = self._normalize_required_string(start_date, "start_date")
         return self.get_pattern_statistics(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             start_date=normalized_start_date,
         )
@@ -1540,7 +1560,7 @@ class KgRepository:
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         return self.get_pattern_statistics(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             start_date=normalized_start_date,
             end_date=normalized_end_date,
@@ -1641,7 +1661,7 @@ class KgRepository:
         normalized_start_date = self._normalize_required_string(start_date, "start_date")
         return self.get_pattern_randomized_paths(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             start_date=normalized_start_date,
             per_group=per_group,
@@ -1734,7 +1754,7 @@ class KgRepository:
         """Return randomized rows with s1/s2 training-date order."""
         return self.get_pattern_randomized_paths(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             per_group=per_group,
             limit=limit,
@@ -1752,7 +1772,7 @@ class KgRepository:
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         return self.get_pattern_randomized_paths(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             end_date=normalized_end_date,
             per_group=per_group,
@@ -1773,7 +1793,7 @@ class KgRepository:
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         return self.get_pattern_randomized_paths(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             start_date=normalized_start_date,
             end_date=normalized_end_date,

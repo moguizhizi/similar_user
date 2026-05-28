@@ -281,7 +281,7 @@ class DebugPatternPathsScriptTest(unittest.TestCase):
             base_date="2022-05-22",
             window_days=14,
             pattern="patient_game_patient",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
         mock_save_pattern_result.assert_called_once_with(
             {

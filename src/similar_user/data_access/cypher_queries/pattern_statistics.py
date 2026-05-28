@@ -12,6 +12,22 @@ def _require_taskset_total_score(query: str) -> str:
         "    s2.`总分` IS NOT NULL AND",
     )
 
+
+def _require_candidate_taskset_date_window(query: str) -> str:
+    """Require candidate TaskInstanceSet training dates in the date-range window."""
+    return query.replace(
+        "    s2.`总分` IS NOT NULL AND\n"
+        "    date(s1.`训练日期`) >= date(s2.`训练日期`) AND\n"
+        "    date(s1.`训练日期`) >= date($start_date) AND\n"
+        "    date(s1.`训练日期`) < date($end_date)",
+        "    s2.`总分` IS NOT NULL AND\n"
+        "    date(s1.`训练日期`) >= date(s2.`训练日期`) AND\n"
+        "    date(s1.`训练日期`) >= date($start_date) AND\n"
+        "    date(s1.`训练日期`) < date($end_date) AND\n"
+        "    date(s2.`训练日期`) >= date($start_date) AND\n"
+        "    date(s2.`训练日期`) < date($end_date)",
+    )
+
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_PATTERN_STATISTICS_QUERY = """
 MATCH path =
 (p:Patient {id: $patient_id})
@@ -730,5 +746,18 @@ PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY
 )
 PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY = _require_taskset_total_score(
+    PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY
+)
+
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY = _require_candidate_taskset_date_window(
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY
+)
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY = _require_candidate_taskset_date_window(
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY
+)
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY = _require_candidate_taskset_date_window(
+    PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY
+)
+PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY = _require_candidate_taskset_date_window(
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY
 )

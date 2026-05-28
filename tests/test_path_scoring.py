@@ -48,7 +48,7 @@ from src.similar_user.utils.pattern_storage import build_path_key, save_pattern_
 def _retrieval_context(paths: list[dict[str, object]]) -> dict[str, object]:
     return {
         "base_date": "2024-01-31",
-        "query_family": "training_order",
+        "query_family": "training_order_source_window",
         "path_window": {
             "start_date": "2024-01-17",
             "end_date": "2024-01-31",
@@ -62,13 +62,13 @@ def _path_cache_args() -> list[str]:
         "--base-date",
         "2024-01-31",
         "--query-family",
-        "training_order",
+        "training_order_source_window",
     ]
 
 
 def score_pattern_paths(*args: object, **kwargs: object) -> dict[str, object]:
     kwargs.setdefault("base_date", "2024-01-31")
-    kwargs.setdefault("query_family", "training_order")
+    kwargs.setdefault("query_family", "training_order_source_window")
     return _score_pattern_paths(*args, **kwargs)
 
 
@@ -921,7 +921,7 @@ class PathScoringTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
             scored_key = build_scored_key(path_key, 150)
             result = {
@@ -1339,7 +1339,7 @@ class PathScoringTest(unittest.TestCase):
             config_path="config/settings.yaml",
             output_dir="data/scored_pattern_paths",
             base_date="2024-01-31",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
 
         self.assertEqual(actual, results)
@@ -1348,7 +1348,7 @@ class PathScoringTest(unittest.TestCase):
             config_path="config/settings.yaml",
             path_index=None,
             base_date="2024-01-31",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
         mock_save_results.assert_called_once_with(
             results,
@@ -1427,7 +1427,7 @@ class PathScoringTest(unittest.TestCase):
                 education=None,
                 scored_paths_dir=str(Path(temp_dir) / "scored_pattern_paths"),
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
             exit_code = main()
@@ -1523,7 +1523,7 @@ class PathScoringTest(unittest.TestCase):
                 education=None,
                 scored_paths_dir=str(Path(temp_dir) / "scored_pattern_paths"),
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
             exit_code = main()
@@ -1567,7 +1567,7 @@ class PathScoringTest(unittest.TestCase):
             education=None,
             scored_paths_dir="data/scored_pattern_paths",
             base_date="2024-01-31",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
         mock_score_configured.return_value = results
         mock_save_scored.side_effect = [
@@ -1589,7 +1589,7 @@ class PathScoringTest(unittest.TestCase):
             config_path="config/settings.yaml",
             path_index=None,
             base_date="2024-01-31",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
         self.assertEqual(mock_save_scored.call_count, 2)
         mock_save_scored.assert_any_call(
@@ -1620,7 +1620,7 @@ class PathScoringTest(unittest.TestCase):
             education=None,
             scored_paths_dir="data/scored_pattern_paths",
             base_date="2024-01-31",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
 
         exit_code = main()

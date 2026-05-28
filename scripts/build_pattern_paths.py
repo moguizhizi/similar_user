@@ -14,8 +14,8 @@
   disease_patient 模式下是 disease_id。
 - `--pattern` 选择路径模式，只接受公开别名。
 - `--patterns-from-config` 从 YAML 的 `candidate_ranking.patterns` 读取多个 patient 起点模式并依次构建。
-- `--query-family` 只适用于带 statistics 的 patient 系列模式。默认 `training_order`。
-  `training_order` 会要求 s1/s2 满足训练日期顺序；`date_window` 只按 s1 的训练日期窗口取路径。
+- `--query-family` 只适用于带 statistics 的 patient 系列模式。默认 `training_order_source_window`。
+  `training_order_source_window` 会要求 s1/s2 满足训练日期顺序，并只按 s1 的训练日期窗口取路径；`date_window` 只按 s1 的训练日期窗口取路径。
 - `--base-date` 是右开窗口的结束日期，向前回看的天数来自
   `query.patient_path.window_days`。
 
@@ -25,7 +25,7 @@
         --source-id 30010096 \
         --pattern patient_game_patient \
         --base-date 2022-05-22 \
-        --query-family training_order
+        --query-family training_order_source_window
 
     python scripts/build_pattern_paths.py \
         --source-id AU_DIS_0013 \
@@ -68,7 +68,7 @@ from similar_user.utils.pattern_storage import save_pattern_result
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 DEFAULT_PATTERN = "patient_game_patient"
-DEFAULT_QUERY_FAMILY = "training_order"
+DEFAULT_QUERY_FAMILY = "training_order_source_window"
 LOGGER = get_logger(__name__)
 
 
@@ -112,18 +112,25 @@ def parse_args() -> argparse.Namespace:
         "--query-family",
         default=None,
         choices=(
-            "training_order",
+            "training_order_source_window",
             "date_window",
-            "training_order_local_sampling",
-            "training_order_age_only",
-            "training_order_layer1_age_completion",
-            "training_order_layer2_education_exact",
-            "training_order_layer3_activity_task_type",
+            "training_order_local_sampling_source_window",
+            "training_order_age_only_source_window",
+            "training_order_layer1_age_completion_source_window",
+            "training_order_layer2_education_exact_source_window",
+            "training_order_layer3_activity_task_type_source_window",
+            "training_order_dual_window",
+            "training_order_local_sampling_dual_window",
+            "training_order_age_only_dual_window",
+            "training_order_layer1_age_completion_dual_window",
+            "training_order_layer2_education_exact_dual_window",
+            "training_order_layer3_activity_task_type_dual_window",
         ),
         help=(
-            "Query family for paired-statistics patterns. Defaults to training_order "
+            "Query family for paired-statistics patterns. Defaults to training_order_source_window "
             "for patient-series patterns and is not allowed for direct patterns. "
-            "training_order enforces s1/s2 training-date order; "
+            "training_order_source_window enforces s1/s2 training-date order "
+            "and filters by the s1 date window; "
             "date_window only filters by the s1 date window."
         ),
     )

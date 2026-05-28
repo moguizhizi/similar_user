@@ -74,6 +74,36 @@ def _require_taskset_total_score(query: str) -> str:
     )
 
 
+def _require_candidate_taskset_date_window(query: str) -> str:
+    """Require candidate TaskInstanceSet training dates in the date-range window."""
+    return (
+        query.replace(
+            "    s2.`总分` IS NOT NULL AND\n"
+            "    date(s1.`训练日期`) >= date(s2.`训练日期`) AND\n"
+            "    date(s1.`训练日期`) >= date($start_date) AND\n"
+            "    date(s1.`训练日期`) < date($end_date)",
+            "    s2.`总分` IS NOT NULL AND\n"
+            "    date(s1.`训练日期`) >= date(s2.`训练日期`) AND\n"
+            "    date(s1.`训练日期`) >= date($start_date) AND\n"
+            "    date(s1.`训练日期`) < date($end_date) AND\n"
+            "    date(s2.`训练日期`) >= date($start_date) AND\n"
+            "    date(s2.`训练日期`) < date($end_date)",
+        )
+        .replace(
+            "        s2.`总分` IS NOT NULL AND\n"
+            "        date(s1.`训练日期`) >= date(s2.`训练日期`) AND\n"
+            "        date(s1.`训练日期`) >= date($start_date) AND\n"
+            "        date(s1.`训练日期`) < date($end_date)",
+            "        s2.`总分` IS NOT NULL AND\n"
+            "        date(s1.`训练日期`) >= date(s2.`训练日期`) AND\n"
+            "        date(s1.`训练日期`) >= date($start_date) AND\n"
+            "        date(s1.`训练日期`) < date($end_date) AND\n"
+            "        date(s2.`训练日期`) >= date($start_date) AND\n"
+            "        date(s2.`训练日期`) < date($end_date)",
+        )
+    )
+
+
 ORIGINAL_QUERY = """
 MATCH path =
 (p:Patient {id: $patient_id})
@@ -384,6 +414,19 @@ LAYER2_EDUCATION_EXACT_QUERY = _require_taskset_total_score(
 LAYER3_ACTIVITY_TASK_TYPE_QUERY = _require_taskset_total_score(
     LAYER3_ACTIVITY_TASK_TYPE_QUERY
 )
+ORIGINAL_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(ORIGINAL_QUERY)
+LOCAL_SAMPLING_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(
+    LOCAL_SAMPLING_QUERY
+)
+LAYER1_AGE_COMPLETION_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(
+    LAYER1_AGE_COMPLETION_QUERY
+)
+LAYER2_EDUCATION_EXACT_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(
+    LAYER2_EDUCATION_EXACT_QUERY
+)
+LAYER3_ACTIVITY_TASK_TYPE_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(
+    LAYER3_ACTIVITY_TASK_TYPE_QUERY
+)
 
 
 QUERY_VARIANTS = {
@@ -392,6 +435,11 @@ QUERY_VARIANTS = {
     "layer1_age_completion": LAYER1_AGE_COMPLETION_QUERY,
     "layer2_education_exact": LAYER2_EDUCATION_EXACT_QUERY,
     "layer3_activity_task_type": LAYER3_ACTIVITY_TASK_TYPE_QUERY,
+    "original_dual_window": ORIGINAL_DUAL_WINDOW_QUERY,
+    "local_sampling_dual_window": LOCAL_SAMPLING_DUAL_WINDOW_QUERY,
+    "layer1_age_completion_dual_window": LAYER1_AGE_COMPLETION_DUAL_WINDOW_QUERY,
+    "layer2_education_exact_dual_window": LAYER2_EDUCATION_EXACT_DUAL_WINDOW_QUERY,
+    "layer3_activity_task_type_dual_window": LAYER3_ACTIVITY_TASK_TYPE_DUAL_WINDOW_QUERY,
 }
 
 
@@ -451,11 +499,19 @@ RETURN
 
 ORIGINAL_STATISTICS_QUERY = _require_taskset_total_score(ORIGINAL_STATISTICS_QUERY)
 APPROX_STATISTICS_QUERY = _require_taskset_total_score(APPROX_STATISTICS_QUERY)
+ORIGINAL_DUAL_WINDOW_STATISTICS_QUERY = _require_candidate_taskset_date_window(
+    ORIGINAL_STATISTICS_QUERY
+)
+APPROX_DUAL_WINDOW_STATISTICS_QUERY = _require_candidate_taskset_date_window(
+    APPROX_STATISTICS_QUERY
+)
 
 
 STATISTICS_VARIANTS = {
     "stats_original": ORIGINAL_STATISTICS_QUERY,
     "stats_approx_group": APPROX_STATISTICS_QUERY,
+    "stats_original_dual_window": ORIGINAL_DUAL_WINDOW_STATISTICS_QUERY,
+    "stats_approx_group_dual_window": APPROX_DUAL_WINDOW_STATISTICS_QUERY,
 }
 
 ALL_VARIANTS = {**QUERY_VARIANTS, **STATISTICS_VARIANTS}
