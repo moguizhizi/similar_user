@@ -120,6 +120,8 @@ from .cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
@@ -347,16 +349,19 @@ PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC = PathPatternSpec(
             "training_order_local_sampling_source_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_age_only_source_window": _training_order_game_variant_family(
+            "training_order_age_source_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer1_age_completion_source_window": _training_order_game_variant_family(
+            "training_order_age_edu_source_window": _training_order_game_variant_family(
+                PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_completed_source_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer2_education_exact_source_window": _training_order_game_variant_family(
+            "training_order_age_edu_completed_source_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER2_EDUCATION_EXACT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer3_activity_task_type_source_window": _training_order_game_variant_family(
+            "training_order_age_edu_task_completed_source_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
             ),
             "training_order_dual_window": _training_order_game_variant_family(
@@ -367,19 +372,23 @@ PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
                 statistics_date_range_query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_age_only_dual_window": _training_order_game_variant_family(
+            "training_order_age_dual_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
                 statistics_date_range_query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer1_age_completion_dual_window": _training_order_game_variant_family(
+            "training_order_age_edu_dual_window": _training_order_game_variant_family(
+                PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_date_range_query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_completed_dual_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
                 statistics_date_range_query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer2_education_exact_dual_window": _training_order_game_variant_family(
+            "training_order_age_edu_completed_dual_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER2_EDUCATION_EXACT_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
                 statistics_date_range_query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer3_activity_task_type_dual_window": _training_order_game_variant_family(
+            "training_order_age_edu_task_completed_dual_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
                 statistics_date_range_query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
@@ -434,7 +443,7 @@ PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_age_only_source_window": _training_order_entity_variant_family(
+            "training_order_age_source_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -444,17 +453,7 @@ PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer1_age_completion_source_window": _training_order_entity_variant_family(
-                randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
-                randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-                randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-                randomized_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-                statistics_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
-                statistics_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-                statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-                statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
-            ),
-            "training_order_layer2_education_exact_source_window": _training_order_entity_variant_family(
+            "training_order_age_edu_source_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -464,7 +463,27 @@ PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer3_activity_task_type_source_window": _training_order_entity_variant_family(
+            "training_order_age_completed_source_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_completed_source_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_task_completed_source_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -494,7 +513,7 @@ PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_age_only_dual_window": _training_order_entity_variant_family(
+            "training_order_age_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -504,17 +523,7 @@ PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer1_age_completion_dual_window": _training_order_entity_variant_family(
-                randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
-                randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-                randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-                randomized_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-                statistics_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
-                statistics_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-                statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-                statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
-            ),
-            "training_order_layer2_education_exact_dual_window": _training_order_entity_variant_family(
+            "training_order_age_edu_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -524,7 +533,27 @@ PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer3_activity_task_type_dual_window": _training_order_entity_variant_family(
+            "training_order_age_completed_dual_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_completed_dual_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_task_completed_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -585,7 +614,7 @@ PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_age_only_source_window": _training_order_entity_variant_family(
+            "training_order_age_source_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -595,17 +624,7 @@ PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer1_age_completion_source_window": _training_order_entity_variant_family(
-                randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
-                randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-                randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-                randomized_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-                statistics_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
-                statistics_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-                statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-                statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
-            ),
-            "training_order_layer2_education_exact_source_window": _training_order_entity_variant_family(
+            "training_order_age_edu_source_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -615,7 +634,27 @@ PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer3_activity_task_type_source_window": _training_order_entity_variant_family(
+            "training_order_age_completed_source_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_completed_source_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_task_completed_source_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -645,7 +684,7 @@ PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_age_only_dual_window": _training_order_entity_variant_family(
+            "training_order_age_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -655,17 +694,7 @@ PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer1_age_completion_dual_window": _training_order_entity_variant_family(
-                randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
-                randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-                randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-                randomized_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-                statistics_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
-                statistics_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-                statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-                statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
-            ),
-            "training_order_layer2_education_exact_dual_window": _training_order_entity_variant_family(
+            "training_order_age_edu_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -675,7 +704,27 @@ PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer3_activity_task_type_dual_window": _training_order_entity_variant_family(
+            "training_order_age_completed_dual_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_completed_dual_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_task_completed_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -736,7 +785,7 @@ PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_age_only_source_window": _training_order_entity_variant_family(
+            "training_order_age_source_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -746,17 +795,7 @@ PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer1_age_completion_source_window": _training_order_entity_variant_family(
-                randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
-                randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-                randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-                randomized_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-                statistics_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
-                statistics_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-                statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-                statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
-            ),
-            "training_order_layer2_education_exact_source_window": _training_order_entity_variant_family(
+            "training_order_age_edu_source_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -766,7 +805,27 @@ PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer3_activity_task_type_source_window": _training_order_entity_variant_family(
+            "training_order_age_completed_source_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_completed_source_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_task_completed_source_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -796,7 +855,7 @@ PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_age_only_dual_window": _training_order_entity_variant_family(
+            "training_order_age_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -806,17 +865,7 @@ PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer1_age_completion_dual_window": _training_order_entity_variant_family(
-                randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
-                randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
-                randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
-                randomized_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
-                statistics_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
-                statistics_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-                statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-                statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
-            ),
-            "training_order_layer2_education_exact_dual_window": _training_order_entity_variant_family(
+            "training_order_age_edu_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -826,7 +875,27 @@ PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
             ),
-            "training_order_layer3_activity_task_type_dual_window": _training_order_entity_variant_family(
+            "training_order_age_completed_dual_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_completed_dual_window": _training_order_entity_variant_family(
+                randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
+                randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
+                randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
+                randomized_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+                statistics_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+                statistics_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+                statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+                statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            ),
+            "training_order_age_edu_task_completed_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
                 randomized_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_START_DATE_QUERY,
                 randomized_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,

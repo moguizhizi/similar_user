@@ -104,6 +104,20 @@ def _require_candidate_taskset_date_window(query: str) -> str:
     )
 
 
+def _require_task_game_training_order_conditions(
+    query: str,
+    conditions: tuple[str, ...],
+) -> str:
+    """Add source/candidate TaskInstanceSet conditions to a task-game path query."""
+    if not conditions:
+        return query
+    anchor = "    date(s1.`训练日期`) < date($end_date)"
+    replacement = anchor + " AND\n" + " AND\n".join(
+        f"    {condition}" for condition in conditions
+    )
+    return query.replace(anchor, replacement, 1)
+
+
 ORIGINAL_QUERY = """
 MATCH path =
 (p:Patient {id: $patient_id})
@@ -465,9 +479,143 @@ RETURN row
 LIMIT $limit
 """.strip()
 
+LOCAL_SAMPLING_QUERY = ORIGINAL_QUERY
+AGE_ONLY_QUERY = _require_task_game_training_order_conditions(
+    ORIGINAL_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+    ),
+)
+AGE_EDU_QUERY = _require_task_game_training_order_conditions(
+    ORIGINAL_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        "s1.`执行学历` IS NOT NULL",
+        "s2.`执行学历` IS NOT NULL",
+        "s1.`执行学历` = s2.`执行学历`",
+    ),
+)
+AGE_I1_COMPLETION_QUERY = _require_task_game_training_order_conditions(
+    ORIGINAL_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        'i1.`结果` = "完成"',
+    ),
+)
+AGE_I2_COMPLETION_QUERY = _require_task_game_training_order_conditions(
+    ORIGINAL_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        'i2.`结果` = "完成"',
+    ),
+)
+LAYER1_AGE_COMPLETION_QUERY = _require_task_game_training_order_conditions(
+    ORIGINAL_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        'i1.`结果` = "完成"',
+        'i2.`结果` = "完成"',
+    ),
+)
+LAYER2_EDUCATION_EXACT_QUERY = _require_task_game_training_order_conditions(
+    ORIGINAL_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        "s1.`执行学历` IS NOT NULL",
+        "s2.`执行学历` IS NOT NULL",
+        "s1.`执行学历` = s2.`执行学历`",
+        'i1.`结果` = "完成"',
+        'i2.`结果` = "完成"',
+    ),
+)
+LAYER3_ACTIVITY_TASK_TYPE_QUERY = _require_task_game_training_order_conditions(
+    ORIGINAL_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        "s1.`执行学历` IS NOT NULL",
+        "s2.`执行学历` IS NOT NULL",
+        "s1.`执行学历` = s2.`执行学历`",
+        'i1.`结果` = "完成"',
+        'i2.`结果` = "完成"',
+        'i1.`活跃` = "是"',
+        'i2.`活跃` = "是"',
+        "i1.`任务类型` = i2.`任务类型`",
+    ),
+)
+
+LAYER1_AGE_COMPLETION_TWO_STAGE_DUAL_WINDOW_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    s1.`总分` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date) AND
+    s1.`执行年龄` IS NOT NULL AND
+    i1.`结果` = "完成"
+
+WITH p, s1, i1, g
+
+MATCH (g)
+--(i2:TaskInstance)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s2.`训练日期` IS NOT NULL AND
+    s2.`总分` IS NOT NULL AND
+    date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+    date(s2.`训练日期`) >= date($start_date) AND
+    date(s2.`训练日期`) < date($end_date) AND
+    s2.`执行年龄` IS NOT NULL AND
+    abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5 AND
+    i2.`结果` = "完成"
+
+WITH p, s1, i1, g, i2, s2, p2, rand() AS r
+ORDER BY r
+
+WITH g, p2, collect({
+    p: p,
+    s1: s1,
+    i1: i1,
+    g: g,
+    i2: i2,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH g, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
 ORIGINAL_QUERY = _require_taskset_total_score(ORIGINAL_QUERY)
 LOCAL_SAMPLING_QUERY = _require_taskset_total_score(LOCAL_SAMPLING_QUERY)
 AGE_ONLY_QUERY = _require_taskset_total_score(AGE_ONLY_QUERY)
+AGE_EDU_QUERY = _require_taskset_total_score(AGE_EDU_QUERY)
+AGE_I1_COMPLETION_QUERY = _require_taskset_total_score(AGE_I1_COMPLETION_QUERY)
+AGE_I2_COMPLETION_QUERY = _require_taskset_total_score(AGE_I2_COMPLETION_QUERY)
 LAYER1_AGE_COMPLETION_QUERY = _require_taskset_total_score(
     LAYER1_AGE_COMPLETION_QUERY
 )
@@ -482,6 +630,13 @@ LOCAL_SAMPLING_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(
     LOCAL_SAMPLING_QUERY
 )
 AGE_ONLY_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(AGE_ONLY_QUERY)
+AGE_EDU_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(AGE_EDU_QUERY)
+AGE_I1_COMPLETION_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(
+    AGE_I1_COMPLETION_QUERY
+)
+AGE_I2_COMPLETION_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(
+    AGE_I2_COMPLETION_QUERY
+)
 LAYER1_AGE_COMPLETION_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_window(
     LAYER1_AGE_COMPLETION_QUERY
 )
@@ -496,16 +651,21 @@ LAYER3_ACTIVITY_TASK_TYPE_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_wi
 QUERY_VARIANTS = {
     "training_order_source_window": ORIGINAL_QUERY,
     "training_order_local_sampling_source_window": LOCAL_SAMPLING_QUERY,
-    "training_order_age_only_source_window": AGE_ONLY_QUERY,
-    "training_order_layer1_age_completion_source_window": LAYER1_AGE_COMPLETION_QUERY,
-    "training_order_layer2_education_exact_source_window": LAYER2_EDUCATION_EXACT_QUERY,
-    "training_order_layer3_activity_task_type_source_window": LAYER3_ACTIVITY_TASK_TYPE_QUERY,
+    "training_order_age_source_window": AGE_ONLY_QUERY,
+    "training_order_age_edu_source_window": AGE_EDU_QUERY,
+    "training_order_age_completed_source_window": LAYER1_AGE_COMPLETION_QUERY,
+    "training_order_age_edu_completed_source_window": LAYER2_EDUCATION_EXACT_QUERY,
+    "training_order_age_edu_task_completed_source_window": LAYER3_ACTIVITY_TASK_TYPE_QUERY,
     "training_order_dual_window": ORIGINAL_DUAL_WINDOW_QUERY,
     "training_order_local_sampling_dual_window": LOCAL_SAMPLING_DUAL_WINDOW_QUERY,
-    "training_order_age_only_dual_window": AGE_ONLY_DUAL_WINDOW_QUERY,
-    "training_order_layer1_age_completion_dual_window": LAYER1_AGE_COMPLETION_DUAL_WINDOW_QUERY,
-    "training_order_layer2_education_exact_dual_window": LAYER2_EDUCATION_EXACT_DUAL_WINDOW_QUERY,
-    "training_order_layer3_activity_task_type_dual_window": LAYER3_ACTIVITY_TASK_TYPE_DUAL_WINDOW_QUERY,
+    "training_order_age_dual_window": AGE_ONLY_DUAL_WINDOW_QUERY,
+    "training_order_age_edu_dual_window": AGE_EDU_DUAL_WINDOW_QUERY,
+    "training_order_age_i1_completion_dual_window": AGE_I1_COMPLETION_DUAL_WINDOW_QUERY,
+    "training_order_age_i2_completion_dual_window": AGE_I2_COMPLETION_DUAL_WINDOW_QUERY,
+    "training_order_age_completed_dual_window": LAYER1_AGE_COMPLETION_DUAL_WINDOW_QUERY,
+    "training_order_age_completed_two_stage_dual_window": LAYER1_AGE_COMPLETION_TWO_STAGE_DUAL_WINDOW_QUERY,
+    "training_order_age_edu_completed_dual_window": LAYER2_EDUCATION_EXACT_DUAL_WINDOW_QUERY,
+    "training_order_age_edu_task_completed_dual_window": LAYER3_ACTIVITY_TASK_TYPE_DUAL_WINDOW_QUERY,
 }
 
 

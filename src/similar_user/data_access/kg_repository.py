@@ -57,27 +57,29 @@ class PatternQueryFamily(str, Enum):
     TRAINING_ORDER_LOCAL_SAMPLING_SOURCE_WINDOW = (
         "training_order_local_sampling_source_window"
     )
-    TRAINING_ORDER_AGE_ONLY_SOURCE_WINDOW = "training_order_age_only_source_window"
-    TRAINING_ORDER_LAYER1_AGE_COMPLETION_SOURCE_WINDOW = (
-        "training_order_layer1_age_completion_source_window"
+    TRAINING_ORDER_AGE_SOURCE_WINDOW = "training_order_age_source_window"
+    TRAINING_ORDER_AGE_EDU_SOURCE_WINDOW = "training_order_age_edu_source_window"
+    TRAINING_ORDER_AGE_COMPLETED_SOURCE_WINDOW = (
+        "training_order_age_completed_source_window"
     )
-    TRAINING_ORDER_LAYER2_EDUCATION_EXACT_SOURCE_WINDOW = (
-        "training_order_layer2_education_exact_source_window"
+    TRAINING_ORDER_AGE_EDU_COMPLETED_SOURCE_WINDOW = (
+        "training_order_age_edu_completed_source_window"
     )
-    TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE_SOURCE_WINDOW = (
-        "training_order_layer3_activity_task_type_source_window"
+    TRAINING_ORDER_AGE_EDU_TASK_COMPLETED_SOURCE_WINDOW = (
+        "training_order_age_edu_task_completed_source_window"
     )
     TRAINING_ORDER_DUAL_WINDOW = "training_order_dual_window"
     TRAINING_ORDER_LOCAL_SAMPLING_DUAL_WINDOW = "training_order_local_sampling_dual_window"
-    TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW = "training_order_age_only_dual_window"
-    TRAINING_ORDER_LAYER1_AGE_COMPLETION_DUAL_WINDOW = (
-        "training_order_layer1_age_completion_dual_window"
+    TRAINING_ORDER_AGE_DUAL_WINDOW = "training_order_age_dual_window"
+    TRAINING_ORDER_AGE_EDU_DUAL_WINDOW = "training_order_age_edu_dual_window"
+    TRAINING_ORDER_AGE_COMPLETED_DUAL_WINDOW = (
+        "training_order_age_completed_dual_window"
     )
-    TRAINING_ORDER_LAYER2_EDUCATION_EXACT_DUAL_WINDOW = (
-        "training_order_layer2_education_exact_dual_window"
+    TRAINING_ORDER_AGE_EDU_COMPLETED_DUAL_WINDOW = (
+        "training_order_age_edu_completed_dual_window"
     )
-    TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE_DUAL_WINDOW = (
-        "training_order_layer3_activity_task_type_dual_window"
+    TRAINING_ORDER_AGE_EDU_TASK_COMPLETED_DUAL_WINDOW = (
+        "training_order_age_edu_task_completed_dual_window"
     )
 
 

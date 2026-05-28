@@ -103,6 +103,8 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
@@ -3502,7 +3504,7 @@ class KgRepositoryTest(unittest.TestCase):
             },
         )
 
-    def test_get_pattern_randomized_paths_selects_training_order_age_only_query(
+    def test_get_pattern_randomized_paths_selects_training_order_age_query(
         self,
     ) -> None:
         mock_client = Mock()
@@ -3511,7 +3513,7 @@ class KgRepositoryTest(unittest.TestCase):
 
         result = repository.get_pattern_randomized_paths(
             pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-            query_family=PatternQueryFamily.TRAINING_ORDER_AGE_ONLY_SOURCE_WINDOW,
+            query_family=PatternQueryFamily.TRAINING_ORDER_AGE_SOURCE_WINDOW,
             patient_id=" 30010096 ",
             start_date=" 2026-05-11 ",
             end_date=" 2026-05-25 ",
@@ -3522,6 +3524,35 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertEqual(result, [{"row": {"p": {"id": "30010096"}}}])
         mock_client.run_query.assert_called_once_with(
             query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2026-05-11",
+                "end_date": "2026-05-25",
+                "per_g": 3,
+                "limit": 100,
+            },
+        )
+
+    def test_get_pattern_randomized_paths_selects_training_order_age_edu_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"p": {"id": "30010096"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_randomized_paths(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            query_family=PatternQueryFamily.TRAINING_ORDER_AGE_EDU_SOURCE_WINDOW,
+            patient_id="30010096",
+            start_date="2026-05-11",
+            end_date="2026-05-25",
+            per_group=3,
+            limit=100,
+        )
+
+        self.assertEqual(result, [{"row": {"p": {"id": "30010096"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
             parameters={
                 "patient_id": "30010096",
                 "start_date": "2026-05-11",
@@ -3560,6 +3591,35 @@ class KgRepositoryTest(unittest.TestCase):
             },
         )
 
+    def test_get_pattern_randomized_paths_selects_training_order_age_edu_dual_window_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [{"row": {"p": {"id": "30010096"}}}]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_randomized_paths(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            query_family=PatternQueryFamily.TRAINING_ORDER_AGE_EDU_DUAL_WINDOW,
+            patient_id="30010096",
+            start_date="2026-05-11",
+            end_date="2026-05-25",
+            per_group=3,
+            limit=100,
+        )
+
+        self.assertEqual(result, [{"row": {"p": {"id": "30010096"}}}])
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2026-05-11",
+                "end_date": "2026-05-25",
+                "per_g": 3,
+                "limit": 100,
+            },
+        )
+
     def test_get_pattern_randomized_paths_maps_entity_layer1_to_age_only_query(
         self,
     ) -> None:
@@ -3569,7 +3629,7 @@ class KgRepositoryTest(unittest.TestCase):
 
         result = repository.get_pattern_randomized_paths(
             pattern=PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
-            query_family="training_order_layer1_age_completion_source_window",
+            query_family="training_order_age_completed_source_window",
             patient_id="30010096",
             start_date="2026-05-11",
             end_date="2026-05-25",
@@ -3598,7 +3658,7 @@ class KgRepositoryTest(unittest.TestCase):
 
         result = repository.get_pattern_randomized_paths(
             pattern=PathPattern.PATIENT_TASKSET_DISEASE_TASKSET_PATIENT,
-            query_family="training_order_layer1_age_completion_dual_window",
+            query_family="training_order_age_completed_dual_window",
             patient_id="30010096",
             start_date="2026-05-11",
             end_date="2026-05-25",
@@ -3627,7 +3687,7 @@ class KgRepositoryTest(unittest.TestCase):
 
         result = repository.get_pattern_randomized_paths(
             pattern=PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
-            query_family="training_order_layer3_activity_task_type_source_window",
+            query_family="training_order_age_edu_task_completed_source_window",
             patient_id="30010096",
             start_date="2026-05-11",
             end_date="2026-05-25",
@@ -3656,7 +3716,7 @@ class KgRepositoryTest(unittest.TestCase):
 
         result = repository.get_pattern_randomized_paths(
             pattern=PathPattern.PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT,
-            query_family="training_order_layer3_activity_task_type_dual_window",
+            query_family="training_order_age_edu_task_completed_dual_window",
             patient_id="30010096",
             start_date="2026-05-11",
             end_date="2026-05-25",

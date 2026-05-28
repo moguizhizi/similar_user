@@ -5,10 +5,10 @@ BASE_DATE="2026-05-25"
 PATIENT_IDS_FILE="data/patient_ids/base_2026-05-25/patients_active_2026-05-25.txt"
 
 QUERY_FAMILIES=(
-  "training_order_age_only_source_window"
-  "training_order_layer1_age_completion_source_window"
-  "training_order_layer2_education_exact_source_window"
-  "training_order_layer3_activity_task_type_source_window"
+  "training_order_age_source_window"
+  "training_order_age_completed_source_window"
+  "training_order_age_edu_completed_source_window"
+  "training_order_age_edu_task_completed_source_window"
 )
 
 failed_count=0

@@ -66,6 +66,20 @@ def _require_candidate_taskset_date_window(query: str) -> str:
         )
     )
 
+
+def _require_task_game_training_order_conditions(
+    query: str,
+    conditions: tuple[str, ...],
+) -> str:
+    """Add source/candidate TaskInstanceSet conditions to a task-game path query."""
+    if not conditions:
+        return query
+    anchor = "    date(s1.`训练日期`) < date($end_date)"
+    replacement = anchor + " AND\n" + " AND\n".join(
+        f"    {condition}" for condition in conditions
+    )
+    return query.replace(anchor, replacement, 1)
+
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY = """
 MATCH path =
 (p:Patient {id: $patient_id})
@@ -644,6 +658,68 @@ UNWIND rows AS row
 RETURN row
 LIMIT $limit
 """.strip()
+
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = (
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY
+)
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_task_game_training_order_conditions(
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+    ),
+)
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_task_game_training_order_conditions(
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        "s1.`执行学历` IS NOT NULL",
+        "s2.`执行学历` IS NOT NULL",
+        "s1.`执行学历` = s2.`执行学历`",
+    ),
+)
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_task_game_training_order_conditions(
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        'i1.`结果` = "完成"',
+        'i2.`结果` = "完成"',
+    ),
+)
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER2_EDUCATION_EXACT_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_task_game_training_order_conditions(
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        "s1.`执行学历` IS NOT NULL",
+        "s2.`执行学历` IS NOT NULL",
+        "s1.`执行学历` = s2.`执行学历`",
+        'i1.`结果` = "完成"',
+        'i2.`结果` = "完成"',
+    ),
+)
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER3_ACTIVITY_TASK_TYPE_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_task_game_training_order_conditions(
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    (
+        "s1.`执行年龄` IS NOT NULL",
+        "s2.`执行年龄` IS NOT NULL",
+        "abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5",
+        "s1.`执行学历` IS NOT NULL",
+        "s2.`执行学历` IS NOT NULL",
+        "s1.`执行学历` = s2.`执行学历`",
+        'i1.`结果` = "完成"',
+        'i2.`结果` = "完成"',
+        'i1.`活跃` = "是"',
+        'i2.`活跃` = "是"',
+        "i1.`任务类型` = i2.`任务类型`",
+    ),
+)
 
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY = """
 MATCH path =
@@ -1626,6 +1702,9 @@ PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOM
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_taskset_total_score(
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY
 )
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_taskset_total_score(
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY
+)
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_taskset_total_score(
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY
 )
@@ -1707,6 +1786,9 @@ PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_DUAL_W
 )
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_candidate_taskset_date_window(
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_ONLY_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY
+)
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_candidate_taskset_date_window(
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_AGE_EDUCATION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY
 )
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY = _require_candidate_taskset_date_window(
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LAYER1_AGE_COMPLETION_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY

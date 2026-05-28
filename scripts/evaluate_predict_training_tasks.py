@@ -68,6 +68,7 @@ from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
 
 LOGGER = get_logger(__name__)
 DEFAULT_OUTPUT_DIR = Path("data/evaluation")
+DEFAULT_SCORE_CURL_FILE = "training_task_score_requests.sh"
 
 
 def parse_args() -> argparse.Namespace:
@@ -119,16 +120,18 @@ def parse_args() -> argparse.Namespace:
             "training_order_source_window",
             "date_window",
             "training_order_local_sampling_source_window",
-            "training_order_age_only_source_window",
-            "training_order_layer1_age_completion_source_window",
-            "training_order_layer2_education_exact_source_window",
-            "training_order_layer3_activity_task_type_source_window",
+            "training_order_age_source_window",
+            "training_order_age_edu_source_window",
+            "training_order_age_completed_source_window",
+            "training_order_age_edu_completed_source_window",
+            "training_order_age_edu_task_completed_source_window",
             "training_order_dual_window",
             "training_order_local_sampling_dual_window",
-            "training_order_age_only_dual_window",
-            "training_order_layer1_age_completion_dual_window",
-            "training_order_layer2_education_exact_dual_window",
-            "training_order_layer3_activity_task_type_dual_window",
+            "training_order_age_dual_window",
+            "training_order_age_edu_dual_window",
+            "training_order_age_completed_dual_window",
+            "training_order_age_edu_completed_dual_window",
+            "training_order_age_edu_task_completed_dual_window",
         ),
         help=(
             "Query family for paired-statistics patterns. Defaults to training_order_source_window "
@@ -1028,6 +1031,46 @@ def write_outputs(
     return summary_path, details_path
 
 
+def write_score_curl_commands(
+    details: list[dict[str, Any]],
+    *,
+    output_dir: str | Path,
+    curl_file: str = DEFAULT_SCORE_CURL_FILE,
+) -> Path | None:
+    """Write score-service curl commands captured in per-patient details."""
+    blocks: list[str] = []
+    for detail in details:
+        validation = detail.get("training_task_score_validation")
+        if not isinstance(validation, dict):
+            continue
+        for label, exchange_name in (
+            ("kg", "kg_score_exchange"),
+            ("csv", "csv_score_exchange"),
+        ):
+            exchange = validation.get(exchange_name)
+            if not isinstance(exchange, dict):
+                continue
+            curl_command = exchange.get("request_curl")
+            if not isinstance(curl_command, str) or not curl_command.strip():
+                continue
+            blocks.append(
+                "\n".join(
+                    [
+                        f"# patient_id={detail.get('patient_id')} base_date={detail.get('base_date')} source={label}",
+                        curl_command.strip(),
+                    ]
+                )
+            )
+    if not blocks:
+        return None
+
+    resolved_output_dir = Path(output_dir)
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    curl_path = resolved_output_dir / curl_file
+    curl_path.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+    return curl_path
+
+
 def write_analysis_output(
     analysis: dict[str, Any],
     *,
@@ -1367,6 +1410,10 @@ def main() -> int:
             summary_file=args.summary_file,
             details_file=args.details_file,
         )
+        score_curl_path = write_score_curl_commands(
+            details,
+            output_dir=resolved_output_dir,
+        )
         analysis_path = write_analysis_output(
             analysis,
             output_dir=resolved_output_dir,
@@ -1388,6 +1435,8 @@ def main() -> int:
         analysis_path,
         round(time.perf_counter() - started_at, 3),
     )
+    if score_curl_path is not None:
+        LOGGER.info("Wrote training-task score curl commands to %s", score_curl_path)
     LOGGER.info(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
     return 0
 
