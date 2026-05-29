@@ -32,7 +32,9 @@ METRIC_FIELDS = (
     "micro_precision",
     "macro_recall",
     "macro_f1",
-    "avg_elapsed_seconds",
+    "avg_prediction_elapsed_seconds",
+    "p95_prediction_elapsed_seconds",
+    "avg_validation_elapsed_seconds",
 )
 
 
@@ -351,7 +353,12 @@ def pick_summary_fields(summary: dict[str, Any]) -> dict[str, Any]:
         "micro_precision",
         "micro_recall",
         "micro_f1",
+        "avg_prediction_elapsed_seconds",
+        "p95_prediction_elapsed_seconds",
+        "avg_validation_elapsed_seconds",
+        "p95_validation_elapsed_seconds",
         "avg_elapsed_seconds",
+        "p95_elapsed_seconds",
         "candidate_training_tasks_actual_missing_rate",
         "similar_user_game_counts_actual_missing_rate",
     )
@@ -383,6 +390,9 @@ def build_markdown_report(analysis: dict[str, Any]) -> str:
         f"- Best experiment: `{best.get('name')}`",
         f"- Second-best experiment: `{second_best.get('name')}`",
         f"- Baseline experiment: `{baseline.get('name')}`",
+        "- Time metrics in the comparison table use prediction-only elapsed time; "
+        "`avg_validation_elapsed_seconds` is shown separately and is not included in "
+        "`avg_prediction_elapsed_seconds`.",
         "",
         "## Metric Comparison: Best vs Baseline",
         "",

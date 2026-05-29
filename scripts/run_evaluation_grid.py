@@ -54,6 +54,10 @@ LEADERBOARD_FIELDS = (
     "evaluated_count",
     "success_count",
     "failed_count",
+    "avg_prediction_elapsed_seconds",
+    "p95_prediction_elapsed_seconds",
+    "avg_validation_elapsed_seconds",
+    "p95_validation_elapsed_seconds",
     "avg_elapsed_seconds",
     "summary_path",
     "overrides",
@@ -549,7 +553,11 @@ def build_leaderboard_sort_key(row: dict[str, Any], rank_by: str) -> tuple[Any, 
         -numeric_metric(row.get("micro_f1")),
         -numeric_metric(row.get("task_hit_rate")),
         -numeric_metric(row.get("micro_precision")),
-        numeric_metric(row.get("avg_elapsed_seconds")),
+        numeric_metric(
+            row.get("avg_prediction_elapsed_seconds")
+            if row.get("avg_prediction_elapsed_seconds") is not None
+            else row.get("avg_elapsed_seconds")
+        ),
         str(row.get("name") or ""),
     )
 

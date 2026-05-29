@@ -293,6 +293,8 @@ def evaluate_patient(
             actual_game_ids,
             prediction_result,
         )
+        prediction_elapsed_seconds = round(time.perf_counter() - started_at, 3)
+        validation_started_at = time.perf_counter()
         validation_result = validate_training_task_recommendation(
             validation_mode=validation_mode,
             prediction_result=prediction_result,
@@ -302,6 +304,10 @@ def evaluate_patient(
             score_url=evaluation_settings.score_validation_url,
             csv_path=evaluation_settings.algorithm_request_results_csv,
             timeout_seconds=evaluation_settings.score_validation_timeout,
+        )
+        validation_elapsed_seconds = round(
+            time.perf_counter() - validation_started_at,
+            3,
         )
     except EmptyPathResultsError as exc:
         detail = build_not_evaluable_detail(
@@ -375,6 +381,8 @@ def evaluate_patient(
         "actual_task_count": validation_result["actual_task_count"],
         "matched_task_count": validation_result["matched_task_count"],
         "prompt_path": str(prompt_path) if prompt_path is not None else None,
+        "prediction_elapsed_seconds": prediction_elapsed_seconds,
+        "validation_elapsed_seconds": validation_elapsed_seconds,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
     }
 
@@ -636,6 +644,16 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         for detail in details
         if isinstance(detail.get("elapsed_seconds"), int | float)
     ]
+    prediction_elapsed_seconds = [
+        float(detail["prediction_elapsed_seconds"])
+        for detail in details
+        if isinstance(detail.get("prediction_elapsed_seconds"), int | float)
+    ]
+    validation_elapsed_seconds = [
+        float(detail["validation_elapsed_seconds"])
+        for detail in details
+        if isinstance(detail.get("validation_elapsed_seconds"), int | float)
+    ]
     similar_user_game_counts_task_counts = [
         int(detail["similar_user_game_counts_task_count"])
         for detail in evaluated_details
@@ -736,6 +754,22 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         ),
         "avg_elapsed_seconds": round(average_numbers(elapsed_seconds), 4),
         "p95_elapsed_seconds": round(percentile(elapsed_seconds, 0.95), 4),
+        "avg_prediction_elapsed_seconds": round(
+            average_numbers(prediction_elapsed_seconds),
+            4,
+        ),
+        "p95_prediction_elapsed_seconds": round(
+            percentile(prediction_elapsed_seconds, 0.95),
+            4,
+        ),
+        "avg_validation_elapsed_seconds": round(
+            average_numbers(validation_elapsed_seconds),
+            4,
+        ),
+        "p95_validation_elapsed_seconds": round(
+            percentile(validation_elapsed_seconds, 0.95),
+            4,
+        ),
     }
 
 
@@ -815,6 +849,12 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
                     "candidate_training_tasks_count"
                 ),
                 "elapsed_seconds": detail.get("elapsed_seconds"),
+                "prediction_elapsed_seconds": detail.get(
+                    "prediction_elapsed_seconds"
+                ),
+                "validation_elapsed_seconds": detail.get(
+                    "validation_elapsed_seconds"
+                ),
             }
         )
 

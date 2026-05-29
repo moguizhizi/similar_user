@@ -1,0 +1,79 @@
+neo4j:
+  uri: "bolt://10.30.1.121:7687"
+  username: "neo4j"
+  password: "password"
+  database: "neo4j"
+
+llm:
+  base_url: "http://10.30.1.121:7999"
+  api_key: ""
+  model: "qwen3_5"
+  timeout: 60
+  max_retries: 3
+  backoff_factor: 1.5
+
+query:
+  graph_path_limit:
+    per_g_strategy: "band"
+    bands:
+      - max_g_count: 49
+        per_g: 10
+      - max_g_count: 199
+        per_g: 6
+      - per_g: 4
+    max_limit_source: "total_paths"
+  pattern_path_storage:
+    output_dir: "data/pattern_paths"
+  patient_path:
+    window_days: 90
+  score_pattern_paths:
+    top_k: 150
+  candidate_ranking:
+    patterns:
+      - "patient_game_patient"
+      - "patient_disease_patient"
+      - "patient_symptom_patient"
+      - "patient_unknown_patient"
+    candidate_top_k: 10
+    total_score_match_top_k: 1
+    disease_course_window_days: 14
+    scoring:
+      common_game_score_similarity: false
+      game_similarity_with_diversity_score: false
+      disease_course_secondary_ability: true
+      set_same:
+        disease: false
+        symptom: false
+        unknown: false
+  training_task_prediction:
+    task_top_k: 7
+    prompt_candidate_compression_enabled: false
+    profile_candidate_training_window_days: null
+    similar_user_game_counts_weighting_enabled: false
+    similar_user_game_counts_weighted_sort_enabled: false
+  training_task_evaluation:
+    validation_mode: "score"
+    score_validation_url: "http://172.21.133.142:5008/training_task_score"
+    algorithm_request_results_csv: "/home/temp/dataset/20260525_Algorithm_Request_Results/20260525_Algorithm_Request_Results.csv"
+    score_validation_timeout: 10
+  direct_entity_task_prediction:
+    prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1"
+  direct_entity_path:
+    window_days: 180
+    direct_path_limit: 1000
+    index_path: "data/pattern_paths/direct_entity_path_index.json"
+  direct_entity_path_scoring:
+    use_when_patient_exists: false
+
+similarity:
+  top_k: 20
+  strategy: "graph"
+  embedding:
+    enabled: false
+    dimension: 64
+
+direct_path_cache:
+  enabled: false
+  sqlite_path: "data/direct_path_cache/direct_paths.sqlite"
+  incremental_enabled: true
+  overlap_days: 1
