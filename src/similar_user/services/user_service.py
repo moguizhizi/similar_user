@@ -988,6 +988,40 @@ class UserService:
             )
         )
 
+    def get_profile_matched_exclusive_tasks(
+        self,
+        *,
+        base_date: str,
+        age: int | None,
+        min_age: int | None,
+        max_age: int | None,
+        gender: str | None,
+        education: str | None,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return fallback exclusive tasks matching available profile fields."""
+        return self.kg_repository.get_profile_matched_exclusive_tasks(
+            base_date=base_date,
+            age=age,
+            min_age=min_age,
+            max_age=max_age,
+            gender=gender,
+            education=education,
+            limit=limit,
+        )
+
+    def get_global_popular_exclusive_tasks(
+        self,
+        *,
+        base_date: str,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return globally popular exclusive tasks for fallback recommendation."""
+        return self.kg_repository.get_global_popular_exclusive_tasks(
+            base_date=base_date,
+            limit=limit,
+        )
+
     def _load_window_statistics(
         self,
         patient_id: str,

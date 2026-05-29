@@ -1448,6 +1448,78 @@ class KgRepository:
             },
         )
 
+    def get_profile_matched_exclusive_tasks(
+        self,
+        *,
+        base_date: str,
+        age: int | None,
+        min_age: int | None,
+        max_age: int | None,
+        gender: str | None,
+        education: str | None,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive tasks matching available profile fields before base_date."""
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if age is not None and (
+            not isinstance(age, int) or isinstance(age, bool) or age < 0
+        ):
+            raise ValueError("age must be a non-negative integer or None.")
+        if min_age is not None and (
+            not isinstance(min_age, int) or isinstance(min_age, bool) or min_age < 0
+        ):
+            raise ValueError("min_age must be a non-negative integer or None.")
+        if max_age is not None and (
+            not isinstance(max_age, int) or isinstance(max_age, bool) or max_age < 0
+        ):
+            raise ValueError("max_age must be a non-negative integer or None.")
+        if age is not None and (min_age is None or max_age is None):
+            raise ValueError("min_age and max_age are required when age is supplied.")
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or limit <= 0
+        ):
+            raise ValueError("limit must be a positive integer.")
+
+        spec = get_graph_query_spec("profile_matched_exclusive_tasks")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "base_date": normalized_base_date,
+                "age": age,
+                "min_age": min_age,
+                "max_age": max_age,
+                "gender": self._normalize_optional_string(gender, "gender"),
+                "education": self._normalize_optional_string(education, "education"),
+                "limit": limit,
+            },
+        )
+
+    def get_global_popular_exclusive_tasks(
+        self,
+        *,
+        base_date: str,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return globally popular exclusive tasks before base_date."""
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or limit <= 0
+        ):
+            raise ValueError("limit must be a positive integer.")
+
+        spec = get_graph_query_spec("global_popular_exclusive_tasks")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "base_date": normalized_base_date,
+                "limit": limit,
+            },
+        )
+
     def get_pattern_date_window_statistics(
         self,
         pattern: PathPattern | str,

@@ -41,6 +41,9 @@ from config.settings import load_query_settings  # noqa: E402
 from similar_user.data_access.kg_repository import KgRepository  # noqa: E402
 from similar_user.data_access.neo4j_client import Neo4jClient  # noqa: E402
 from similar_user.services.llm_client import LlmClient  # noqa: E402
+from similar_user.services.direct_entity_fallback_prediction import (  # noqa: E402
+    DirectEntityFallbackPredictionService,
+)
 from similar_user.services.task_prediction import (  # noqa: E402
     TrainingTaskPredictionService,
 )
@@ -161,51 +164,79 @@ def predict_training_tasks_from_direct_entity(
         task_top_k,
     )
 
-    direct_score_result = score_direct_entity_paths(
-        config_path=resolved_config_path,
-        patient_id=normalized_patient_id,
-        base_date=base_date,
-        age=age,
-        education=education,
-        gender=gender,
-        disease_ids=disease_ids or [],
-        symptom_ids=symptom_ids or [],
-        unknown_ids=unknown_ids or [],
-        top_k=query_settings.score_pattern_paths.top_k,
-        force_manual_input=True,
-    )
-    LOGGER.info(
-        "Scored direct entity paths: patient_id=%s, source_count=%s, path_count=%s, scored_path_count=%s, missing_source_count=%s",
-        normalized_patient_id,
-        direct_score_result.get("source_count"),
-        direct_score_result.get("path_count"),
-        direct_score_result.get("scored_path_count"),
-        len(direct_score_result.get("missing_sources") or []),
-    )
-    missing_sources = direct_score_result.get("missing_sources")
-    if isinstance(missing_sources, list) and missing_sources:
-        LOGGER.warning(
-            "Some direct entity sources were not found in local path cache: patient_id=%s, missing_sources=%s",
+    has_direct_entities = bool(disease_ids or symptom_ids or unknown_ids)
+    direct_score_result: dict[str, Any] = {
+        "should_score": False,
+        "reason": "missing_entity_input",
+        "path_count": 0,
+        "scored_path_count": 0,
+        "top_k": query_settings.score_pattern_paths.top_k,
+        "missing_sources": [],
+    }
+    direct_score_output_paths: list[dict[str, Path]] = []
+    candidate_result: dict[str, Any] = {
+        "source_id": normalized_patient_id,
+        "source_parameter": "manual_profile",
+        "candidate_top_k": candidate_top_k,
+        "path_count": 0,
+        "scored_path_count": 0,
+        "candidate_count": 0,
+        "pre_score_candidate_count": 0,
+        "ranking": "direct_entity_best_score_avg_score_match_count",
+        "candidates": [],
+    }
+
+    if has_direct_entities:
+        direct_score_result = score_direct_entity_paths(
+            config_path=resolved_config_path,
+            patient_id=normalized_patient_id,
+            base_date=base_date,
+            age=age,
+            education=education,
+            gender=gender,
+            disease_ids=disease_ids or [],
+            symptom_ids=symptom_ids or [],
+            unknown_ids=unknown_ids or [],
+            top_k=query_settings.score_pattern_paths.top_k,
+            force_manual_input=True,
+        )
+        LOGGER.info(
+            "Scored direct entity paths: patient_id=%s, source_count=%s, path_count=%s, scored_path_count=%s, missing_source_count=%s",
             normalized_patient_id,
-            missing_sources,
+            direct_score_result.get("source_count"),
+            direct_score_result.get("path_count"),
+            direct_score_result.get("scored_path_count"),
+            len(direct_score_result.get("missing_sources") or []),
         )
-    direct_score_output_paths = save_scored_direct_entity_result(
-        direct_score_result,
-        scored_paths_dir,
-    )
-    candidate_result = (
-        SimilarUserCandidateService()
-        .aggregate_candidates_from_direct_entity_scored_result(
+        missing_sources = direct_score_result.get("missing_sources")
+        if isinstance(missing_sources, list) and missing_sources:
+            LOGGER.warning(
+                "Some direct entity sources were not found in local path cache: patient_id=%s, missing_sources=%s",
+                normalized_patient_id,
+                missing_sources,
+            )
+        direct_score_output_paths = save_scored_direct_entity_result(
             direct_score_result,
-            candidate_top_k=candidate_top_k,
+            scored_paths_dir,
         )
-    )
-    LOGGER.info(
-        "Aggregated direct entity candidates: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s",
-        normalized_patient_id,
-        candidate_result.get("pre_score_candidate_count"),
-        candidate_result.get("candidate_count"),
-    )
+        candidate_result = (
+            SimilarUserCandidateService()
+            .aggregate_candidates_from_direct_entity_scored_result(
+                direct_score_result,
+                candidate_top_k=candidate_top_k,
+            )
+        )
+        LOGGER.info(
+            "Aggregated direct entity candidates: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s",
+            normalized_patient_id,
+            candidate_result.get("pre_score_candidate_count"),
+            candidate_result.get("candidate_count"),
+        )
+    else:
+        LOGGER.info(
+            "Skipping direct entity path scoring because no disease/symptom/unknown IDs were supplied: patient_id=%s",
+            normalized_patient_id,
+        )
 
     with Neo4jClient.from_config(resolved_config_path) as client:
         user_service = UserService(
@@ -214,6 +245,49 @@ def predict_training_tasks_from_direct_entity(
                 config_path=resolved_config_path,
             )
         )
+        if int(candidate_result.get("candidate_count") or 0) <= 0:
+            fallback_reason = (
+                "missing_entity_input"
+                if not has_direct_entities
+                else "no_direct_entity_candidates"
+            )
+            prediction_result = DirectEntityFallbackPredictionService(
+                user_service=user_service,
+            ).predict(
+                patient_id=normalized_patient_id,
+                base_date=base_date,
+                age=age,
+                education=education,
+                gender=gender,
+                task_top_k=task_top_k,
+                reason=fallback_reason,
+            )
+            LOGGER.info(
+                "Completed fallback task prediction: patient_id=%s, fallback_level=%s, predicted_task_count=%s",
+                normalized_patient_id,
+                prediction_result.get("candidate_source", {}).get("fallback_level"),
+                len(prediction_result.get("predicted_training_tasks") or []),
+            )
+            return {
+                "patient_id": normalized_patient_id,
+                "source_parameter": "manual_profile",
+                "base_date": base_date,
+                "config_path": str(resolved_config_path),
+                "direct_entity_scoring": {
+                    "should_score": direct_score_result.get("should_score"),
+                    "reason": direct_score_result.get("reason"),
+                    "path_count": direct_score_result.get("path_count"),
+                    "scored_path_count": direct_score_result.get("scored_path_count"),
+                    "top_k": direct_score_result.get("top_k"),
+                    "output_paths": [
+                        {key: str(value) for key, value in item.items()}
+                        for item in direct_score_output_paths
+                    ],
+                },
+                "direct_entity_candidate_result": candidate_result,
+                "training_task_prediction": prediction_result,
+            }
+
         llm_client = LlmClient.from_config(resolved_config_path) if use_llm else None
         prediction_service = TrainingTaskPredictionService(
             user_service=user_service,

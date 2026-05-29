@@ -10,6 +10,7 @@ from .cypher_queries import (
     DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISTINCT_TRAINING_GAMES_QUERY,
+    GLOBAL_POPULAR_EXCLUSIVE_TASKS_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_DATE_RANGE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_END_DATE_QUERY,
     PATIENT_DISEASE_SET_COMPARISON_BY_START_DATE_QUERY,
@@ -46,6 +47,7 @@ from .cypher_queries import (
     PATIENT_IDS_WITH_TRAINING_ON_DATE_LIMIT_QUERY,
     PATIENT_IDS_WITH_TRAINING_ON_DATE_QUERY,
     PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+    PROFILE_MATCHED_EXCLUSIVE_TASKS_QUERY,
     SOURCE_PATIENT_IDS_WITH_SECONDARY_ABILITY_SCORES_QUERY,
     SYMPTOM_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     PATIENT_SYMPTOM_SET_COMPARISON_BY_DATE_RANGE_QUERY,
@@ -78,6 +80,7 @@ class GraphQueryCategory(str, Enum):
     PATIENT_ENTITY_COLLECTION = "patient_entity_collection"
     PATIENT_SET_COMPARISON = "patient_set_comparison"
     PATIENT_SCORE_COMPARISON = "patient_score_comparison"
+    FALLBACK_TASK_RECOMMENDATION = "fallback_task_recommendation"
 
 
 @dataclass(frozen=True)
@@ -377,6 +380,43 @@ PATIENT_TRAINING_HISTORY_SPECS = (
         ),
         row_fields=("trainingDate", "g"),
         query=PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+    ),
+)
+
+FALLBACK_TASK_RECOMMENDATION_SPECS = (
+    _spec(
+        name="profile_matched_exclusive_tasks",
+        category=GraphQueryCategory.FALLBACK_TASK_RECOMMENDATION,
+        description="按年龄、性别、学历和日期查询兜底专属训练任务",
+        source_label="TaskInstanceSet",
+        source_parameters=(
+            "base_date",
+            "age",
+            "min_age",
+            "max_age",
+            "gender",
+            "education",
+            "limit",
+        ),
+        path_shape=(
+            "(:Patient)--(s:TaskInstanceSet)--"
+            "(:TaskInstance {任务类型: '专属'})--(g:Game)"
+        ),
+        row_fields=("g", "support_count", "patient_count", "latest_training_date"),
+        query=PROFILE_MATCHED_EXCLUSIVE_TASKS_QUERY,
+    ),
+    _spec(
+        name="global_popular_exclusive_tasks",
+        category=GraphQueryCategory.FALLBACK_TASK_RECOMMENDATION,
+        description="按日期查询全局热门专属训练任务",
+        source_label="TaskInstanceSet",
+        source_parameters=("base_date", "limit"),
+        path_shape=(
+            "(:Patient)--(s:TaskInstanceSet)--"
+            "(:TaskInstance {任务类型: '专属'})--(g:Game)"
+        ),
+        row_fields=("g", "support_count", "patient_count", "latest_training_date"),
+        query=GLOBAL_POPULAR_EXCLUSIVE_TASKS_QUERY,
     ),
 )
 
@@ -863,6 +903,7 @@ GRAPH_QUERY_SPEC_LIST = (
     UNKNOWN_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_SPEC,
     *PATIENT_IDENTITY_SPECS,
     *PATIENT_TRAINING_HISTORY_SPECS,
+    *FALLBACK_TASK_RECOMMENDATION_SPECS,
     *PATIENT_GAME_COLLECTION_SPECS,
     *PATIENT_ENTITY_COLLECTION_SPECS,
     *PATIENT_SET_COMPARISON_SPECS,

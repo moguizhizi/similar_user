@@ -64,6 +64,13 @@
 | 查询单个症状 direct path 最新训练日期 | `SYMPTOM_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY` | `pattern_paths.py` | `source_id` | `latest_training_date` |
 | 查询单个 unknown direct path 最新训练日期 | `UNKNOWN_TASKSET_PATIENT_LATEST_TRAINING_DATE_QUERY` | `pattern_paths.py` | `source_id` | `latest_training_date` |
 
+### 兜底任务推荐
+
+| 场景 | Query | 文件 | 主要参数 | 返回 |
+|---|---|---|---|---|
+| 按年龄、性别、学历和日期查询兜底专属训练任务 | `PROFILE_MATCHED_EXCLUSIVE_TASKS_QUERY` | `fallback_task_queries.py` | `base_date`, `age`, `min_age`, `max_age`, `gender`, `education`, `limit` | `g`, `support_count`, `patient_count`, `latest_training_date` |
+| 按日期查询全局热门专属训练任务 | `GLOBAL_POPULAR_EXCLUSIVE_TASKS_QUERY` | `fallback_task_queries.py` | `base_date`, `limit` | `g`, `support_count`, `patient_count`, `latest_training_date` |
+
 ### 两个患者的集合比较
 
 | 场景 | Query | 文件 | 主要参数 | 返回 |
@@ -276,6 +283,13 @@ Disease -- TaskInstanceSet -- Patient
 | `PATIENT_GAMES_BY_END_DATE_QUERY` | 查询患者早于 end_date 的游戏记录（不去重） | `patient_id`, `end_date` | `g` |
 | `PATIENT_GAMES_BY_START_DATE_QUERY` | 查询患者从某日期开始的游戏记录（不去重） | `patient_id`, `start_date` | `g` |
 | `PATIENT_GAMES_BY_DATE_RANGE_QUERY` | 查询患者左闭右开日期区间内的游戏记录（不去重） | `patient_id`, `start_date`, `end_date` | `g` |
+
+### `fallback_task_queries.py`
+
+| Query | 用途 | 主要参数 | 返回 |
+|---|---|---|---|
+| `PROFILE_MATCHED_EXCLUSIVE_TASKS_QUERY` | 按年龄、性别、学历和日期查询兜底专属训练任务 | `base_date`, `age`, `min_age`, `max_age`, `gender`, `education`, `limit` | `g`, `support_count`, `patient_count`, `latest_training_date` |
+| `GLOBAL_POPULAR_EXCLUSIVE_TASKS_QUERY` | 按日期查询全局热门专属训练任务 | `base_date`, `limit` | `g`, `support_count`, `patient_count`, `latest_training_date` |
 
 ### `patient_entity_queries.py`
 
