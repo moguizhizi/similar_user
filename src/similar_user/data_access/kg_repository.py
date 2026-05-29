@@ -1448,6 +1448,26 @@ class KgRepository:
             },
         )
 
+    def resolve_direct_entity_name(
+        self,
+        entity_name: str,
+    ) -> list[dict[str, object]]:
+        """Return Disease/Symptom/Unknown entities with an exact matching name."""
+        normalized_entity_name = self._normalize_required_string(
+            entity_name,
+            "entity_name",
+        )
+        spec = get_graph_query_spec("direct_entity_name_resolution")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={"entity_name": normalized_entity_name},
+        )
+
+    def get_direct_entity_alias_index(self) -> list[dict[str, object]]:
+        """Return Disease/Symptom/Unknown standard names and aliases."""
+        spec = get_graph_query_spec("direct_entity_alias_index")
+        return self.client.run_query(query=spec.query, parameters={})
+
     def get_profile_matched_exclusive_tasks(
         self,
         *,

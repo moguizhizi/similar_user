@@ -71,6 +71,13 @@
 | 按年龄、性别、学历和日期查询兜底专属训练任务 | `PROFILE_MATCHED_EXCLUSIVE_TASKS_QUERY` | `fallback_task_queries.py` | `base_date`, `age`, `min_age`, `max_age`, `gender`, `education`, `limit` | `g`, `support_count`, `patient_count`, `latest_training_date` |
 | 按日期查询全局热门专属训练任务 | `GLOBAL_POPULAR_EXCLUSIVE_TASKS_QUERY` | `fallback_task_queries.py` | `base_date`, `limit` | `g`, `support_count`, `patient_count`, `latest_training_date` |
 
+### Direct Entity 名称解析
+
+| 场景 | Query | 文件 | 主要参数 | 返回 |
+|---|---|---|---|---|
+| 按输入名称解析 Disease/Symptom/Unknown 实体 | `DIRECT_ENTITY_NAME_RESOLUTION_QUERY` | `direct_entity_resolution.py` | `entity_name` | `entity_type`, `entity_id`, `entity_name` |
+| 列出 Disease/Symptom/Unknown 的标准名和别名 | `DIRECT_ENTITY_ALIAS_INDEX_QUERY` | `direct_entity_resolution.py` | 无 | `entity_type`, `entity_id`, `entity_name`, `alias_label` |
+
 ### 两个患者的集合比较
 
 | 场景 | Query | 文件 | 主要参数 | 返回 |
@@ -290,6 +297,13 @@ Disease -- TaskInstanceSet -- Patient
 |---|---|---|---|
 | `PROFILE_MATCHED_EXCLUSIVE_TASKS_QUERY` | 按年龄、性别、学历和日期查询兜底专属训练任务 | `base_date`, `age`, `min_age`, `max_age`, `gender`, `education`, `limit` | `g`, `support_count`, `patient_count`, `latest_training_date` |
 | `GLOBAL_POPULAR_EXCLUSIVE_TASKS_QUERY` | 按日期查询全局热门专属训练任务 | `base_date`, `limit` | `g`, `support_count`, `patient_count`, `latest_training_date` |
+
+### `direct_entity_resolution.py`
+
+| Query | 用途 | 主要参数 | 返回 |
+|---|---|---|---|
+| `DIRECT_ENTITY_NAME_RESOLUTION_QUERY` | 按输入名称解析 Disease/Symptom/Unknown 实体 | `entity_name` | `entity_type`, `entity_id`, `entity_name` |
+| `DIRECT_ENTITY_ALIAS_INDEX_QUERY` | 列出 Disease/Symptom/Unknown 的标准名和别名 | 无 | `entity_type`, `entity_id`, `entity_name`, `alias_label` |
 
 ### `patient_entity_queries.py`
 

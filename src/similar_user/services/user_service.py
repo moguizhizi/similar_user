@@ -988,6 +988,17 @@ class UserService:
             )
         )
 
+    def resolve_direct_entity_name(
+        self,
+        entity_name: str,
+    ) -> list[dict[str, object]]:
+        """Resolve a user-entered entity name to Disease/Symptom/Unknown IDs."""
+        return self.kg_repository.resolve_direct_entity_name(entity_name)
+
+    def get_direct_entity_alias_index(self) -> list[dict[str, object]]:
+        """Return Disease/Symptom/Unknown standard names and aliases."""
+        return self.kg_repository.get_direct_entity_alias_index()
+
     def get_profile_matched_exclusive_tasks(
         self,
         *,

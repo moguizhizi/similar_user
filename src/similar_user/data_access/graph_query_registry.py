@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .cypher_queries import (
+    DIRECT_ENTITY_ALIAS_INDEX_QUERY,
+    DIRECT_ENTITY_NAME_RESOLUTION_QUERY,
     DISEASE_EDUCATION_AGE_EXCLUSIVE_TASK_GAME_QUERY,
     DISEASE_TASKSET_EXCLUSIVE_TASK_GAME_SAMPLED_PER_GAME_QUERY,
     DISEASE_TASKSET_TASK_GAME_SAMPLED_PER_GAME_QUERY,
@@ -81,6 +83,7 @@ class GraphQueryCategory(str, Enum):
     PATIENT_SET_COMPARISON = "patient_set_comparison"
     PATIENT_SCORE_COMPARISON = "patient_score_comparison"
     FALLBACK_TASK_RECOMMENDATION = "fallback_task_recommendation"
+    DIRECT_ENTITY_RESOLUTION = "direct_entity_resolution"
 
 
 @dataclass(frozen=True)
@@ -417,6 +420,29 @@ FALLBACK_TASK_RECOMMENDATION_SPECS = (
         ),
         row_fields=("g", "support_count", "patient_count", "latest_training_date"),
         query=GLOBAL_POPULAR_EXCLUSIVE_TASKS_QUERY,
+    ),
+)
+
+DIRECT_ENTITY_RESOLUTION_SPECS = (
+    _spec(
+        name="direct_entity_name_resolution",
+        category=GraphQueryCategory.DIRECT_ENTITY_RESOLUTION,
+        description="按输入名称解析 Disease/Symptom/Unknown 实体",
+        source_label="Disease|Symptom|Unknown",
+        source_parameters=("entity_name",),
+        path_shape="(Disease|Symptom|Unknown)",
+        row_fields=("entity_type", "entity_id", "entity_name"),
+        query=DIRECT_ENTITY_NAME_RESOLUTION_QUERY,
+    ),
+    _spec(
+        name="direct_entity_alias_index",
+        category=GraphQueryCategory.DIRECT_ENTITY_RESOLUTION,
+        description="列出 Disease/Symptom/Unknown 的标准名和别名",
+        source_label="Disease|Symptom|Unknown",
+        source_parameters=(),
+        path_shape="(Disease|Symptom|Unknown)",
+        row_fields=("entity_type", "entity_id", "entity_name", "alias_label"),
+        query=DIRECT_ENTITY_ALIAS_INDEX_QUERY,
     ),
 )
 
@@ -904,6 +930,7 @@ GRAPH_QUERY_SPEC_LIST = (
     *PATIENT_IDENTITY_SPECS,
     *PATIENT_TRAINING_HISTORY_SPECS,
     *FALLBACK_TASK_RECOMMENDATION_SPECS,
+    *DIRECT_ENTITY_RESOLUTION_SPECS,
     *PATIENT_GAME_COLLECTION_SPECS,
     *PATIENT_ENTITY_COLLECTION_SPECS,
     *PATIENT_SET_COMPARISON_SPECS,
