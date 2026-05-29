@@ -37,6 +37,25 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             "predict_training_tasks_analysis.json",
         )
         self.assertEqual(args.patient_list_dir, "data/patient_ids")
+        self.assertEqual(args.workers, 1)
+
+    def test_parse_args_accepts_workers(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "evaluate_predict_training_tasks.py",
+                "--patient-id",
+                "40",
+                "--base-date",
+                "2022-05-22",
+                "--workers",
+                "4",
+            ],
+        ):
+            args = evaluate_predict_training_tasks.parse_args()
+
+        self.assertEqual(args.workers, 4)
 
     def test_build_patient_ids_file_from_base_date_uses_export_path_rule(self) -> None:
         patient_ids_file = (
@@ -579,13 +598,18 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             ),
         )
 
+    @patch("scripts.evaluate_predict_training_tasks.load_query_settings")
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
     @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
     def test_evaluate_patient_uses_base_date_as_actual_label_window(
         self,
         mock_write_prompt: Mock,
         mock_predict: Mock,
+        mock_load_query_settings: Mock,
     ) -> None:
+        mock_load_query_settings.return_value = Mock(
+            training_task_evaluation=Mock(validation_mode="set")
+        )
         mock_predict.return_value = {
             "training_task_prediction": {
                 "similar_user_game_counts": [
@@ -726,13 +750,18 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             "2022-05-23",
         )
 
+    @patch("scripts.evaluate_predict_training_tasks.load_query_settings")
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
     @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
     def test_evaluate_patient_skips_prediction_without_actual_tasks(
         self,
         mock_write_prompt: Mock,
         mock_predict: Mock,
+        mock_load_query_settings: Mock,
     ) -> None:
+        mock_load_query_settings.return_value = Mock(
+            training_task_evaluation=Mock(validation_mode="set")
+        )
         user_service = Mock()
         user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = []
 
@@ -974,6 +1003,17 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 limit=0,
             )
 
+    def test_run_batch_evaluation_rejects_non_positive_workers(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "workers must be a positive integer, got 0.",
+        ):
+            evaluate_predict_training_tasks.run_batch_evaluation(
+                ["40"],
+                base_date="2022-05-22",
+                workers=0,
+            )
+
     def test_run_batch_evaluation_rejects_missing_patient_ids(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
@@ -983,6 +1023,45 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 [],
                 base_date="2022-05-22",
             )
+
+    @patch("scripts.evaluate_predict_training_tasks.Neo4jClient")
+    @patch("scripts.evaluate_predict_training_tasks.KgRepository")
+    @patch("scripts.evaluate_predict_training_tasks.UserService")
+    @patch("scripts.evaluate_predict_training_tasks.evaluate_patient")
+    def test_run_batch_evaluation_with_workers_preserves_patient_order(
+        self,
+        mock_evaluate_patient: Mock,
+        mock_user_service_class: Mock,
+        mock_repository_class: Mock,
+        mock_client_class: Mock,
+    ) -> None:
+        mock_client = Mock()
+        mock_client_class.from_config.return_value.__enter__.return_value = mock_client
+        mock_user_service = Mock()
+        mock_user_service_class.return_value = mock_user_service
+
+        def evaluate_side_effect(patient_id: str, **_: object) -> dict[str, object]:
+            return {"patient_id": patient_id, "status": "success_evaluated"}
+
+        mock_evaluate_patient.side_effect = evaluate_side_effect
+
+        details = evaluate_predict_training_tasks.run_batch_evaluation(
+            ["40", "41", "42"],
+            base_date="2022-05-22",
+            config_path="config/settings.yaml",
+            use_llm=False,
+            workers=2,
+        )
+
+        self.assertEqual(
+            [detail["patient_id"] for detail in details],
+            ["40", "41", "42"],
+        )
+        self.assertEqual(mock_evaluate_patient.call_count, 3)
+        mock_repository_class.assert_called_once_with(
+            client=mock_client,
+            config_path=evaluate_predict_training_tasks.Path("config/settings.yaml"),
+        )
 
     @patch("scripts.evaluate_predict_training_tasks.write_analysis_output")
     @patch("scripts.evaluate_predict_training_tasks.write_outputs")

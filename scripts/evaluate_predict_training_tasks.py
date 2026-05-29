@@ -10,6 +10,7 @@
 
     python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22
     python scripts/evaluate_predict_training_tasks.py --patient-id 40 --base-date 2022-05-22
+    python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --workers 4
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import math
 import sys
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -186,6 +188,15 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Evaluate at most this many patient IDs after loading them.",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "Number of patient evaluations to run concurrently. Defaults to 1 "
+            "for serial execution."
+        ),
     )
     return parser.parse_args()
 
@@ -1354,6 +1365,7 @@ def run_batch_evaluation(
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     limit: int | None = None,
+    workers: int = 1,
     save_prompt: bool = True,
     prompt_output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
 ) -> list[dict[str, Any]]:
@@ -1364,6 +1376,8 @@ def run_batch_evaluation(
     validation_mode = query_settings.training_task_evaluation.validation_mode
     if limit is not None and limit <= 0:
         raise ValueError(f"limit must be a positive integer, got {limit}.")
+    if workers <= 0:
+        raise ValueError(f"workers must be a positive integer, got {workers}.")
     if not patient_ids:
         raise ValueError("patient_ids must contain at least one patient ID.")
     details: list[dict[str, Any]] = []
@@ -1378,7 +1392,7 @@ def run_batch_evaluation(
         if limit is not None:
             resolved_patient_ids = resolved_patient_ids[:limit]
         LOGGER.info(
-            "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, validation_mode=%s",
+            "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, validation_mode=%s, workers=%s",
             len(resolved_patient_ids),
             base_date,
             patient_path_window_days,
@@ -1386,30 +1400,69 @@ def run_batch_evaluation(
             task_top_k,
             use_llm,
             validation_mode,
+            workers,
         )
-        for index, patient_id in enumerate(resolved_patient_ids, start=1):
-            detail = evaluate_patient(
-                patient_id,
-                base_date=base_date,
-                user_service=user_service,
-                pattern=pattern,
-                config_path=config_path,
-                skip_path_build=skip_path_build,
-                skip_path_scoring=skip_path_scoring,
-                query_family=query_family,
-                task_top_k=task_top_k,
-                use_llm=use_llm,
-                save_prompt=save_prompt,
-                prompt_output_dir=prompt_output_dir,
-            )
-            details.append(detail)
-            LOGGER.info(
-                "Evaluated prediction: index=%s/%s, patient_id=%s, status=%s",
-                index,
-                len(resolved_patient_ids),
-                patient_id,
-                detail.get("status"),
-            )
+        if workers == 1 or len(resolved_patient_ids) == 1:
+            for index, patient_id in enumerate(resolved_patient_ids, start=1):
+                detail = evaluate_patient(
+                    patient_id,
+                    base_date=base_date,
+                    user_service=user_service,
+                    pattern=pattern,
+                    config_path=config_path,
+                    skip_path_build=skip_path_build,
+                    skip_path_scoring=skip_path_scoring,
+                    query_family=query_family,
+                    task_top_k=task_top_k,
+                    use_llm=use_llm,
+                    save_prompt=save_prompt,
+                    prompt_output_dir=prompt_output_dir,
+                )
+                details.append(detail)
+                LOGGER.info(
+                    "Evaluated prediction: index=%s/%s, patient_id=%s, status=%s",
+                    index,
+                    len(resolved_patient_ids),
+                    patient_id,
+                    detail.get("status"),
+                )
+        else:
+            max_workers = min(workers, len(resolved_patient_ids))
+            details_by_index: dict[int, dict[str, Any]] = {}
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(
+                        evaluate_patient,
+                        patient_id,
+                        base_date=base_date,
+                        user_service=user_service,
+                        pattern=pattern,
+                        config_path=config_path,
+                        skip_path_build=skip_path_build,
+                        skip_path_scoring=skip_path_scoring,
+                        query_family=query_family,
+                        task_top_k=task_top_k,
+                        use_llm=use_llm,
+                        save_prompt=save_prompt,
+                        prompt_output_dir=prompt_output_dir,
+                    ): (index, patient_id)
+                    for index, patient_id in enumerate(resolved_patient_ids, start=1)
+                }
+                for future in as_completed(futures):
+                    index, patient_id = futures[future]
+                    detail = future.result()
+                    details_by_index[index] = detail
+                    LOGGER.info(
+                        "Evaluated prediction: index=%s/%s, patient_id=%s, status=%s",
+                        index,
+                        len(resolved_patient_ids),
+                        patient_id,
+                        detail.get("status"),
+                    )
+            details = [
+                details_by_index[index]
+                for index in range(1, len(resolved_patient_ids) + 1)
+            ]
     summary = summarize_evaluation_details(details)
     LOGGER.info(
         "Completed prediction evaluation batch: total_count=%s, evaluated_count=%s, not_evaluable_count=%s, failed_count=%s, task_hit_rate=%s, elapsed_seconds=%s",
@@ -1536,6 +1589,7 @@ def main() -> int:
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             limit=args.limit,
+            workers=args.workers,
             save_prompt=not args.no_save_prompt,
             prompt_output_dir=args.prompt_output_dir,
         )
