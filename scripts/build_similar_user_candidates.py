@@ -37,7 +37,11 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
-from config.settings import load_query_settings
+from config.settings import load_query_settings, load_user_cache_settings
+from similar_user.data_access.user_cache_index import (
+    UserCacheEntry,
+    UserCacheIndexStore,
+)
 from similar_user.data_access.kg_repository import KgRepository
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.data_access.pattern_registry import resolve_path_pattern
@@ -124,6 +128,7 @@ def build_similar_user_candidates(
     *,
     config_path: str | Path | None = None,
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    candidates_dir: str | Path = DEFAULT_CANDIDATES_DIR,
     disease_course_window_days: int | None = None,
     base_date: str | None = None,
     query_family: str | None = None,
@@ -147,6 +152,35 @@ def build_similar_user_candidates(
         resolved_disease_course_window_days,
         "disease_course_window_days",
     )
+    candidate_cache_context = build_candidate_cache_context(
+        resolved_config_path,
+        scored_key=scored_key,
+        disease_course_window_days=resolved_disease_course_window_days,
+    )
+    user_cache_context = build_topk_candidate_user_cache_context(
+        resolved_config_path,
+        patient_id=patient_id,
+        base_date=base_date,
+        query_family=query_family,
+        scored_key=scored_key,
+        candidate_cache_context=candidate_cache_context,
+    )
+    cached_result = load_cached_topk_candidate_result(
+        user_cache_context,
+        candidates_dir=candidates_dir,
+        request_base_date=base_date,
+    )
+    if cached_result is not None:
+        LOGGER.info(
+            "Loaded topK similar-user candidates from user cache: patient_id=%s, query_family=%s, cached_base_date=%s, request_base_date=%s, data_path=%s",
+            patient_id,
+            user_cache_context.get("query_family"),
+            user_cache_context.get("cached_base_date"),
+            base_date,
+            cached_result.get("user_cache_data_path"),
+        )
+        return cached_result
+
     selected_patterns = tuple(ranking_settings.patterns)
     LOGGER.info(
         "Starting similar-user candidate build from saved scored paths: patient_id=%s, patterns=%s, candidate_top_k=%s, disease_course_window_days=%s, config_path=%s, scored_paths_dir=%s",
@@ -221,11 +255,9 @@ def build_similar_user_candidates(
         result.setdefault("retrieval_context", {})[
             "disease_course_window_days"
         ] = resolved_disease_course_window_days
-        result["cache_context"] = build_candidate_cache_context(
-            resolved_config_path,
-            scored_key=scored_key,
-            disease_course_window_days=resolved_disease_course_window_days,
-        )
+        result["cache_context"] = candidate_cache_context
+        result["user_cache_context"] = user_cache_context
+        result["user_cache_hit"] = False
     LOGGER.info(
         "Completed similar-user candidate build: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s, scored_path_count=%s, disease_course_available_count=%s, disease_course_missing_count=%s, elapsed_seconds=%s",
         patient_id,
@@ -363,6 +395,7 @@ def save_similar_user_candidates_result(
     )
     _write_json_atomic(detail_path, build_similar_user_candidate_detail(result))
     _write_json_atomic(summary_path, build_similar_user_candidate_summary(result))
+    _register_topk_candidate_user_cache(result, detail_path, summary_path)
     LOGGER.debug(
         "Saved similar-user candidates result: source_id=%s, detail_path=%s, summary_path=%s",
         result.get("source_id"),
@@ -422,7 +455,7 @@ def _build_candidate_score_output(
                 score_details
             )
         score_candidates.append(score_candidate)
-    return {
+    output = {
         "source_id": result.get("source_id"),
         "source_parameter": result.get("source_parameter"),
         "candidate_top_k": result.get("candidate_top_k"),
@@ -431,6 +464,25 @@ def _build_candidate_score_output(
         "candidate_count": result.get("candidate_count"),
         "candidates": score_candidates,
     }
+    if include_score_details:
+        output.update(
+            {
+                "pattern": result.get("pattern"),
+                "patterns": result.get("patterns"),
+                "path_count": result.get("path_count"),
+                "scored_path_count": result.get("scored_path_count"),
+                "user_cache_context": result.get("user_cache_context"),
+                "user_cache_hit": result.get("user_cache_hit"),
+                "pre_score_candidate_count": result.get("pre_score_candidate_count"),
+                "disease_course_available_count": result.get(
+                    "disease_course_available_count"
+                ),
+                "disease_course_missing_count": result.get(
+                    "disease_course_missing_count"
+                ),
+            }
+        )
+    return output
 
 
 def build_candidate_key(scored_key: str, candidate_config_hash: str) -> str:
@@ -457,6 +509,122 @@ def build_candidate_cache_context(
         "candidate_config_hash": candidate_config_hash,
         "candidate_config": candidate_config,
     }
+
+
+def build_topk_candidate_user_cache_context(
+    config_path: str | Path,
+    *,
+    patient_id: str,
+    base_date: str | None,
+    query_family: str | None,
+    scored_key: str,
+    candidate_cache_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Build patient-centered cache metadata for final topK candidates."""
+    settings = load_user_cache_settings(config_path)
+    if not settings.enabled:
+        return {"enabled": False, "cache_type": "topk_candidates"}
+    query_settings = load_query_settings(config_path)
+    normalized_patient_id = _normalize_required_string(patient_id, "patient_id")
+    normalized_base_date = _normalize_required_string(base_date, "base_date")
+    normalized_scored_key = _normalize_required_string(scored_key, "scored_key")
+    candidate_key = _normalize_required_string(
+        candidate_cache_context.get("candidate_key"),
+        "candidate_key",
+    )
+    candidate_config_hash = _normalize_required_string(
+        candidate_cache_context.get("candidate_config_hash"),
+        "candidate_config_hash",
+    )
+    query_family_key = _normalize_user_cache_query_family(query_family)
+    config_hash = _short_hash(
+        {
+            "cache_type": "topk_candidates",
+            "cache_key_without_base_date": _strip_base_date_from_key(candidate_key),
+        }
+    )
+    return {
+        "enabled": settings.enabled,
+        "cache_type": "topk_candidates",
+        "sqlite_path": settings.sqlite_path,
+        "patient_id": normalized_patient_id,
+        "query_family": query_family_key,
+        "window_days": query_settings.patient_path.window_days,
+        "config_hash": config_hash,
+        "cached_base_date": normalized_base_date,
+        "valid_days": settings.topk_candidates_valid_days,
+        "candidate_key": candidate_key,
+        "scored_key": normalized_scored_key,
+        "candidate_config_hash": candidate_config_hash,
+    }
+
+
+def load_cached_topk_candidate_result(
+    user_cache_context: dict[str, Any],
+    *,
+    candidates_dir: str | Path = DEFAULT_CANDIDATES_DIR,
+    request_base_date: str | None,
+) -> dict[str, Any] | None:
+    """Load the newest valid topK candidate cache for one patient/config."""
+    if not user_cache_context.get("enabled"):
+        return None
+    request_date = _normalize_required_string(request_base_date, "base_date")
+    store = UserCacheIndexStore(
+        _normalize_required_string(user_cache_context.get("sqlite_path"), "sqlite_path")
+    )
+    entry = store.find_latest_valid_entry(
+        cache_type="topk_candidates",
+        patient_id=_normalize_required_string(
+            user_cache_context.get("patient_id"),
+            "patient_id",
+        ),
+        query_family=_normalize_required_string(
+            user_cache_context.get("query_family"),
+            "query_family",
+        ),
+        window_days=_normalize_positive_int(
+            user_cache_context.get("window_days"),
+            "window_days",
+        ),
+        config_hash=_normalize_required_string(
+            user_cache_context.get("config_hash"),
+            "config_hash",
+        ),
+        request_base_date=request_date,
+    )
+    if entry is None:
+        return None
+    detail_path = Path(entry.data_path)
+    if not detail_path.exists():
+        store.delete_entry(entry)
+        LOGGER.warning(
+            "Deleted stale topK candidate user-cache index entry because detail file is missing: patient_id=%s, detail_path=%s",
+            entry.patient_id,
+            detail_path,
+        )
+        return None
+    with detail_path.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+    if not isinstance(data, dict):
+        raise ValueError(f"Cached topK candidate detail must be a JSON object: {detail_path}")
+    _validate_cached_topk_candidate_result(
+        data,
+        expected_candidate_key=_normalize_required_string(
+            entry.payload.get("candidate_key"),
+            "candidate_key",
+        ),
+    )
+    result = dict(data)
+    result["user_cache_hit"] = True
+    result["user_cache_context"] = {
+        **user_cache_context,
+        "cached_base_date": entry.cached_base_date,
+        "valid_days": entry.valid_days,
+    }
+    result["user_cache_data_path"] = str(detail_path)
+    # Keep output path calculation stable even when a custom candidates_dir is supplied.
+    result.setdefault("cache_context", data.get("cache_context"))
+    return result
 
 
 def _build_candidate_score_summary(score_details: object) -> dict[str, Any]:
@@ -542,6 +710,73 @@ def _extract_candidate_key(cache_context: object) -> str:
     return candidate_key.strip()
 
 
+def _register_topk_candidate_user_cache(
+    result: dict[str, Any],
+    detail_path: Path,
+    summary_path: Path,
+) -> None:
+    user_cache_context = result.get("user_cache_context")
+    if not isinstance(user_cache_context, dict) or not user_cache_context.get("enabled"):
+        return
+    store = UserCacheIndexStore(
+        _normalize_required_string(user_cache_context.get("sqlite_path"), "sqlite_path")
+    )
+    entry = UserCacheEntry(
+        cache_type="topk_candidates",
+        patient_id=_normalize_required_string(
+            user_cache_context.get("patient_id"),
+            "patient_id",
+        ),
+        query_family=_normalize_required_string(
+            user_cache_context.get("query_family"),
+            "query_family",
+        ),
+        window_days=_normalize_positive_int(
+            user_cache_context.get("window_days"),
+            "window_days",
+        ),
+        config_hash=_normalize_required_string(
+            user_cache_context.get("config_hash"),
+            "config_hash",
+        ),
+        cached_base_date=_normalize_required_string(
+            user_cache_context.get("cached_base_date"),
+            "cached_base_date",
+        ),
+        valid_days=_normalize_non_negative_int(
+            user_cache_context.get("valid_days"),
+            "valid_days",
+        ),
+        data_path=str(detail_path),
+        payload={
+            "candidate_key": _normalize_required_string(
+                user_cache_context.get("candidate_key"),
+                "candidate_key",
+            ),
+            "scored_key": user_cache_context.get("scored_key"),
+            "candidate_config_hash": user_cache_context.get("candidate_config_hash"),
+            "summary_path": str(summary_path),
+        },
+    )
+    store.upsert_entry(entry)
+
+
+def _validate_cached_topk_candidate_result(
+    result: dict[str, Any],
+    *,
+    expected_candidate_key: str,
+) -> None:
+    cache_context = result.get("cache_context")
+    if not isinstance(cache_context, dict):
+        raise ValueError("Cached topK candidate result is missing cache_context.")
+    actual_candidate_key = cache_context.get("candidate_key")
+    if actual_candidate_key != expected_candidate_key:
+        raise ValueError(
+            "Cached topK candidate result cache key mismatch: "
+            f"expected={expected_candidate_key}, actual={actual_candidate_key}."
+        )
+
+
 def _candidate_config_payload(
     config_path: str | Path,
     *,
@@ -584,6 +819,31 @@ def _normalize_required_string(value: object, field_name: str) -> str:
     return value.strip()
 
 
+def _normalize_positive_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer.")
+    return value
+
+
+def _normalize_non_negative_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer.")
+    return value
+
+
+def _normalize_user_cache_query_family(query_family: str | None) -> str:
+    if query_family is None or not str(query_family).strip():
+        return "default"
+    return _slug_part(str(query_family).strip())
+
+
+def _strip_base_date_from_key(value: str) -> str:
+    parts = value.split("_", 2)
+    if len(parts) == 3 and parts[0] == "base":
+        return parts[2]
+    return value
+
+
 def _validate_optional_positive_int(value: object, field_name: str) -> None:
     if value is None:
         return
@@ -616,6 +876,7 @@ def main() -> int:
             args.patient_id,
             config_path=args.config,
             scored_paths_dir=args.scored_paths_dir,
+            candidates_dir=args.candidates_dir,
             **_scored_cache_kwargs(args),
         )
         output_paths = save_similar_user_candidates_result(
