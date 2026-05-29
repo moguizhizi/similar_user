@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import ast
+import csv
 import json
 from dataclasses import dataclass
 from datetime import date, timedelta
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from .llm_client import LlmClient
@@ -119,6 +123,8 @@ class TrainingTaskPredictionService:
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
     profile_candidate_training_window_days: int | None = None
+    unlock_train_candidate_tasks_enabled: bool = False
+    algorithm_request_results_csv: str | None = None
     similar_user_game_counts_weighting_enabled: bool = False
     similar_user_game_counts_weighted_sort_enabled: bool = False
 
@@ -166,21 +172,27 @@ class TrainingTaskPredictionService:
             for candidate in candidates
         }
 
-        profile_candidate_game_rows = (
-            self.user_service.get_patient_profile_candidate_training_games(
-                resolved_patient_id,
-                target_task_window["base_date"],
-                profile_candidate_training_window_days=(
-                    self.profile_candidate_training_window_days
-                ),
-            )
-        )
-        if not isinstance(profile_candidate_game_rows, list):
-            profile_candidate_game_rows = []
         candidate_source_type = "patient_profile_entities"
-        candidate_tasks = build_candidate_training_tasks_from_distinct_games(
-            profile_candidate_game_rows
+        candidate_tasks = self._build_unlock_train_candidate_tasks(
+            resolved_patient_id
         )
+        if candidate_tasks:
+            candidate_source_type = "unlock_train"
+        else:
+            profile_candidate_game_rows = (
+                self.user_service.get_patient_profile_candidate_training_games(
+                    resolved_patient_id,
+                    target_task_window["base_date"],
+                    profile_candidate_training_window_days=(
+                        self.profile_candidate_training_window_days
+                    ),
+                )
+            )
+            if not isinstance(profile_candidate_game_rows, list):
+                profile_candidate_game_rows = []
+            candidate_tasks = build_candidate_training_tasks_from_distinct_games(
+                profile_candidate_game_rows
+            )
         if not candidate_tasks:
             profile_candidate_game_rows = self.user_service.get_distinct_training_games()
             candidate_source_type = "distinct_training_games_fallback"
@@ -329,6 +341,32 @@ class TrainingTaskPredictionService:
             use_llm,
         )
         return result
+
+    def _build_unlock_train_candidate_tasks(self, patient_id: str) -> list[dict[str, Any]]:
+        """Build candidate tasks from algorithm CSV unlock_train keys when enabled."""
+        if not self.unlock_train_candidate_tasks_enabled:
+            return []
+        csv_path = (
+            self.algorithm_request_results_csv.strip()
+            if isinstance(self.algorithm_request_results_csv, str)
+            else ""
+        )
+        if not csv_path:
+            LOGGER.warning(
+                "Skipped unlock_train candidate tasks because CSV path is empty: patient_id=%s",
+                patient_id,
+            )
+            return []
+        try:
+            return load_unlock_train_candidate_tasks(csv_path, patient_id)
+        except Exception as exc:
+            LOGGER.warning(
+                "Failed to load unlock_train candidate tasks: patient_id=%s, csv_path=%s, error=%s",
+                patient_id,
+                csv_path,
+                exc,
+            )
+            return []
 
     def predict_from_direct_entity_candidates(
         self,
@@ -749,6 +787,76 @@ def build_candidate_training_tasks_from_distinct_games(
         )
         seen_game_ids.add(game_id)
     return sorted(tasks, key=lambda item: str(item["game_id"]))
+
+
+def load_unlock_train_candidate_tasks(
+    csv_path: str | Path,
+    patient_id: str,
+) -> list[dict[str, Any]]:
+    """Build candidate task rows from ai_params.unlock_train keys in request CSV."""
+    unlock_train = _load_unlock_train_by_patient(csv_path).get(
+        _normalize_csv_patient_id(patient_id),
+        {},
+    )
+    tasks: list[dict[str, Any]] = []
+    seen_game_ids: set[str] = set()
+    for raw_task_id in unlock_train:
+        game_id = _normalize_text(raw_task_id)
+        if game_id is None or game_id in seen_game_ids:
+            continue
+        tasks.append({"game_id": game_id, "game_name": None})
+        seen_game_ids.add(game_id)
+    return tasks
+
+
+@lru_cache(maxsize=8)
+def _load_unlock_train_by_patient(csv_path: str | Path) -> dict[str, dict[str, Any]]:
+    """Load patient_id -> unlock_train mapping from algorithm request CSV."""
+    resolved_path = Path(csv_path)
+    if not resolved_path.exists():
+        raise FileNotFoundError(f"algorithm request CSV not found: {resolved_path}")
+
+    rows_by_patient: dict[str, dict[str, Any]] = {}
+    with resolved_path.open("r", encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            try:
+                ai_params = _parse_csv_object(row.get("ai_params"))
+            except (SyntaxError, ValueError) as exc:
+                LOGGER.warning("Skipped malformed ai_params row in CSV: error=%s", exc)
+                continue
+            if not isinstance(ai_params, dict):
+                continue
+            normalized_patient_id = _normalize_csv_patient_id(ai_params.get("user_id"))
+            if normalized_patient_id is None:
+                continue
+            unlock_train = ai_params.get("unlock_train")
+            if isinstance(unlock_train, dict):
+                rows_by_patient[normalized_patient_id] = unlock_train
+    return rows_by_patient
+
+
+def _parse_csv_object(value: object) -> object:
+    """Parse object-like CSV fields that may be quoted Python literals."""
+    parsed: object = value
+    for _ in range(2):
+        if not isinstance(parsed, str):
+            break
+        stripped = parsed.strip()
+        if not stripped:
+            return None
+        parsed = ast.literal_eval(stripped)
+    return parsed
+
+
+def _normalize_csv_patient_id(value: object) -> str | None:
+    """Normalize CSV user_id such as 20123188_old to patient_id 20123188."""
+    text = _normalize_text(value)
+    if text is None:
+        return None
+    if text.endswith("_old"):
+        text = text[: -len("_old")]
+    return text or None
 
 
 def build_similar_user_game_counts(

@@ -546,6 +546,10 @@ def build_coverage_diagnostics(
             actual_game_ids,
             candidate_training_task_ids,
         ),
+        "similar_user_candidate_task_overlap": build_task_pool_overlap_section(
+            similar_user_game_ids,
+            candidate_training_task_ids,
+        ),
     }
 
 
@@ -588,6 +592,27 @@ def build_missing_coverage_section(
         "actual_total_count": len(actual_ids),
         "actual_missing_rate": round(
             safe_divide(actual_missing_count, len(actual_ids)),
+            4,
+        ),
+    }
+
+
+def build_task_pool_overlap_section(
+    similar_user_task_ids: set[str],
+    candidate_task_ids: set[str],
+) -> dict[str, Any]:
+    """Build overlap metrics between similar-user evidence tasks and candidates."""
+    intersection_ids = similar_user_task_ids & candidate_task_ids
+    return {
+        "similar_user_task_count": len(similar_user_task_ids),
+        "candidate_task_count": len(candidate_task_ids),
+        "intersection_task_count": len(intersection_ids),
+        "coverage": round(
+            safe_divide(len(intersection_ids), len(similar_user_task_ids)),
+            4,
+        ),
+        "candidate_supported_rate": round(
+            safe_divide(len(intersection_ids), len(candidate_task_ids)),
             4,
         ),
     }
@@ -665,6 +690,7 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         if isinstance(detail.get("candidate_training_tasks_count"), int | float)
     ]
     coverage_diagnostics = aggregate_coverage_diagnostics(evaluated_details)
+    task_pool_overlap = coverage_diagnostics["similar_user_candidate_task_overlap"]
     score_evaluated_details = [
         detail
         for detail in evaluated_details
@@ -739,6 +765,13 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         "candidate_training_tasks_actual_missing_rate": coverage_diagnostics[
             "candidate_training_tasks"
         ]["actual_missing_rate"],
+        "similar_user_candidate_task_coverage": task_pool_overlap["coverage"],
+        "candidate_task_supported_rate": task_pool_overlap[
+            "candidate_supported_rate"
+        ],
+        "avg_similar_user_candidate_task_intersection_count": task_pool_overlap[
+            "avg_intersection_task_count"
+        ],
         "score_evaluated_count": len(score_evaluated_details),
         "avg_kg_score": round(
             average_metric(score_evaluated_details, "kg_avg_score"),
@@ -848,6 +881,16 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
                 "candidate_training_tasks_count": detail.get(
                     "candidate_training_tasks_count"
                 ),
+                "similar_user_candidate_task_coverage": (
+                    (detail.get("coverage_diagnostics") or {})
+                    .get("similar_user_candidate_task_overlap", {})
+                    .get("coverage")
+                ),
+                "candidate_task_supported_rate": (
+                    (detail.get("coverage_diagnostics") or {})
+                    .get("similar_user_candidate_task_overlap", {})
+                    .get("candidate_supported_rate")
+                ),
                 "elapsed_seconds": detail.get("elapsed_seconds"),
                 "prediction_elapsed_seconds": detail.get(
                     "prediction_elapsed_seconds"
@@ -869,6 +912,7 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(detail.get("candidate_training_tasks_count"), int | float)
     ]
     coverage_diagnostics = aggregate_coverage_diagnostics(evaluated_details)
+    task_pool_overlap = coverage_diagnostics["similar_user_candidate_task_overlap"]
 
     return {
         "evaluated_count": len(evaluated_details),
@@ -895,6 +939,7 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
         "candidate_training_tasks_count_stats": build_number_stats(
             candidate_training_tasks_counts
         ),
+        "similar_user_candidate_task_overlap": task_pool_overlap,
         "top_predicted_games": _counter_to_game_rows(predicted_games),
         "top_actual_games": _counter_to_game_rows(actual_games),
         "top_matched_games": _counter_to_game_rows(matched_games),
@@ -939,6 +984,69 @@ def aggregate_coverage_diagnostics(
         "candidate_training_tasks": aggregate_coverage_section(
             evaluated_details,
             "candidate_training_tasks",
+        ),
+        "similar_user_candidate_task_overlap": (
+            aggregate_task_pool_overlap_section(evaluated_details)
+        ),
+    }
+
+
+def aggregate_task_pool_overlap_section(
+    evaluated_details: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Aggregate similar-user task pool vs candidate task pool overlap metrics."""
+    sections: list[dict[str, Any]] = []
+    for detail in evaluated_details:
+        coverage_diagnostics = detail.get("coverage_diagnostics")
+        if not isinstance(coverage_diagnostics, dict):
+            continue
+        section = coverage_diagnostics.get("similar_user_candidate_task_overlap")
+        if isinstance(section, dict):
+            sections.append(section)
+
+    coverage_values = [
+        float(section["coverage"])
+        for section in sections
+        if isinstance(section.get("coverage"), int | float)
+    ]
+    candidate_supported_rate_values = [
+        float(section["candidate_supported_rate"])
+        for section in sections
+        if isinstance(section.get("candidate_supported_rate"), int | float)
+    ]
+    intersection_counts = [
+        float(section["intersection_task_count"])
+        for section in sections
+        if isinstance(section.get("intersection_task_count"), int | float)
+    ]
+    similar_user_task_counts = [
+        float(section["similar_user_task_count"])
+        for section in sections
+        if isinstance(section.get("similar_user_task_count"), int | float)
+    ]
+    candidate_task_counts = [
+        float(section["candidate_task_count"])
+        for section in sections
+        if isinstance(section.get("candidate_task_count"), int | float)
+    ]
+    return {
+        "count": len(sections),
+        "coverage": round(average_numbers(coverage_values), 4),
+        "candidate_supported_rate": round(
+            average_numbers(candidate_supported_rate_values),
+            4,
+        ),
+        "avg_intersection_task_count": round(
+            average_numbers(intersection_counts),
+            4,
+        ),
+        "avg_similar_user_task_count": round(
+            average_numbers(similar_user_task_counts),
+            4,
+        ),
+        "avg_candidate_task_count": round(
+            average_numbers(candidate_task_counts),
+            4,
         ),
     }
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import Mock
 
@@ -28,6 +30,7 @@ from src.similar_user.services.task_prediction import (
     filter_candidate_tasks_to_ids,
     filter_recent_target_repeated_games,
     filter_task_evidence_to_ids,
+    load_unlock_train_candidate_tasks,
     parse_json_object_from_text,
     parse_date_value,
     select_prompt_candidate_game_ids,
@@ -106,6 +109,30 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertIn('"similar_user_candidates"', prompt)
         self.assertIn('"patient_id": "201"', prompt)
         self.assertIn('"candidate_score": 2.5', prompt)
+
+    def test_load_unlock_train_candidate_tasks_uses_unlock_train_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            csv_path = Path(tmp_dir) / "request.csv"
+            csv_path.write_text(
+                "\n".join(
+                    [
+                        "ai_params,recommen_train",
+                        "\"\"\"{'user_id': '40_old', 'unlock_train': {'300': 60, '301': 0}}\"\"\",{}",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            tasks = load_unlock_train_candidate_tasks(csv_path, "40")
+
+        self.assertEqual(
+            tasks,
+            [
+                {"game_id": "300", "game_name": None},
+                {"game_id": "301", "game_name": None},
+            ],
+        )
 
     def test_build_task_prediction_prompt_v2_includes_task_evidence(self) -> None:
         prompt = build_task_prediction_prompt(

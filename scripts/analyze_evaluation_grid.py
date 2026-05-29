@@ -35,6 +35,9 @@ METRIC_FIELDS = (
     "avg_prediction_elapsed_seconds",
     "p95_prediction_elapsed_seconds",
     "avg_validation_elapsed_seconds",
+    "similar_user_candidate_task_coverage",
+    "candidate_task_supported_rate",
+    "avg_similar_user_candidate_task_intersection_count",
 )
 
 
@@ -357,6 +360,9 @@ def pick_summary_fields(summary: dict[str, Any]) -> dict[str, Any]:
         "p95_prediction_elapsed_seconds",
         "avg_validation_elapsed_seconds",
         "p95_validation_elapsed_seconds",
+        "similar_user_candidate_task_coverage",
+        "candidate_task_supported_rate",
+        "avg_similar_user_candidate_task_intersection_count",
         "avg_elapsed_seconds",
         "p95_elapsed_seconds",
         "candidate_training_tasks_actual_missing_rate",

@@ -104,6 +104,7 @@ class TrainingTaskPredictionSettings:
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
     profile_candidate_training_window_days: int | None = None
+    unlock_train_candidate_tasks_enabled: bool = False
     similar_user_game_counts_weighting_enabled: bool = False
     similar_user_game_counts_weighted_sort_enabled: bool = False
 
@@ -410,6 +411,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction profile_candidate_training_window_days must be a non-negative integer or null."
         )
+    unlock_train_candidate_tasks_enabled = training_task_prediction_data.get(
+        "unlock_train_candidate_tasks_enabled",
+        False,
+    )
+    if not isinstance(unlock_train_candidate_tasks_enabled, bool):
+        raise ValueError(
+            "training_task_prediction unlock_train_candidate_tasks_enabled must be a boolean."
+        )
     similar_user_game_counts_weighting_enabled = training_task_prediction_data.get(
         "similar_user_game_counts_weighting_enabled",
         False,
@@ -534,6 +543,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name.strip(),
             profile_candidate_training_window_days=profile_candidate_training_window_days,
+            unlock_train_candidate_tasks_enabled=unlock_train_candidate_tasks_enabled,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
         ),
