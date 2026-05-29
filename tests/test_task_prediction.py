@@ -724,6 +724,21 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertEqual(result["patient_id"], "40")
         self.assertEqual(result["candidate_source"]["candidate_ids"], ["201", "202"])
         self.assertEqual(
+            result["raw_similar_user_game_counts"],
+            [
+                {
+                    "game_id": "1",
+                    "game_name": "任务A",
+                    "count": 1,
+                },
+                {
+                    "game_id": "2",
+                    "game_name": "任务B",
+                    "count": 1,
+                },
+            ],
+        )
+        self.assertEqual(
             result["similar_user_game_counts"],
             [
                 {
@@ -848,6 +863,47 @@ class TaskPredictionTest(unittest.TestCase):
             ],
         )
         self.assertEqual(result["candidate_training_tasks"], [{"game_id": "2", "game_name": "任务B"}])
+
+    def test_predict_from_direct_entity_candidates_keeps_raw_similar_user_counts(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_exclusive_training_task_history_by_date_window.side_effect = [
+            [
+                {
+                    "trainingDate": "2022-05-10",
+                    "g": {"id": f"{index:03d}", "name": f"任务{index:03d}"},
+                }
+                for index in range(1, 52)
+            ]
+        ]
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            prompt_candidate_compression_enabled=False,
+        )
+
+        result = service.predict_from_direct_entity_candidates(
+            patient_id="new-user",
+            candidate_result={"candidates": [{"patient_id": "201"}]},
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=1,
+        )
+
+        self.assertEqual(
+            len(result["raw_similar_user_game_counts"]),
+            51,
+        )
+        self.assertEqual(
+            len(result["similar_user_game_counts"]),
+            50,
+        )
+        self.assertEqual(result["raw_similar_user_game_counts"][-1]["game_id"], "051")
+        self.assertNotIn(
+            "051",
+            [item["game_id"] for item in result["similar_user_game_counts"]],
+        )
 
     def test_predict_from_pipeline_result_can_disable_prompt_candidate_compression(
         self,

@@ -202,14 +202,14 @@ class TrainingTaskPredictionService:
 
         repeated_target_game_ids = find_consecutive_target_game_ids(target_history)
         allowed_candidate_game_ids = _extract_candidate_task_game_ids(candidate_tasks)
-        similar_user_game_counts = build_similar_user_game_counts(
+        raw_similar_user_game_counts = build_similar_user_game_counts(
             candidates,
             similar_user_histories,
             weighting_enabled=self.similar_user_game_counts_weighting_enabled,
             weighted_sort_enabled=self.similar_user_game_counts_weighted_sort_enabled,
         )
         similar_user_game_counts = filter_game_counts_by_ids(
-            similar_user_game_counts,
+            raw_similar_user_game_counts,
             repeated_target_game_ids,
         )
         similar_user_game_counts = filter_game_counts_to_ids(
@@ -318,6 +318,7 @@ class TrainingTaskPredictionService:
                 "candidate_task_source": candidate_source_type,
             },
             "prompt_candidate_selection": prompt_candidate_selection,
+            "raw_similar_user_game_counts": raw_similar_user_game_counts,
             "similar_user_game_counts": prompt_similar_user_game_counts,
             "similar_user_task_evidence": prompt_similar_user_task_evidence,
             "candidate_training_tasks": prompt_candidate_tasks,
@@ -420,14 +421,14 @@ class TrainingTaskPredictionService:
             task_top_k,
         )
         allowed_candidate_game_ids = _extract_candidate_task_game_ids(candidate_tasks)
-        similar_user_game_counts = build_similar_user_game_counts(
+        raw_similar_user_game_counts = build_similar_user_game_counts(
             candidates,
             similar_user_histories,
             weighting_enabled=self.similar_user_game_counts_weighting_enabled,
             weighted_sort_enabled=self.similar_user_game_counts_weighted_sort_enabled,
         )
         similar_user_game_counts = filter_game_counts_to_ids(
-            similar_user_game_counts,
+            raw_similar_user_game_counts,
             allowed_candidate_game_ids,
         )
         similar_user_task_evidence = build_similar_user_task_evidence(
@@ -526,6 +527,7 @@ class TrainingTaskPredictionService:
                     self.similar_user_game_counts_weighted_sort_enabled
                 ),
             },
+            "raw_similar_user_game_counts": raw_similar_user_game_counts,
             "similar_user_game_counts": prompt_similar_user_game_counts,
             "similar_user_task_evidence": prompt_similar_user_task_evidence,
             "candidate_training_tasks": prompt_candidate_tasks,

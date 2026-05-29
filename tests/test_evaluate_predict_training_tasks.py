@@ -66,6 +66,75 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 {"evaluated_count": 2},
             )
 
+    def test_write_score_curl_commands_writes_kg_and_csv_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            curl_path = evaluate_predict_training_tasks.write_score_curl_commands(
+                [
+                    {
+                        "patient_id": "40",
+                        "base_date": "2022-05-22",
+                        "training_task_score_validation": {
+                            "kg_score_exchange": {"request_curl": "curl kg"},
+                            "csv_score_exchange": {"request_curl": "curl csv"},
+                        },
+                    }
+                ],
+                output_dir=temp_dir,
+            )
+
+            self.assertEqual(
+                curl_path,
+                evaluate_predict_training_tasks.Path(temp_dir)
+                / "training_task_score_requests.sh",
+            )
+            content = curl_path.read_text(encoding="utf-8")
+            self.assertIn("source=kg", content)
+            self.assertIn("curl kg", content)
+            self.assertIn("source=csv", content)
+            self.assertIn("curl csv", content)
+
+    def test_build_coverage_diagnostics_uses_raw_similar_user_counts_for_overlap(
+        self,
+    ) -> None:
+        diagnostics = evaluate_predict_training_tasks.build_coverage_diagnostics(
+            predicted_game_ids=["A"],
+            actual_game_ids=["D"],
+            result={
+                "training_task_prediction": {
+                    "raw_similar_user_game_counts": [
+                        {"game_id": "A"},
+                        {"game_id": "B"},
+                        {"game_id": "C"},
+                        {"game_id": "D"},
+                    ],
+                    "similar_user_game_counts": [
+                        {"game_id": "A"},
+                        {"game_id": "B"},
+                    ],
+                    "candidate_training_tasks": [
+                        {"game_id": "A"},
+                        {"game_id": "B"},
+                        {"game_id": "E"},
+                    ],
+                }
+            },
+        )
+
+        self.assertEqual(
+            diagnostics["similar_user_candidate_task_overlap"],
+            {
+                "similar_user_task_count": 4,
+                "candidate_task_count": 3,
+                "intersection_task_count": 2,
+                "coverage": 0.5,
+                "candidate_supported_rate": 0.6667,
+            },
+        )
+        self.assertEqual(
+            diagnostics["similar_user_game_counts"]["actual_missing_count"],
+            1,
+        )
+
     def test_evaluate_prediction_sets_ignores_ranking_and_dedupes_ids(self) -> None:
         result = evaluate_predict_training_tasks.evaluate_prediction_sets(
             ["A", "B", "A", "C"],
@@ -105,6 +174,13 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                             "actual_missing_count": 1,
                             "actual_total_count": 2,
                         },
+                        "similar_user_candidate_task_overlap": {
+                            "similar_user_task_count": 10,
+                            "candidate_task_count": 4,
+                            "intersection_task_count": 3,
+                            "coverage": 0.3,
+                            "candidate_supported_rate": 0.75,
+                        },
                     },
                     "elapsed_seconds": 1.0,
                 },
@@ -131,6 +207,13 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                             "predicted_total_count": 1,
                             "actual_missing_count": 1,
                             "actual_total_count": 2,
+                        },
+                        "similar_user_candidate_task_overlap": {
+                            "similar_user_task_count": 20,
+                            "candidate_task_count": 6,
+                            "intersection_task_count": 6,
+                            "coverage": 0.3,
+                            "candidate_supported_rate": 1.0,
                         },
                     },
                     "elapsed_seconds": 3.0,
@@ -172,6 +255,12 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(summary["similar_user_game_counts_actual_missing_rate"], 0.5)
         self.assertEqual(summary["candidate_training_tasks_predicted_missing_rate"], 0.0)
         self.assertEqual(summary["candidate_training_tasks_actual_missing_rate"], 0.5)
+        self.assertEqual(summary["similar_user_candidate_task_coverage"], 0.3)
+        self.assertEqual(summary["candidate_task_supported_rate"], 0.875)
+        self.assertEqual(
+            summary["avg_similar_user_candidate_task_intersection_count"],
+            4.5,
+        )
         self.assertEqual(summary["avg_elapsed_seconds"], 2.5)
         self.assertEqual(summary["p95_elapsed_seconds"], 4.0)
 
@@ -202,6 +291,13 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                             "actual_missing_count": 0,
                             "actual_total_count": 0,
                         },
+                        "similar_user_candidate_task_overlap": {
+                            "similar_user_task_count": 3,
+                            "candidate_task_count": 2,
+                            "intersection_task_count": 1,
+                            "coverage": 0.3333,
+                            "candidate_supported_rate": 0.5,
+                        },
                     },
                     "elapsed_seconds": 1.0,
                 },
@@ -228,6 +324,13 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                             "predicted_total_count": 2,
                             "actual_missing_count": 0,
                             "actual_total_count": 0,
+                        },
+                        "similar_user_candidate_task_overlap": {
+                            "similar_user_task_count": 3,
+                            "candidate_task_count": 2,
+                            "intersection_task_count": 2,
+                            "coverage": 0.6667,
+                            "candidate_supported_rate": 1.0,
                         },
                     },
                     "elapsed_seconds": 1.0,
@@ -563,6 +666,13 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                     "actual_missing_count": 2,
                     "actual_total_count": 2,
                     "actual_missing_rate": 1.0,
+                },
+                "similar_user_candidate_task_overlap": {
+                    "similar_user_task_count": 2,
+                    "candidate_task_count": 2,
+                    "intersection_task_count": 1,
+                    "coverage": 0.5,
+                    "candidate_supported_rate": 0.5,
                 },
             },
         )

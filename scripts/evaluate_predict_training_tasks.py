@@ -527,10 +527,15 @@ def build_coverage_diagnostics(
 ) -> dict[str, Any]:
     """Build per-patient coverage diagnostics for prompt evidence and candidates."""
     prediction_result = unwrap_training_task_prediction(result)
+    raw_similar_user_game_ids = extract_game_ids_from_rows(
+        prediction_result.get("raw_similar_user_game_counts"),
+        "game_id",
+    )
     similar_user_game_ids = extract_game_ids_from_rows(
         prediction_result.get("similar_user_game_counts"),
         "game_id",
     )
+    overlap_similar_user_game_ids = raw_similar_user_game_ids or similar_user_game_ids
     candidate_training_task_ids = extract_game_ids_from_rows(
         prediction_result.get("candidate_training_tasks"),
         "game_id",
@@ -547,7 +552,7 @@ def build_coverage_diagnostics(
             candidate_training_task_ids,
         ),
         "similar_user_candidate_task_overlap": build_task_pool_overlap_section(
-            similar_user_game_ids,
+            overlap_similar_user_game_ids,
             candidate_training_task_ids,
         ),
     }
