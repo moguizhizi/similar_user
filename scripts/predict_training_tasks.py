@@ -81,10 +81,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--query-family",
         default=None,
-        choices=("training_order", "date_window"),
+        choices=(
+            "training_order_source_window",
+            "date_window",
+            "training_order_local_sampling_source_window",
+            "training_order_age_source_window",
+            "training_order_age_edu_source_window",
+            "training_order_age_completed_source_window",
+            "training_order_age_edu_completed_source_window",
+            "training_order_age_edu_task_completed_source_window",
+            "training_order_dual_window",
+            "training_order_local_sampling_dual_window",
+            "training_order_age_dual_window",
+            "training_order_age_edu_dual_window",
+            "training_order_age_completed_dual_window",
+            "training_order_age_edu_completed_dual_window",
+            "training_order_age_edu_task_completed_dual_window",
+        ),
         help=(
             "Query family for paired-statistics path building. Defaults to "
-            "training_order; date_window only filters by the s1 date window."
+            "training_order_source_window enforces s1/s2 training-date order and filters by the s1 date window; date_window only filters by the s1 date window."
         ),
     )
     parser.add_argument(
@@ -220,6 +236,16 @@ def run_training_task_prediction(
     profile_candidate_training_window_days = (
         query_settings.training_task_prediction.profile_candidate_training_window_days
     )
+    raw_unlock_train_candidate_tasks_enabled = getattr(
+        query_settings.training_task_prediction,
+        "unlock_train_candidate_tasks_enabled",
+        False,
+    )
+    unlock_train_candidate_tasks_enabled = (
+        raw_unlock_train_candidate_tasks_enabled
+        if isinstance(raw_unlock_train_candidate_tasks_enabled, bool)
+        else False
+    )
     raw_similar_user_game_counts_weighting_enabled = getattr(
         query_settings.training_task_prediction,
         "similar_user_game_counts_weighting_enabled",
@@ -240,6 +266,16 @@ def run_training_task_prediction(
         if isinstance(raw_similar_user_game_counts_weighted_sort_enabled, bool)
         else False
     )
+    training_task_evaluation_settings = getattr(
+        query_settings,
+        "training_task_evaluation",
+        None,
+    )
+    algorithm_request_results_csv = getattr(
+        training_task_evaluation_settings,
+        "algorithm_request_results_csv",
+        None,
+    )
     with Neo4jClient.from_config(config_path) as client:
         user_service = UserService(
             kg_repository=KgRepository(
@@ -254,6 +290,8 @@ def run_training_task_prediction(
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name,
             profile_candidate_training_window_days=profile_candidate_training_window_days,
+            unlock_train_candidate_tasks_enabled=unlock_train_candidate_tasks_enabled,
+            algorithm_request_results_csv=algorithm_request_results_csv,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
         )

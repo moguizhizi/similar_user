@@ -145,6 +145,71 @@ class AnalyzeEvaluationGridTest(unittest.TestCase):
         self.assertIn('"status": "no_leaderboard_rows"', json_text)
         self.assertIn("# Evaluation Grid Analysis", markdown_text)
 
+    def test_analyze_evaluation_grid_recommends_by_score_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            grid_dir = Path(temp_dir)
+            baseline_summary = grid_dir / "baseline_summary.json"
+            best_summary = grid_dir / "best_summary.json"
+            baseline_summary.write_text(
+                json.dumps(
+                    {
+                        "failed_count": 0,
+                        "avg_score_delta": 1.0,
+                        "avg_kg_score": 80.0,
+                        "avg_csv_score": 79.0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            best_summary.write_text(
+                json.dumps(
+                    {
+                        "failed_count": 0,
+                        "avg_score_delta": 2.5,
+                        "avg_kg_score": 82.0,
+                        "avg_csv_score": 79.5,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (grid_dir / "leaderboard.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "rank": 1,
+                            "name": "exp_002_score",
+                            "rank_metric": "avg_score_delta",
+                            "avg_score_delta": 2.5,
+                            "avg_kg_score": 82.0,
+                            "avg_csv_score": 79.5,
+                            "summary_path": str(best_summary),
+                            "overrides": {"query.a": 2},
+                        },
+                        {
+                            "rank": 2,
+                            "name": "exp_001_baseline-best",
+                            "rank_metric": "avg_score_delta",
+                            "avg_score_delta": 1.0,
+                            "avg_kg_score": 80.0,
+                            "avg_csv_score": 79.0,
+                            "summary_path": str(baseline_summary),
+                            "overrides": {"query.a": 1},
+                        },
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (grid_dir / "grid_summary.json").write_text(
+                json.dumps({"failed_count": 0}),
+                encoding="utf-8",
+            )
+
+            analysis = analyze_evaluation_grid.analyze_evaluation_grid(grid_dir)
+
+        self.assertEqual(analysis["rank_by"], "avg_score_delta")
+        self.assertEqual(analysis["metric_comparison"]["avg_score_delta"]["delta"], 1.5)
+        self.assertIn("avg_score_delta", analysis["recommendation"])
+
 
 if __name__ == "__main__":
     unittest.main()

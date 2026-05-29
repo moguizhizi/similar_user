@@ -22,7 +22,7 @@ from similar_user.utils.pattern_storage import (
 def _retrieval_context() -> dict[str, object]:
     return {
         "base_date": "2024-01-31",
-        "query_family": "training_order",
+        "query_family": "training_order_source_window",
         "path_window": {
             "start_date": "2024-01-17",
             "end_date": "2024-01-31",
@@ -67,7 +67,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
             loaded_result = read_patient_pattern_result(
@@ -75,7 +75,7 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config_path=config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
         self.assertIsInstance(loaded_result, StoredPatternResult)
@@ -129,14 +129,14 @@ class ReadPatientPatternResultScriptTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
             mock_parse_args.return_value = Mock(
                 patient_id="30010096",
                 pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
                 config=str(config_path),
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
             exit_code = main()

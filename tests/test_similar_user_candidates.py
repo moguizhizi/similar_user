@@ -40,7 +40,7 @@ def _cache_kwargs() -> dict[str, object]:
     return {
         "base_date": "2024-01-31",
         "window_days": 14,
-        "query_family": "training_order",
+        "query_family": "training_order_source_window",
     }
 
 
@@ -50,7 +50,7 @@ def _scored_cache_context(output_dir: str | Path) -> dict[str, object]:
     path_key = build_path_key(
         config_path,
         base_date="2024-01-31",
-        query_family="training_order",
+        query_family="training_order_source_window",
     )
     return {
         "cache_type": "scored_pattern_paths",
@@ -71,7 +71,7 @@ def save_scored_pattern_result(
 
 def build_similar_user_candidates(*args: object, **kwargs: object) -> dict[str, object]:
     kwargs.setdefault("base_date", "2024-01-31")
-    kwargs.setdefault("query_family", "training_order")
+    kwargs.setdefault("query_family", "training_order_source_window")
     return _build_similar_user_candidates(*args, **kwargs)
 
 
@@ -1578,7 +1578,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
             scored_key = build_scored_key(path_key, 150)
             saved_result = {
@@ -1779,7 +1779,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
             scored_key = build_scored_key(path_key, 150)
             cache_context = build_candidate_cache_context(
@@ -2058,13 +2058,13 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             base_date="2022-01-17",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
             base_date="2022-01-17",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
 
@@ -2109,7 +2109,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             base_date="2022-01-17",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
 

@@ -131,7 +131,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--query-family",
         default=None,
-        choices=("training_order", "date_window"),
+        choices=(
+            "training_order_source_window",
+            "date_window",
+            "training_order_local_sampling_source_window",
+            "training_order_age_source_window",
+            "training_order_age_edu_source_window",
+            "training_order_age_completed_source_window",
+            "training_order_age_edu_completed_source_window",
+            "training_order_age_edu_task_completed_source_window",
+            "training_order_dual_window",
+            "training_order_local_sampling_dual_window",
+            "training_order_age_dual_window",
+            "training_order_age_edu_dual_window",
+            "training_order_age_completed_dual_window",
+            "training_order_age_edu_completed_dual_window",
+            "training_order_age_edu_task_completed_dual_window",
+        ),
         help="Path cache query family used to locate saved raw pattern paths.",
     )
     args = parser.parse_args()

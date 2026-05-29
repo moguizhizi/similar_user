@@ -53,7 +53,34 @@ class PatternQueryFamily(str, Enum):
     """Named query families for a path pattern candidate space."""
 
     DATE_WINDOW = "date_window"
-    TRAINING_ORDER = "training_order"
+    TRAINING_ORDER_SOURCE_WINDOW = "training_order_source_window"
+    TRAINING_ORDER_LOCAL_SAMPLING_SOURCE_WINDOW = (
+        "training_order_local_sampling_source_window"
+    )
+    TRAINING_ORDER_AGE_SOURCE_WINDOW = "training_order_age_source_window"
+    TRAINING_ORDER_AGE_EDU_SOURCE_WINDOW = "training_order_age_edu_source_window"
+    TRAINING_ORDER_AGE_COMPLETED_SOURCE_WINDOW = (
+        "training_order_age_completed_source_window"
+    )
+    TRAINING_ORDER_AGE_EDU_COMPLETED_SOURCE_WINDOW = (
+        "training_order_age_edu_completed_source_window"
+    )
+    TRAINING_ORDER_AGE_EDU_TASK_COMPLETED_SOURCE_WINDOW = (
+        "training_order_age_edu_task_completed_source_window"
+    )
+    TRAINING_ORDER_DUAL_WINDOW = "training_order_dual_window"
+    TRAINING_ORDER_LOCAL_SAMPLING_DUAL_WINDOW = "training_order_local_sampling_dual_window"
+    TRAINING_ORDER_AGE_DUAL_WINDOW = "training_order_age_dual_window"
+    TRAINING_ORDER_AGE_EDU_DUAL_WINDOW = "training_order_age_edu_dual_window"
+    TRAINING_ORDER_AGE_COMPLETED_DUAL_WINDOW = (
+        "training_order_age_completed_dual_window"
+    )
+    TRAINING_ORDER_AGE_EDU_COMPLETED_DUAL_WINDOW = (
+        "training_order_age_edu_completed_dual_window"
+    )
+    TRAINING_ORDER_AGE_EDU_TASK_COMPLETED_DUAL_WINDOW = (
+        "training_order_age_edu_task_completed_dual_window"
+    )
 
 
 @dataclass
@@ -1421,6 +1448,98 @@ class KgRepository:
             },
         )
 
+    def resolve_direct_entity_name(
+        self,
+        entity_name: str,
+    ) -> list[dict[str, object]]:
+        """Return Disease/Symptom/Unknown entities with an exact matching name."""
+        normalized_entity_name = self._normalize_required_string(
+            entity_name,
+            "entity_name",
+        )
+        spec = get_graph_query_spec("direct_entity_name_resolution")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={"entity_name": normalized_entity_name},
+        )
+
+    def get_direct_entity_alias_index(self) -> list[dict[str, object]]:
+        """Return Disease/Symptom/Unknown standard names and aliases."""
+        spec = get_graph_query_spec("direct_entity_alias_index")
+        return self.client.run_query(query=spec.query, parameters={})
+
+    def get_profile_matched_exclusive_tasks(
+        self,
+        *,
+        base_date: str,
+        age: int | None,
+        min_age: int | None,
+        max_age: int | None,
+        gender: str | None,
+        education: str | None,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return exclusive tasks matching available profile fields before base_date."""
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if age is not None and (
+            not isinstance(age, int) or isinstance(age, bool) or age < 0
+        ):
+            raise ValueError("age must be a non-negative integer or None.")
+        if min_age is not None and (
+            not isinstance(min_age, int) or isinstance(min_age, bool) or min_age < 0
+        ):
+            raise ValueError("min_age must be a non-negative integer or None.")
+        if max_age is not None and (
+            not isinstance(max_age, int) or isinstance(max_age, bool) or max_age < 0
+        ):
+            raise ValueError("max_age must be a non-negative integer or None.")
+        if age is not None and (min_age is None or max_age is None):
+            raise ValueError("min_age and max_age are required when age is supplied.")
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or limit <= 0
+        ):
+            raise ValueError("limit must be a positive integer.")
+
+        spec = get_graph_query_spec("profile_matched_exclusive_tasks")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "base_date": normalized_base_date,
+                "age": age,
+                "min_age": min_age,
+                "max_age": max_age,
+                "gender": self._normalize_optional_string(gender, "gender"),
+                "education": self._normalize_optional_string(education, "education"),
+                "limit": limit,
+            },
+        )
+
+    def get_global_popular_exclusive_tasks(
+        self,
+        *,
+        base_date: str,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return globally popular exclusive tasks before base_date."""
+        normalized_base_date = self._normalize_required_string(base_date, "base_date")
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or limit <= 0
+        ):
+            raise ValueError("limit must be a positive integer.")
+
+        spec = get_graph_query_spec("global_popular_exclusive_tasks")
+        return self.client.run_query(
+            query=spec.query,
+            parameters={
+                "base_date": normalized_base_date,
+                "limit": limit,
+            },
+        )
+
     def get_pattern_date_window_statistics(
         self,
         pattern: PathPattern | str,
@@ -1489,7 +1608,7 @@ class KgRepository:
         """Return statistics for rows constrained by s1/s2 training-date order."""
         return self.get_pattern_statistics(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
         )
 
@@ -1503,7 +1622,7 @@ class KgRepository:
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         return self.get_pattern_statistics(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             end_date=normalized_end_date,
         )
@@ -1518,7 +1637,7 @@ class KgRepository:
         normalized_start_date = self._normalize_required_string(start_date, "start_date")
         return self.get_pattern_statistics(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             start_date=normalized_start_date,
         )
@@ -1535,7 +1654,7 @@ class KgRepository:
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         return self.get_pattern_statistics(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             start_date=normalized_start_date,
             end_date=normalized_end_date,
@@ -1636,7 +1755,7 @@ class KgRepository:
         normalized_start_date = self._normalize_required_string(start_date, "start_date")
         return self.get_pattern_randomized_paths(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             start_date=normalized_start_date,
             per_group=per_group,
@@ -1729,7 +1848,7 @@ class KgRepository:
         """Return randomized rows with s1/s2 training-date order."""
         return self.get_pattern_randomized_paths(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             per_group=per_group,
             limit=limit,
@@ -1747,7 +1866,7 @@ class KgRepository:
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         return self.get_pattern_randomized_paths(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             end_date=normalized_end_date,
             per_group=per_group,
@@ -1768,7 +1887,7 @@ class KgRepository:
         normalized_end_date = self._normalize_required_string(end_date, "end_date")
         return self.get_pattern_randomized_paths(
             pattern=pattern,
-            query_family=PatternQueryFamily.TRAINING_ORDER,
+            query_family=PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW,
             patient_id=patient_id,
             start_date=normalized_start_date,
             end_date=normalized_end_date,

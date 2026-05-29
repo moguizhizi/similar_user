@@ -19,7 +19,7 @@ from src.similar_user.utils.pattern_storage import (
 def _retrieval_context(paths: list[dict[str, object]] | None = None) -> dict[str, object]:
     return {
         "base_date": "2024-01-31",
-        "query_family": "training_order",
+        "query_family": "training_order_source_window",
         "path_window": {
             "start_date": "2024-01-17",
             "end_date": "2024-01-31",
@@ -47,7 +47,7 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
             output_dir = get_pattern_result_output_dir(
@@ -81,7 +81,7 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
             output_dir = get_pattern_result_output_dir(
@@ -116,7 +116,7 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
             output_path = get_pattern_result_output_path(
@@ -179,7 +179,7 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
             expected_loaded_result = {
                 "source_id": "30010096",
@@ -196,7 +196,7 @@ class PatternStorageTest(unittest.TestCase):
                     "post_split_games": [],
                     "limit_recommendation": None,
                     "base_date": "2024-01-31",
-                    "query_family": "training_order",
+                    "query_family": "training_order_source_window",
                     "path_window": {
                         "start_date": "2024-01-17",
                         "end_date": "2024-01-31",
@@ -207,7 +207,7 @@ class PatternStorageTest(unittest.TestCase):
                         "path_key": path_key,
                         "base_date": "2024-01-31",
                         "window_days": 14,
-                        "query_family": "training_order",
+                        "query_family": "training_order_source_window",
                         "path_config_hash": path_key.rsplit("_", 1)[-1],
                         "path_config": {
                             "graph_path_limit": {
@@ -226,7 +226,7 @@ class PatternStorageTest(unittest.TestCase):
                 second_result["pattern"],
                 "30010096",
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
             output_exists = output_path.exists()
 
@@ -362,7 +362,7 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
             records = list(
@@ -407,7 +407,7 @@ class PatternStorageTest(unittest.TestCase):
             path_key = build_path_key(
                 config_path,
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
             output_path = save_pattern_result(result, config_path)
@@ -415,7 +415,7 @@ class PatternStorageTest(unittest.TestCase):
                 result["pattern"],
                 "30010096",
                 base_date="2024-01-31",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
         self.assertEqual(

@@ -47,6 +47,7 @@ from similar_user.services.task_recommendation_validation import (
     calculate_f1,
     evaluate_prediction_sets,
     safe_divide,
+    validate_training_task_recommendation,
 )
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
@@ -67,6 +68,7 @@ from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH
 
 LOGGER = get_logger(__name__)
 DEFAULT_OUTPUT_DIR = Path("data/evaluation")
+DEFAULT_SCORE_CURL_FILE = "training_task_score_requests.sh"
 
 
 def parse_args() -> argparse.Namespace:
@@ -114,11 +116,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--query-family",
         default=None,
-        choices=("training_order", "date_window"),
+        choices=(
+            "training_order_source_window",
+            "date_window",
+            "training_order_local_sampling_source_window",
+            "training_order_age_source_window",
+            "training_order_age_edu_source_window",
+            "training_order_age_completed_source_window",
+            "training_order_age_edu_completed_source_window",
+            "training_order_age_edu_task_completed_source_window",
+            "training_order_dual_window",
+            "training_order_local_sampling_dual_window",
+            "training_order_age_dual_window",
+            "training_order_age_edu_dual_window",
+            "training_order_age_completed_dual_window",
+            "training_order_age_edu_completed_dual_window",
+            "training_order_age_edu_task_completed_dual_window",
+        ),
         help=(
-            "Query family for paired-statistics patterns. Defaults to training_order "
+            "Query family for paired-statistics patterns. Defaults to training_order_source_window "
             "for patient-series patterns and is not allowed for direct patterns. "
-            "training_order enforces s1/s2 training-date order; "
+            "training_order_source_window enforces s1/s2 training-date order; "
             "date_window only filters by the s1 date window."
         ),
     )
@@ -212,17 +230,28 @@ def evaluate_patient(
 ) -> dict[str, Any]:
     """Run prediction and compare it with the patient's same-day true tasks."""
     started_at = time.perf_counter()
+    evaluation_settings = load_query_settings(config_path).training_task_evaluation
+    validation_mode = evaluation_settings.validation_mode
     try:
-        actual_game_ids = get_actual_game_ids_on_base_date(
-            user_service,
-            patient_id,
-            base_date,
-        )
-        if not actual_game_ids:
-            return build_not_evaluable_detail(
-                patient_id=patient_id,
-                base_date=base_date,
-                elapsed_seconds=round(time.perf_counter() - started_at, 3),
+        if validation_mode == "set":
+            actual_game_ids = get_actual_game_ids_on_base_date(
+                user_service,
+                patient_id,
+                base_date,
+            )
+            if not actual_game_ids:
+                detail = build_not_evaluable_detail(
+                    patient_id=patient_id,
+                    base_date=base_date,
+                    elapsed_seconds=round(time.perf_counter() - started_at, 3),
+                )
+                detail["validation_mode"] = validation_mode
+                return detail
+        elif validation_mode == "score":
+            actual_game_ids = []
+        else:
+            raise ValueError(
+                f"Unsupported training task evaluation validation_mode: {validation_mode}."
             )
 
         prediction_result = run_end_to_end_training_task_prediction(
@@ -264,14 +293,32 @@ def evaluate_patient(
             actual_game_ids,
             prediction_result,
         )
+        prediction_elapsed_seconds = round(time.perf_counter() - started_at, 3)
+        validation_started_at = time.perf_counter()
+        validation_result = validate_training_task_recommendation(
+            validation_mode=validation_mode,
+            prediction_result=prediction_result,
+            patient_id=patient_id,
+            predicted_game_ids=predicted_game_ids,
+            actual_game_ids=actual_game_ids,
+            score_url=evaluation_settings.score_validation_url,
+            csv_path=evaluation_settings.algorithm_request_results_csv,
+            timeout_seconds=evaluation_settings.score_validation_timeout,
+        )
+        validation_elapsed_seconds = round(
+            time.perf_counter() - validation_started_at,
+            3,
+        )
     except EmptyPathResultsError as exc:
-        return build_not_evaluable_detail(
+        detail = build_not_evaluable_detail(
             patient_id=patient_id,
             base_date=base_date,
             elapsed_seconds=round(time.perf_counter() - started_at, 3),
             reason="no_pattern_paths",
             error_message=str(exc),
         )
+        detail["validation_mode"] = validation_mode
+        return detail
     except Exception as exc:
         prompt_path = None
         llm_prompt = getattr(exc, "llm_prompt", None)
@@ -299,17 +346,19 @@ def evaluate_patient(
             "patient_id": patient_id,
             "base_date": base_date,
             "status": "failed",
+            "validation_mode": validation_mode,
             "error_type": type(exc).__name__,
             "error_message": str(exc),
             "prompt_path": str(prompt_path) if prompt_path is not None else None,
             "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         }
 
-    metrics = evaluate_prediction_sets(predicted_game_ids, actual_game_ids)
     return {
         "patient_id": patient_id,
         "base_date": base_date,
-        "status": "success_evaluated",
+        "status": validation_result["status"],
+        "validation_mode": validation_result["validation_mode"],
+        "reason": validation_result.get("reason"),
         "predicted_game_ids": predicted_game_ids,
         "predicted_game_similar_user_counts": predicted_game_similar_user_counts,
         "actual_game_ids": actual_game_ids,
@@ -317,15 +366,23 @@ def evaluate_patient(
         "similar_user_game_counts_task_count": similar_user_game_counts_task_count,
         "candidate_training_tasks_count": candidate_training_tasks_count,
         "coverage_diagnostics": coverage_diagnostics,
-        "matched_game_ids": metrics["matched_game_ids"],
-        "task_hit": metrics["task_hit"],
-        "precision": metrics["precision"],
-        "recall": metrics["recall"],
-        "f1": metrics["f1"],
+        "matched_game_ids": validation_result.get("matched_game_ids", []),
+        "task_hit": validation_result.get("task_hit"),
+        "precision": validation_result.get("precision"),
+        "recall": validation_result.get("recall"),
+        "f1": validation_result.get("f1"),
+        "training_task_score_validation": validation_result.get(
+            "training_task_score_validation"
+        ),
+        "kg_avg_score": validation_result.get("kg_avg_score"),
+        "csv_avg_score": validation_result.get("csv_avg_score"),
+        "score_delta": validation_result.get("score_delta"),
         "predicted_task_count": len(predicted_game_ids),
-        "actual_task_count": len(actual_game_ids),
-        "matched_task_count": len(metrics["matched_game_ids"]),
+        "actual_task_count": validation_result["actual_task_count"],
+        "matched_task_count": validation_result["matched_task_count"],
         "prompt_path": str(prompt_path) if prompt_path is not None else None,
+        "prediction_elapsed_seconds": prediction_elapsed_seconds,
+        "validation_elapsed_seconds": validation_elapsed_seconds,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
     }
 
@@ -470,10 +527,15 @@ def build_coverage_diagnostics(
 ) -> dict[str, Any]:
     """Build per-patient coverage diagnostics for prompt evidence and candidates."""
     prediction_result = unwrap_training_task_prediction(result)
+    raw_similar_user_game_ids = extract_game_ids_from_rows(
+        prediction_result.get("raw_similar_user_game_counts"),
+        "game_id",
+    )
     similar_user_game_ids = extract_game_ids_from_rows(
         prediction_result.get("similar_user_game_counts"),
         "game_id",
     )
+    overlap_similar_user_game_ids = raw_similar_user_game_ids or similar_user_game_ids
     candidate_training_task_ids = extract_game_ids_from_rows(
         prediction_result.get("candidate_training_tasks"),
         "game_id",
@@ -487,6 +549,10 @@ def build_coverage_diagnostics(
         "candidate_training_tasks": build_missing_coverage_section(
             predicted_game_ids,
             actual_game_ids,
+            candidate_training_task_ids,
+        ),
+        "similar_user_candidate_task_overlap": build_task_pool_overlap_section(
+            overlap_similar_user_game_ids,
             candidate_training_task_ids,
         ),
     }
@@ -531,6 +597,27 @@ def build_missing_coverage_section(
         "actual_total_count": len(actual_ids),
         "actual_missing_rate": round(
             safe_divide(actual_missing_count, len(actual_ids)),
+            4,
+        ),
+    }
+
+
+def build_task_pool_overlap_section(
+    similar_user_task_ids: set[str],
+    candidate_task_ids: set[str],
+) -> dict[str, Any]:
+    """Build overlap metrics between similar-user evidence tasks and candidates."""
+    intersection_ids = similar_user_task_ids & candidate_task_ids
+    return {
+        "similar_user_task_count": len(similar_user_task_ids),
+        "candidate_task_count": len(candidate_task_ids),
+        "intersection_task_count": len(intersection_ids),
+        "coverage": round(
+            safe_divide(len(intersection_ids), len(similar_user_task_ids)),
+            4,
+        ),
+        "candidate_supported_rate": round(
+            safe_divide(len(intersection_ids), len(candidate_task_ids)),
             4,
         ),
     }
@@ -587,6 +674,16 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         for detail in details
         if isinstance(detail.get("elapsed_seconds"), int | float)
     ]
+    prediction_elapsed_seconds = [
+        float(detail["prediction_elapsed_seconds"])
+        for detail in details
+        if isinstance(detail.get("prediction_elapsed_seconds"), int | float)
+    ]
+    validation_elapsed_seconds = [
+        float(detail["validation_elapsed_seconds"])
+        for detail in details
+        if isinstance(detail.get("validation_elapsed_seconds"), int | float)
+    ]
     similar_user_game_counts_task_counts = [
         int(detail["similar_user_game_counts_task_count"])
         for detail in evaluated_details
@@ -598,6 +695,13 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         if isinstance(detail.get("candidate_training_tasks_count"), int | float)
     ]
     coverage_diagnostics = aggregate_coverage_diagnostics(evaluated_details)
+    task_pool_overlap = coverage_diagnostics["similar_user_candidate_task_overlap"]
+    score_evaluated_details = [
+        detail
+        for detail in evaluated_details
+        if detail.get("validation_mode") == "score"
+        and isinstance(detail.get("score_delta"), int | float)
+    ]
 
     return {
         "total_count": total_count,
@@ -666,8 +770,44 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         "candidate_training_tasks_actual_missing_rate": coverage_diagnostics[
             "candidate_training_tasks"
         ]["actual_missing_rate"],
+        "similar_user_candidate_task_coverage": task_pool_overlap["coverage"],
+        "candidate_task_supported_rate": task_pool_overlap[
+            "candidate_supported_rate"
+        ],
+        "avg_similar_user_candidate_task_intersection_count": task_pool_overlap[
+            "avg_intersection_task_count"
+        ],
+        "score_evaluated_count": len(score_evaluated_details),
+        "avg_kg_score": round(
+            average_metric(score_evaluated_details, "kg_avg_score"),
+            4,
+        ),
+        "avg_csv_score": round(
+            average_metric(score_evaluated_details, "csv_avg_score"),
+            4,
+        ),
+        "avg_score_delta": round(
+            average_metric(score_evaluated_details, "score_delta"),
+            4,
+        ),
         "avg_elapsed_seconds": round(average_numbers(elapsed_seconds), 4),
         "p95_elapsed_seconds": round(percentile(elapsed_seconds, 0.95), 4),
+        "avg_prediction_elapsed_seconds": round(
+            average_numbers(prediction_elapsed_seconds),
+            4,
+        ),
+        "p95_prediction_elapsed_seconds": round(
+            percentile(prediction_elapsed_seconds, 0.95),
+            4,
+        ),
+        "avg_validation_elapsed_seconds": round(
+            average_numbers(validation_elapsed_seconds),
+            4,
+        ),
+        "p95_validation_elapsed_seconds": round(
+            percentile(validation_elapsed_seconds, 0.95),
+            4,
+        ),
     }
 
 
@@ -746,7 +886,23 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
                 "candidate_training_tasks_count": detail.get(
                     "candidate_training_tasks_count"
                 ),
+                "similar_user_candidate_task_coverage": (
+                    (detail.get("coverage_diagnostics") or {})
+                    .get("similar_user_candidate_task_overlap", {})
+                    .get("coverage")
+                ),
+                "candidate_task_supported_rate": (
+                    (detail.get("coverage_diagnostics") or {})
+                    .get("similar_user_candidate_task_overlap", {})
+                    .get("candidate_supported_rate")
+                ),
                 "elapsed_seconds": detail.get("elapsed_seconds"),
+                "prediction_elapsed_seconds": detail.get(
+                    "prediction_elapsed_seconds"
+                ),
+                "validation_elapsed_seconds": detail.get(
+                    "validation_elapsed_seconds"
+                ),
             }
         )
 
@@ -761,6 +917,7 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(detail.get("candidate_training_tasks_count"), int | float)
     ]
     coverage_diagnostics = aggregate_coverage_diagnostics(evaluated_details)
+    task_pool_overlap = coverage_diagnostics["similar_user_candidate_task_overlap"]
 
     return {
         "evaluated_count": len(evaluated_details),
@@ -787,6 +944,7 @@ def analyze_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any]:
         "candidate_training_tasks_count_stats": build_number_stats(
             candidate_training_tasks_counts
         ),
+        "similar_user_candidate_task_overlap": task_pool_overlap,
         "top_predicted_games": _counter_to_game_rows(predicted_games),
         "top_actual_games": _counter_to_game_rows(actual_games),
         "top_matched_games": _counter_to_game_rows(matched_games),
@@ -831,6 +989,69 @@ def aggregate_coverage_diagnostics(
         "candidate_training_tasks": aggregate_coverage_section(
             evaluated_details,
             "candidate_training_tasks",
+        ),
+        "similar_user_candidate_task_overlap": (
+            aggregate_task_pool_overlap_section(evaluated_details)
+        ),
+    }
+
+
+def aggregate_task_pool_overlap_section(
+    evaluated_details: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Aggregate similar-user task pool vs candidate task pool overlap metrics."""
+    sections: list[dict[str, Any]] = []
+    for detail in evaluated_details:
+        coverage_diagnostics = detail.get("coverage_diagnostics")
+        if not isinstance(coverage_diagnostics, dict):
+            continue
+        section = coverage_diagnostics.get("similar_user_candidate_task_overlap")
+        if isinstance(section, dict):
+            sections.append(section)
+
+    coverage_values = [
+        float(section["coverage"])
+        for section in sections
+        if isinstance(section.get("coverage"), int | float)
+    ]
+    candidate_supported_rate_values = [
+        float(section["candidate_supported_rate"])
+        for section in sections
+        if isinstance(section.get("candidate_supported_rate"), int | float)
+    ]
+    intersection_counts = [
+        float(section["intersection_task_count"])
+        for section in sections
+        if isinstance(section.get("intersection_task_count"), int | float)
+    ]
+    similar_user_task_counts = [
+        float(section["similar_user_task_count"])
+        for section in sections
+        if isinstance(section.get("similar_user_task_count"), int | float)
+    ]
+    candidate_task_counts = [
+        float(section["candidate_task_count"])
+        for section in sections
+        if isinstance(section.get("candidate_task_count"), int | float)
+    ]
+    return {
+        "count": len(sections),
+        "coverage": round(average_numbers(coverage_values), 4),
+        "candidate_supported_rate": round(
+            average_numbers(candidate_supported_rate_values),
+            4,
+        ),
+        "avg_intersection_task_count": round(
+            average_numbers(intersection_counts),
+            4,
+        ),
+        "avg_similar_user_task_count": round(
+            average_numbers(similar_user_task_counts),
+            4,
+        ),
+        "avg_candidate_task_count": round(
+            average_numbers(candidate_task_counts),
+            4,
         ),
     }
 
@@ -963,6 +1184,46 @@ def write_outputs(
     return summary_path, details_path
 
 
+def write_score_curl_commands(
+    details: list[dict[str, Any]],
+    *,
+    output_dir: str | Path,
+    curl_file: str = DEFAULT_SCORE_CURL_FILE,
+) -> Path | None:
+    """Write score-service curl commands captured in per-patient details."""
+    blocks: list[str] = []
+    for detail in details:
+        validation = detail.get("training_task_score_validation")
+        if not isinstance(validation, dict):
+            continue
+        for label, exchange_name in (
+            ("kg", "kg_score_exchange"),
+            ("csv", "csv_score_exchange"),
+        ):
+            exchange = validation.get(exchange_name)
+            if not isinstance(exchange, dict):
+                continue
+            curl_command = exchange.get("request_curl")
+            if not isinstance(curl_command, str) or not curl_command.strip():
+                continue
+            blocks.append(
+                "\n".join(
+                    [
+                        f"# patient_id={detail.get('patient_id')} base_date={detail.get('base_date')} source={label}",
+                        curl_command.strip(),
+                    ]
+                )
+            )
+    if not blocks:
+        return None
+
+    resolved_output_dir = Path(output_dir)
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    curl_path = resolved_output_dir / curl_file
+    curl_path.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+    return curl_path
+
+
 def write_analysis_output(
     analysis: dict[str, Any],
     *,
@@ -1019,6 +1280,19 @@ def build_experiment_config(
     )
     if not isinstance(similar_user_game_counts_weighted_sort_enabled, bool):
         similar_user_game_counts_weighted_sort_enabled = False
+    evaluation_settings = getattr(query_settings, "training_task_evaluation", None)
+    validation_mode = getattr(evaluation_settings, "validation_mode", "set")
+    score_validation_url = getattr(evaluation_settings, "score_validation_url", None)
+    algorithm_request_results_csv = getattr(
+        evaluation_settings,
+        "algorithm_request_results_csv",
+        None,
+    )
+    score_validation_timeout = getattr(
+        evaluation_settings,
+        "score_validation_timeout",
+        None,
+    )
     return {
         "base_date": base_date,
         "window_days": patient_path_window_days,
@@ -1032,6 +1306,10 @@ def build_experiment_config(
         "prompt_template": prompt_template_name,
         "similar_user_game_counts_weighting_enabled": similar_user_game_counts_weighting_enabled,
         "similar_user_game_counts_weighted_sort_enabled": similar_user_game_counts_weighted_sort_enabled,
+        "validation_mode": validation_mode,
+        "score_validation_url": score_validation_url,
+        "algorithm_request_results_csv": algorithm_request_results_csv,
+        "score_validation_timeout": score_validation_timeout,
         "scored_path_top_k": scored_path_top_k,
         "disease_course_window_days": disease_course_window_days,
     }
@@ -1053,6 +1331,8 @@ def build_experiment_output_dir(
         f"qf_{_slug_part(query_family)}",
         use_llm,
     ]
+    if "validation_mode" in experiment_config:
+        parts.insert(-1, f"eval_{_slug_part(experiment_config.get('validation_mode'))}")
     return Path(output_dir) / "_".join(parts)
 
 
@@ -1079,7 +1359,9 @@ def run_batch_evaluation(
 ) -> list[dict[str, Any]]:
     """Evaluate every patient and return per-patient details."""
     started_at = time.perf_counter()
-    patient_path_window_days = load_query_settings(config_path).patient_path.window_days
+    query_settings = load_query_settings(config_path)
+    patient_path_window_days = query_settings.patient_path.window_days
+    validation_mode = query_settings.training_task_evaluation.validation_mode
     if limit is not None and limit <= 0:
         raise ValueError(f"limit must be a positive integer, got {limit}.")
     if not patient_ids:
@@ -1096,13 +1378,14 @@ def run_batch_evaluation(
         if limit is not None:
             resolved_patient_ids = resolved_patient_ids[:limit]
         LOGGER.info(
-            "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s",
+            "Starting prediction evaluation batch: patient_count=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, validation_mode=%s",
             len(resolved_patient_ids),
             base_date,
             patient_path_window_days,
             query_family,
             task_top_k,
             use_llm,
+            validation_mode,
         )
         for index, patient_id in enumerate(resolved_patient_ids, start=1):
             detail = evaluate_patient(
@@ -1280,6 +1563,10 @@ def main() -> int:
             summary_file=args.summary_file,
             details_file=args.details_file,
         )
+        score_curl_path = write_score_curl_commands(
+            details,
+            output_dir=resolved_output_dir,
+        )
         analysis_path = write_analysis_output(
             analysis,
             output_dir=resolved_output_dir,
@@ -1301,6 +1588,8 @@ def main() -> int:
         analysis_path,
         round(time.perf_counter() - started_at, 3),
     )
+    if score_curl_path is not None:
+        LOGGER.info("Wrote training-task score curl commands to %s", score_curl_path)
     LOGGER.info(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
     return 0
 

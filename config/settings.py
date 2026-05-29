@@ -104,8 +104,22 @@ class TrainingTaskPredictionSettings:
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
     profile_candidate_training_window_days: int | None = None
+    unlock_train_candidate_tasks_enabled: bool = False
     similar_user_game_counts_weighting_enabled: bool = False
     similar_user_game_counts_weighted_sort_enabled: bool = False
+
+
+@dataclass(frozen=True)
+class TrainingTaskEvaluationSettings:
+    """Configuration for evaluating predicted training tasks."""
+
+    validation_mode: str = "set"
+    score_validation_url: str = "http://172.21.133.142:5008/training_task_score"
+    algorithm_request_results_csv: str = (
+        "/home/temp/dataset/20260525_Algorithm_Request_Results/"
+        "20260525_Algorithm_Request_Results.csv"
+    )
+    score_validation_timeout: float = 10.0
 
 
 @dataclass(frozen=True)
@@ -163,6 +177,7 @@ class QuerySettings:
     score_pattern_paths: ScorePatternPathsSettings
     candidate_ranking: CandidateRankingSettings
     training_task_prediction: TrainingTaskPredictionSettings
+    training_task_evaluation: TrainingTaskEvaluationSettings
     direct_entity_task_prediction: DirectEntityTaskPredictionSettings
     direct_entity_path: DirectEntityPathSettings
     direct_entity_path_scoring: DirectEntityPathScoringSettings
@@ -269,6 +284,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     score_pattern_paths_data = data.get("score_pattern_paths") or {}
     candidate_ranking_data = data.get("candidate_ranking") or {}
     training_task_prediction_data = data.get("training_task_prediction") or {}
+    training_task_evaluation_data = data.get("training_task_evaluation") or {}
     direct_entity_task_prediction_data = data.get("direct_entity_task_prediction") or {}
     direct_entity_path_data = data.get("direct_entity_path") or {}
     direct_entity_path_scoring_data = data.get("direct_entity_path_scoring") or {}
@@ -395,6 +411,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction profile_candidate_training_window_days must be a non-negative integer or null."
         )
+    unlock_train_candidate_tasks_enabled = training_task_prediction_data.get(
+        "unlock_train_candidate_tasks_enabled",
+        False,
+    )
+    if not isinstance(unlock_train_candidate_tasks_enabled, bool):
+        raise ValueError(
+            "training_task_prediction unlock_train_candidate_tasks_enabled must be a boolean."
+        )
     similar_user_game_counts_weighting_enabled = training_task_prediction_data.get(
         "similar_user_game_counts_weighting_enabled",
         False,
@@ -410,6 +434,46 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     if not isinstance(similar_user_game_counts_weighted_sort_enabled, bool):
         raise ValueError(
             "training_task_prediction similar_user_game_counts_weighted_sort_enabled must be a boolean."
+        )
+    validation_mode = training_task_evaluation_data.get("validation_mode", "set")
+    if not isinstance(validation_mode, str) or validation_mode.strip() not in {
+        "set",
+        "score",
+    }:
+        raise ValueError(
+            "training_task_evaluation validation_mode must be one of: set, score."
+        )
+    score_validation_url = training_task_evaluation_data.get(
+        "score_validation_url",
+        "http://172.21.133.142:5008/training_task_score",
+    )
+    if not isinstance(score_validation_url, str) or not score_validation_url.strip():
+        raise ValueError(
+            "training_task_evaluation score_validation_url must be a non-empty string."
+        )
+    algorithm_request_results_csv = training_task_evaluation_data.get(
+        "algorithm_request_results_csv",
+        "/home/temp/dataset/20260525_Algorithm_Request_Results/"
+        "20260525_Algorithm_Request_Results.csv",
+    )
+    if (
+        not isinstance(algorithm_request_results_csv, str)
+        or not algorithm_request_results_csv.strip()
+    ):
+        raise ValueError(
+            "training_task_evaluation algorithm_request_results_csv must be a non-empty string."
+        )
+    score_validation_timeout = training_task_evaluation_data.get(
+        "score_validation_timeout",
+        10.0,
+    )
+    if (
+        isinstance(score_validation_timeout, bool)
+        or not isinstance(score_validation_timeout, (int, float))
+        or score_validation_timeout <= 0
+    ):
+        raise ValueError(
+            "training_task_evaluation score_validation_timeout must be a positive number."
         )
     direct_entity_prompt_template_name = direct_entity_task_prediction_data.get(
         "prompt_template_name",
@@ -479,8 +543,15 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name.strip(),
             profile_candidate_training_window_days=profile_candidate_training_window_days,
+            unlock_train_candidate_tasks_enabled=unlock_train_candidate_tasks_enabled,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
+        ),
+        training_task_evaluation=TrainingTaskEvaluationSettings(
+            validation_mode=validation_mode.strip(),
+            score_validation_url=score_validation_url.strip(),
+            algorithm_request_results_csv=algorithm_request_results_csv.strip(),
+            score_validation_timeout=float(score_validation_timeout),
         ),
         direct_entity_task_prediction=DirectEntityTaskPredictionSettings(
             prompt_template_name=direct_entity_prompt_template_name.strip(),

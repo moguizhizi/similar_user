@@ -36,7 +36,7 @@ class RunMonthlyPatternPathsTest(unittest.TestCase):
             patient_id="20102686",
             base_date="2024-02-23",
             config_path="config/settings.yaml",
-            query_family="training_order",
+            query_family="training_order_source_window",
         )
 
         self.assertEqual(
@@ -51,7 +51,7 @@ class RunMonthlyPatternPathsTest(unittest.TestCase):
                 "--config",
                 "config/settings.yaml",
                 "--query-family",
-                "training_order",
+                "training_order_source_window",
             ],
         )
 
@@ -99,7 +99,7 @@ class RunMonthlyPatternPathsTest(unittest.TestCase):
                 base_date="2026-05-25",
                 config_path="config/settings.yaml",
                 log_dir="logs/monthly_pattern_paths",
-                query_family="training_order",
+                query_family="training_order_source_window",
             )
 
         self.assertEqual([run.patient_id for run in runs], ["20102686", "20104662"])
@@ -117,7 +117,7 @@ class RunMonthlyPatternPathsTest(unittest.TestCase):
                 "--config",
                 "config/settings.yaml",
                 "--query-family",
-                "training_order",
+                "training_order_source_window",
             ],
         )
         self.assertEqual(

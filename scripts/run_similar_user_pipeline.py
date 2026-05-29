@@ -92,10 +92,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--query-family",
         default=None,
-        choices=("training_order", "date_window"),
+        choices=(
+            "training_order_source_window",
+            "date_window",
+            "training_order_local_sampling_source_window",
+            "training_order_age_source_window",
+            "training_order_age_edu_source_window",
+            "training_order_age_completed_source_window",
+            "training_order_age_edu_completed_source_window",
+            "training_order_age_edu_task_completed_source_window",
+            "training_order_dual_window",
+            "training_order_local_sampling_dual_window",
+            "training_order_age_dual_window",
+            "training_order_age_edu_dual_window",
+            "training_order_age_completed_dual_window",
+            "training_order_age_edu_completed_dual_window",
+            "training_order_age_edu_task_completed_dual_window",
+        ),
         help=(
             "Query family for paired-statistics path building. Defaults to "
-            "training_order; date_window only filters by the s1 date window."
+            "training_order_source_window enforces s1/s2 training-date order and filters by the s1 date window; date_window only filters by the s1 date window."
         ),
     )
     parser.add_argument(
@@ -142,7 +158,7 @@ def run_similar_user_pipeline(
             patient_id,
             config_path=resolved_config_path,
             base_date=base_date,
-            query_family=query_family or "training_order",
+            query_family=query_family or "training_order_source_window",
         )
         path_generation = [_summarize_path_result(item) for item in path_results]
         _raise_if_path_results_empty(
@@ -157,7 +173,7 @@ def run_similar_user_pipeline(
             patient_id,
             config_path=resolved_config_path,
             base_date=base_date,
-            query_family=query_family or "training_order",
+            query_family=query_family or "training_order_source_window",
         )
         direct_entity_scoring = _score_direct_entity_paths_if_enabled(
             patient_id,
@@ -171,7 +187,7 @@ def run_similar_user_pipeline(
         patient_id,
         config_path=resolved_config_path,
         base_date=base_date,
-        query_family=query_family or "training_order",
+        query_family=query_family or "training_order_source_window",
     )
     candidate_output_paths = save_similar_user_candidates_result(candidate_result)
     LOGGER.info(

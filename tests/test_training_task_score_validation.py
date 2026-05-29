@@ -9,10 +9,70 @@ from pathlib import Path
 
 from src.similar_user.services.task_recommendation_validation import (
     build_training_task_score_validation,
+    validate_training_task_recommendation,
 )
 
 
 class TrainingTaskScoreValidationTest(unittest.TestCase):
+    def test_validate_training_task_recommendation_set_mode(self) -> None:
+        result = validate_training_task_recommendation(
+            validation_mode="set",
+            prediction_result={},
+            patient_id="40",
+            predicted_game_ids=["1", "2", "1"],
+            actual_game_ids=["2", "3"],
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "status": "success_evaluated",
+                "validation_mode": "set",
+                "matched_game_ids": ["2"],
+                "task_hit": True,
+                "precision": 0.5,
+                "recall": 0.5,
+                "f1": 0.5,
+                "actual_task_count": 2,
+                "matched_task_count": 1,
+            },
+        )
+
+    def test_validate_training_task_recommendation_score_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "request_results.csv"
+            self._write_csv(
+                csv_path,
+                [
+                    {
+                        "ai_params": {
+                            "user_id": "20123188_old",
+                            "ba": [0.5],
+                        },
+                        "recommen_train": {
+                            "id": [306],
+                        },
+                    }
+                ],
+            )
+
+            result = validate_training_task_recommendation(
+                validation_mode="score",
+                prediction_result={"predicted_training_tasks": [{"game_id": "299"}]},
+                patient_id="20123188",
+                predicted_game_ids=["299"],
+                score_url="http://score.test/training_task_score",
+                csv_path=csv_path,
+                timeout_seconds=3.0,
+                score_client=_FakeScoreClient({"299": 60.0, "306": 70.0}),
+            )
+
+        self.assertEqual(result["status"], "success_evaluated")
+        self.assertEqual(result["validation_mode"], "score")
+        self.assertEqual(result["actual_task_count"], 0)
+        self.assertEqual(result["matched_task_count"], 0)
+        self.assertEqual(result["training_task_score_validation"]["status"], "ok")
+
     def test_build_validation_compares_kg_and_csv_task_scores(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             csv_path = Path(temp_dir) / "request_results.csv"

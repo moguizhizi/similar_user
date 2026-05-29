@@ -119,7 +119,7 @@ class PathPatternRegistryTest(unittest.TestCase):
         self.assertEqual(spec.group_field, "g")
         self.assertIs(spec.path_model, PatientTasksetTaskGameTaskTasksetPatientPath)
         date_window = spec.queries.family("date_window")
-        training_order = spec.queries.family("training_order")
+        training_order = spec.queries.family("training_order_source_window")
         self.assertEqual(
             date_window.randomized_path.base,
             PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
@@ -219,7 +219,7 @@ class PathPatternRegistryTest(unittest.TestCase):
         self.assertEqual(spec.group_field, "dis")
         self.assertIs(spec.path_model, PatientTasksetDiseaseTasksetPatientPath)
         date_window = spec.queries.family("date_window")
-        training_order = spec.queries.family("training_order")
+        training_order = spec.queries.family("training_order_source_window")
         self.assertEqual(
             date_window.randomized_path.base,
             PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
@@ -293,7 +293,7 @@ class PathPatternRegistryTest(unittest.TestCase):
         self.assertEqual(spec.group_field, "sym")
         self.assertIs(spec.path_model, PatientTasksetSymptomTasksetPatientPath)
         date_window = spec.queries.family("date_window")
-        training_order = spec.queries.family("training_order")
+        training_order = spec.queries.family("training_order_source_window")
         self.assertEqual(
             date_window.randomized_path.base,
             PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
@@ -367,7 +367,7 @@ class PathPatternRegistryTest(unittest.TestCase):
         self.assertEqual(spec.group_field, "un")
         self.assertIs(spec.path_model, PatientTasksetUnknownTasksetPatientPath)
         date_window = spec.queries.family("date_window")
-        training_order = spec.queries.family("training_order")
+        training_order = spec.queries.family("training_order_source_window")
         self.assertEqual(
             date_window.randomized_path.base,
             PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_DATE_WINDOW_RANDOMIZED_PATH_QUERY,
@@ -591,7 +591,7 @@ class PathPatternRegistryTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "does not support query family"):
-            query_set.family("training_order")
+            query_set.family("training_order_source_window")
 
     def test_registered_specs_are_keyed_by_their_pattern(self) -> None:
         for pattern, spec in PATH_PATTERN_SPECS.items():

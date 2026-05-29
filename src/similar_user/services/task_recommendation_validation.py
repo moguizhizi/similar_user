@@ -36,6 +36,65 @@ def evaluate_prediction_sets(
     }
 
 
+def validate_training_task_recommendation(
+    *,
+    validation_mode: str,
+    prediction_result: dict[str, Any],
+    patient_id: str,
+    predicted_game_ids: list[str],
+    actual_game_ids: list[str] | None = None,
+    score_url: str = "http://172.21.133.142:5008/training_task_score",
+    csv_path: str | Path = DEFAULT_ALGORITHM_REQUEST_RESULTS_PATH,
+    timeout_seconds: float = 10.0,
+    score_client: TrainingTaskScoreClient | None = None,
+) -> dict[str, Any]:
+    """Build validation fields for one predicted training-task result."""
+    if validation_mode == "set":
+        resolved_actual_game_ids = actual_game_ids or []
+        metrics = evaluate_prediction_sets(predicted_game_ids, resolved_actual_game_ids)
+        return {
+            "status": "success_evaluated",
+            "validation_mode": validation_mode,
+            "matched_game_ids": metrics["matched_game_ids"],
+            "task_hit": metrics["task_hit"],
+            "precision": metrics["precision"],
+            "recall": metrics["recall"],
+            "f1": metrics["f1"],
+            "actual_task_count": len(normalize_task_ids(resolved_actual_game_ids)),
+            "matched_task_count": len(metrics["matched_game_ids"]),
+        }
+
+    if validation_mode == "score":
+        score_validation = build_training_task_score_validation(
+            prediction_result,
+            patient_id=patient_id,
+            score_url=score_url,
+            csv_path=csv_path,
+            timeout_seconds=timeout_seconds,
+            client=score_client,
+        )
+        status = (
+            "success_evaluated"
+            if score_validation.get("status") == "ok"
+            else "success_not_evaluable"
+        )
+        return {
+            "status": status,
+            "validation_mode": validation_mode,
+            "reason": score_validation.get("reason"),
+            "training_task_score_validation": score_validation,
+            "kg_avg_score": score_validation.get("kg_avg_score"),
+            "csv_avg_score": score_validation.get("csv_avg_score"),
+            "score_delta": score_validation.get("score_delta"),
+            "actual_task_count": 0,
+            "matched_task_count": 0,
+        }
+
+    raise ValueError(
+        f"Unsupported training task evaluation validation_mode: {validation_mode}."
+    )
+
+
 def build_training_task_score_validation(
     prediction_result: dict[str, Any],
     *,

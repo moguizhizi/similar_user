@@ -25,7 +25,7 @@ query:
   pattern_path_storage:
     output_dir: "data/pattern_paths"
   patient_path:
-    window_days: 14
+    window_days: 90
   score_pattern_paths:
     top_k: 150
   candidate_ranking:
@@ -52,7 +52,7 @@ query:
     similar_user_game_counts_weighting_enabled: false
     similar_user_game_counts_weighted_sort_enabled: false
   training_task_evaluation:
-    validation_mode: "set"
+    validation_mode: "score"
     score_validation_url: "http://172.21.133.142:5008/training_task_score"
     algorithm_request_results_csv: "/home/temp/dataset/20260525_Algorithm_Request_Results/20260525_Algorithm_Request_Results.csv"
     score_validation_timeout: 10
@@ -63,7 +63,7 @@ query:
     direct_path_limit: 1000
     index_path: "data/pattern_paths/direct_entity_path_index.json"
   direct_entity_path_scoring:
-    use_when_patient_exists: true
+    use_when_patient_exists: false
 
 similarity:
   top_k: 20

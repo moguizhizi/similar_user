@@ -346,6 +346,50 @@ class RunEvaluationGridTest(unittest.TestCase):
         self.assertEqual(leaderboard[0]["rank"], 1)
         self.assertEqual(leaderboard[0]["overrides"], {"query.score_pattern_paths.top_k": 50})
 
+    def test_build_leaderboard_can_rank_by_score_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            first_output_dir = Path(temp_dir) / "runs" / "exp_001"
+            second_output_dir = Path(temp_dir) / "runs" / "exp_002"
+            first_summary_dir = first_output_dir / "base_2026-05-25_window_14"
+            second_summary_dir = second_output_dir / "base_2026-05-25_window_14"
+            first_summary_dir.mkdir(parents=True)
+            second_summary_dir.mkdir(parents=True)
+            (first_summary_dir / "predict_training_tasks_summary.json").write_text(
+                '{"avg_score_delta": 1.5, "avg_kg_score": 80, "avg_csv_score": 78.5, "score_evaluated_count": 1}\n',
+                encoding="utf-8",
+            )
+            (second_summary_dir / "predict_training_tasks_summary.json").write_text(
+                '{"avg_score_delta": 2.5, "avg_kg_score": 82, "avg_csv_score": 79.5, "score_evaluated_count": 1}\n',
+                encoding="utf-8",
+            )
+            runs = [
+                run_evaluation_grid.EvaluationGridRun(
+                    index=1,
+                    name="exp_001",
+                    overrides={},
+                    config_path=str(Path(temp_dir) / "exp_001.yaml"),
+                    output_dir=str(first_output_dir),
+                    command=["python", "evaluate"],
+                ),
+                run_evaluation_grid.EvaluationGridRun(
+                    index=2,
+                    name="exp_002",
+                    overrides={},
+                    config_path=str(Path(temp_dir) / "exp_002.yaml"),
+                    output_dir=str(second_output_dir),
+                    command=["python", "evaluate"],
+                ),
+            ]
+
+            leaderboard = run_evaluation_grid.build_leaderboard(
+                runs,
+                rank_by="avg_score_delta",
+            )
+
+        self.assertEqual([row["name"] for row in leaderboard], ["exp_002", "exp_001"])
+        self.assertEqual(leaderboard[0]["avg_score_delta"], 2.5)
+        self.assertEqual(leaderboard[0]["rank_metric"], "avg_score_delta")
+
     def test_write_leaderboard_outputs_writes_json_and_csv(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             json_path, csv_path = run_evaluation_grid.write_leaderboard_outputs(

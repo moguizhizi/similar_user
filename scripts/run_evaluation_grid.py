@@ -47,9 +47,20 @@ LEADERBOARD_FIELDS = (
     "micro_precision",
     "macro_recall",
     "macro_f1",
+    "score_evaluated_count",
+    "avg_kg_score",
+    "avg_csv_score",
+    "avg_score_delta",
     "evaluated_count",
     "success_count",
     "failed_count",
+    "avg_prediction_elapsed_seconds",
+    "p95_prediction_elapsed_seconds",
+    "avg_validation_elapsed_seconds",
+    "p95_validation_elapsed_seconds",
+    "similar_user_candidate_task_coverage",
+    "candidate_task_supported_rate",
+    "avg_similar_user_candidate_task_intersection_count",
     "avg_elapsed_seconds",
     "summary_path",
     "overrides",
@@ -540,10 +551,16 @@ def build_leaderboard_sort_key(row: dict[str, Any], rank_by: str) -> tuple[Any, 
     """Sort by primary metric, then stable secondary metrics."""
     return (
         -numeric_metric(row.get(rank_by)),
+        -numeric_metric(row.get("avg_score_delta")),
+        -numeric_metric(row.get("avg_kg_score")),
         -numeric_metric(row.get("micro_f1")),
         -numeric_metric(row.get("task_hit_rate")),
         -numeric_metric(row.get("micro_precision")),
-        numeric_metric(row.get("avg_elapsed_seconds")),
+        numeric_metric(
+            row.get("avg_prediction_elapsed_seconds")
+            if row.get("avg_prediction_elapsed_seconds") is not None
+            else row.get("avg_elapsed_seconds")
+        ),
         str(row.get("name") or ""),
     )
 

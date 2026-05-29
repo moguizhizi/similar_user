@@ -1,0 +1,63 @@
+stage: "coarse_2026_183_users"
+
+base:
+  base_date: "2026-05-25"
+  window_days: 14
+  task_top_k: 7
+  use_llm: true
+  skip_path_build: true
+  skip_path_scoring: false
+  limit: 100
+  query_family: "training_order_age_dual_window"
+
+baseline_overrides:
+  query.candidate_ranking.disease_course_window_days: 14
+  query.candidate_ranking.total_score_match_top_k: 1
+  query.score_pattern_paths.top_k: 150
+  query.training_task_prediction.prompt_candidate_compression_enabled: false
+  query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V1"
+
+experiments:
+  - name: baseline_best
+    overrides: {}
+
+  - name: score_game_diversity_on
+    overrides:
+      query.candidate_ranking.scoring.game_similarity_with_diversity_score: true
+
+  - name: more_path_candidates_3
+    overrides:
+      query.candidate_ranking.total_score_match_top_k: 3
+
+  - name: more_path_candidates_5
+    overrides:
+      query.candidate_ranking.total_score_match_top_k: 5
+
+  - name: prompt_compression_on
+    overrides:
+      query.training_task_prediction.prompt_candidate_compression_enabled: true
+
+  - name: prompt_template_v2
+    overrides:
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+
+  - name: more_path_candidates_10_disease_course_window_21
+    overrides:
+      query.candidate_ranking.disease_course_window_days: 21
+      query.candidate_ranking.total_score_match_top_k: 10
+
+  - name: unlock_train_candidate_tasks_on
+    overrides:
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: prompt_template_v2_unlock_train_candidate_tasks_on
+    overrides:
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: score_game_diversity_on_unlock_train_candidate_tasks_on
+    overrides:
+      query.candidate_ranking.scoring.game_similarity_with_diversity_score: true
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+

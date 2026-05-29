@@ -18,6 +18,14 @@
       --education 本科 \
       --gender 男 \
       --disease-id AU_DIS_0029
+
+    python scripts/predict_training_tasks_from_direct_entity.py \
+      --patient-id 201231885555 \
+      --base-date 2026-05-27 \
+      --age 66 \
+      --education 本科 \
+      --gender 男 \
+      --disease-name 注意缺陷多动障碍
 """
 
 from __future__ import annotations
@@ -41,6 +49,12 @@ from config.settings import load_query_settings  # noqa: E402
 from similar_user.data_access.kg_repository import KgRepository  # noqa: E402
 from similar_user.data_access.neo4j_client import Neo4jClient  # noqa: E402
 from similar_user.services.llm_client import LlmClient  # noqa: E402
+from similar_user.services.direct_entity_fallback_prediction import (  # noqa: E402
+    DirectEntityFallbackPredictionService,
+)
+from similar_user.services.direct_entity_name_resolution import (  # noqa: E402
+    DirectEntityNameResolver,
+)
 from similar_user.services.task_prediction import (  # noqa: E402
     TrainingTaskPredictionService,
 )
@@ -75,6 +89,16 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=[],
         help="Disease IDs. Can be supplied multiple times.",
+    )
+    parser.add_argument(
+        "--disease-name",
+        action="append",
+        nargs="+",
+        default=[],
+        help=(
+            "Disease/entity names to resolve from KG Disease/Symptom/Unknown nodes. "
+            "Can be supplied multiple times."
+        ),
     )
     parser.add_argument(
         "--symptom-id",
@@ -131,6 +155,7 @@ def predict_training_tasks_from_direct_entity(
     education: str,
     gender: str,
     disease_ids: list[str] | None = None,
+    disease_names: list[str] | None = None,
     symptom_ids: list[str] | None = None,
     unknown_ids: list[str] | None = None,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
@@ -142,6 +167,33 @@ def predict_training_tasks_from_direct_entity(
     normalized_patient_id = _normalize_required_text(patient_id, "patient_id")
     resolved_config_path = Path(config_path)
     query_settings = load_query_settings(resolved_config_path)
+    resolved_disease_ids = _dedupe_texts(disease_ids or [])
+    resolved_symptom_ids = _dedupe_texts(symptom_ids or [])
+    resolved_unknown_ids = _dedupe_texts(unknown_ids or [])
+    resolved_disease_names = _dedupe_texts(disease_names or [])
+    entity_name_resolution = {
+        "resolved": [],
+        "unresolved": [],
+    }
+    if resolved_disease_names:
+        with Neo4jClient.from_config(resolved_config_path) as client:
+            repository = KgRepository(
+                client=client,
+                config_path=resolved_config_path,
+            )
+            entity_name_resolution = resolve_direct_entity_names(
+                DirectEntityNameResolver(repository),
+                resolved_disease_names,
+            )
+        resolved_disease_ids = _dedupe_texts(
+            resolved_disease_ids + _ids_by_type(entity_name_resolution, "disease")
+        )
+        resolved_symptom_ids = _dedupe_texts(
+            resolved_symptom_ids + _ids_by_type(entity_name_resolution, "symptom")
+        )
+        resolved_unknown_ids = _dedupe_texts(
+            resolved_unknown_ids + _ids_by_type(entity_name_resolution, "unknown")
+        )
     task_top_k = query_settings.training_task_prediction.task_top_k
     candidate_top_k = query_settings.candidate_ranking.candidate_top_k
     candidate_window_days = query_settings.candidate_ranking.disease_course_window_days
@@ -153,59 +205,92 @@ def predict_training_tasks_from_direct_entity(
         "Starting direct entity task prediction: patient_id=%s, base_date=%s, disease_id_count=%s, symptom_id_count=%s, unknown_id_count=%s, score_top_k=%s, candidate_top_k=%s, task_top_k=%s",
         normalized_patient_id,
         base_date,
-        len(disease_ids or []),
-        len(symptom_ids or []),
-        len(unknown_ids or []),
+        len(resolved_disease_ids),
+        len(resolved_symptom_ids),
+        len(resolved_unknown_ids),
         query_settings.score_pattern_paths.top_k,
         candidate_top_k,
         task_top_k,
     )
 
-    direct_score_result = score_direct_entity_paths(
-        config_path=resolved_config_path,
-        patient_id=normalized_patient_id,
-        base_date=base_date,
-        age=age,
-        education=education,
-        gender=gender,
-        disease_ids=disease_ids or [],
-        symptom_ids=symptom_ids or [],
-        unknown_ids=unknown_ids or [],
-        top_k=query_settings.score_pattern_paths.top_k,
-        force_manual_input=True,
+    has_direct_entities = bool(
+        resolved_disease_ids or resolved_symptom_ids or resolved_unknown_ids
     )
-    LOGGER.info(
-        "Scored direct entity paths: patient_id=%s, source_count=%s, path_count=%s, scored_path_count=%s, missing_source_count=%s",
-        normalized_patient_id,
-        direct_score_result.get("source_count"),
-        direct_score_result.get("path_count"),
-        direct_score_result.get("scored_path_count"),
-        len(direct_score_result.get("missing_sources") or []),
+    missing_entity_reason = (
+        "no_resolved_entity_names" if resolved_disease_names else "missing_entity_input"
     )
-    missing_sources = direct_score_result.get("missing_sources")
-    if isinstance(missing_sources, list) and missing_sources:
-        LOGGER.warning(
-            "Some direct entity sources were not found in local path cache: patient_id=%s, missing_sources=%s",
+    direct_score_result: dict[str, Any] = {
+        "should_score": False,
+        "reason": missing_entity_reason,
+        "path_count": 0,
+        "scored_path_count": 0,
+        "top_k": query_settings.score_pattern_paths.top_k,
+        "missing_sources": [],
+    }
+    direct_score_output_paths: list[dict[str, Path]] = []
+    candidate_result: dict[str, Any] = {
+        "source_id": normalized_patient_id,
+        "source_parameter": "manual_profile",
+        "candidate_top_k": candidate_top_k,
+        "path_count": 0,
+        "scored_path_count": 0,
+        "candidate_count": 0,
+        "pre_score_candidate_count": 0,
+        "ranking": "direct_entity_best_score_avg_score_match_count",
+        "candidates": [],
+    }
+
+    if has_direct_entities:
+        direct_score_result = score_direct_entity_paths(
+            config_path=resolved_config_path,
+            patient_id=normalized_patient_id,
+            base_date=base_date,
+            age=age,
+            education=education,
+            gender=gender,
+            disease_ids=resolved_disease_ids,
+            symptom_ids=resolved_symptom_ids,
+            unknown_ids=resolved_unknown_ids,
+            top_k=query_settings.score_pattern_paths.top_k,
+            force_manual_input=True,
+        )
+        LOGGER.info(
+            "Scored direct entity paths: patient_id=%s, source_count=%s, path_count=%s, scored_path_count=%s, missing_source_count=%s",
             normalized_patient_id,
-            missing_sources,
+            direct_score_result.get("source_count"),
+            direct_score_result.get("path_count"),
+            direct_score_result.get("scored_path_count"),
+            len(direct_score_result.get("missing_sources") or []),
         )
-    direct_score_output_paths = save_scored_direct_entity_result(
-        direct_score_result,
-        scored_paths_dir,
-    )
-    candidate_result = (
-        SimilarUserCandidateService()
-        .aggregate_candidates_from_direct_entity_scored_result(
+        missing_sources = direct_score_result.get("missing_sources")
+        if isinstance(missing_sources, list) and missing_sources:
+            LOGGER.warning(
+                "Some direct entity sources were not found in local path cache: patient_id=%s, missing_sources=%s",
+                normalized_patient_id,
+                missing_sources,
+            )
+        direct_score_output_paths = save_scored_direct_entity_result(
             direct_score_result,
-            candidate_top_k=candidate_top_k,
+            scored_paths_dir,
         )
-    )
-    LOGGER.info(
-        "Aggregated direct entity candidates: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s",
-        normalized_patient_id,
-        candidate_result.get("pre_score_candidate_count"),
-        candidate_result.get("candidate_count"),
-    )
+        candidate_result = (
+            SimilarUserCandidateService()
+            .aggregate_candidates_from_direct_entity_scored_result(
+                direct_score_result,
+                candidate_top_k=candidate_top_k,
+            )
+        )
+        LOGGER.info(
+            "Aggregated direct entity candidates: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s",
+            normalized_patient_id,
+            candidate_result.get("pre_score_candidate_count"),
+            candidate_result.get("candidate_count"),
+        )
+    else:
+        LOGGER.info(
+            "Skipping direct entity path scoring because no disease/symptom/unknown IDs were supplied: patient_id=%s",
+            normalized_patient_id,
+        )
 
     with Neo4jClient.from_config(resolved_config_path) as client:
         user_service = UserService(
@@ -214,6 +299,50 @@ def predict_training_tasks_from_direct_entity(
                 config_path=resolved_config_path,
             )
         )
+        if int(candidate_result.get("candidate_count") or 0) <= 0:
+            fallback_reason = (
+                missing_entity_reason
+                if not has_direct_entities
+                else "no_direct_entity_candidates"
+            )
+            prediction_result = DirectEntityFallbackPredictionService(
+                user_service=user_service,
+            ).predict(
+                patient_id=normalized_patient_id,
+                base_date=base_date,
+                age=age,
+                education=education,
+                gender=gender,
+                task_top_k=task_top_k,
+                reason=fallback_reason,
+            )
+            LOGGER.info(
+                "Completed fallback task prediction: patient_id=%s, fallback_level=%s, predicted_task_count=%s",
+                normalized_patient_id,
+                prediction_result.get("candidate_source", {}).get("fallback_level"),
+                len(prediction_result.get("predicted_training_tasks") or []),
+            )
+            return {
+                "patient_id": normalized_patient_id,
+                "source_parameter": "manual_profile",
+                "base_date": base_date,
+                "config_path": str(resolved_config_path),
+                "entity_name_resolution": entity_name_resolution,
+                "direct_entity_scoring": {
+                    "should_score": direct_score_result.get("should_score"),
+                    "reason": direct_score_result.get("reason"),
+                    "path_count": direct_score_result.get("path_count"),
+                    "scored_path_count": direct_score_result.get("scored_path_count"),
+                    "top_k": direct_score_result.get("top_k"),
+                    "output_paths": [
+                        {key: str(value) for key, value in item.items()}
+                        for item in direct_score_output_paths
+                    ],
+                },
+                "direct_entity_candidate_result": candidate_result,
+                "training_task_prediction": prediction_result,
+            }
+
         llm_client = LlmClient.from_config(resolved_config_path) if use_llm else None
         prediction_service = TrainingTaskPredictionService(
             user_service=user_service,
@@ -242,9 +371,11 @@ def predict_training_tasks_from_direct_entity(
                 "gender": gender,
             },
             target_entities={
-                "disease_ids": disease_ids or [],
-                "symptom_ids": symptom_ids or [],
-                "unknown_ids": unknown_ids or [],
+                "disease_ids": resolved_disease_ids,
+                "symptom_ids": resolved_symptom_ids,
+                "unknown_ids": resolved_unknown_ids,
+                "disease_names": resolved_disease_names,
+                "entity_name_resolution": entity_name_resolution,
             },
             task_top_k=task_top_k,
             use_llm=use_llm,
@@ -265,6 +396,7 @@ def predict_training_tasks_from_direct_entity(
         "source_parameter": "manual_profile",
         "base_date": base_date,
         "config_path": str(resolved_config_path),
+        "entity_name_resolution": entity_name_resolution,
         "direct_entity_scoring": {
             "should_score": direct_score_result.get("should_score"),
             "reason": direct_score_result.get("reason"),
@@ -308,6 +440,30 @@ def summarize_prediction_result(
     return result
 
 
+def resolve_direct_entity_names(
+    resolver: DirectEntityNameResolver,
+    entity_names: list[str],
+) -> dict[str, list[dict[str, Any]]]:
+    """Resolve disease-name input against KG Disease/Symptom/Unknown nodes."""
+    return resolver.resolve_names(entity_names)
+
+
+def _ids_by_type(
+    resolution: dict[str, list[dict[str, Any]]],
+    entity_type: str,
+) -> list[str]:
+    ids: list[str] = []
+    for item in resolution.get("resolved") or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("entity_type") != entity_type:
+            continue
+        entity_id = _normalize_optional_text(item.get("entity_id"))
+        if entity_id is not None:
+            ids.append(entity_id)
+    return ids
+
+
 def _flatten(values: list[list[str]] | None) -> list[str]:
     flattened: list[str] = []
     for group in values or []:
@@ -316,6 +472,18 @@ def _flatten(values: list[list[str]] | None) -> list[str]:
             if text is not None:
                 flattened.append(text)
     return flattened
+
+
+def _dedupe_texts(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = _normalize_optional_text(value)
+        if text is None or text in seen:
+            continue
+        deduped.append(text)
+        seen.add(text)
+    return deduped
 
 
 def _normalize_required_text(value: object, field_name: str) -> str:
@@ -359,6 +527,7 @@ def main() -> int:
             education=args.education,
             gender=args.gender,
             disease_ids=_flatten(args.disease_id),
+            disease_names=_flatten(args.disease_name),
             symptom_ids=_flatten(args.symptom_id),
             unknown_ids=_flatten(args.unknown_id),
             config_path=args.config,

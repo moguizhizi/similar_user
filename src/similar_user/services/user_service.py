@@ -637,7 +637,7 @@ class UserService:
     ) -> dict[str, Any]:
         """Run a statistics-guided randomized path query for one pattern family."""
         normalized_query_family = (
-            PatternQueryFamily.TRAINING_ORDER
+            PatternQueryFamily.TRAINING_ORDER_SOURCE_WINDOW
             if query_family is None
             else self._normalize_pattern_query_family(query_family)
         )
@@ -986,6 +986,51 @@ class UserService:
                 start_date,
                 end_date,
             )
+        )
+
+    def resolve_direct_entity_name(
+        self,
+        entity_name: str,
+    ) -> list[dict[str, object]]:
+        """Resolve a user-entered entity name to Disease/Symptom/Unknown IDs."""
+        return self.kg_repository.resolve_direct_entity_name(entity_name)
+
+    def get_direct_entity_alias_index(self) -> list[dict[str, object]]:
+        """Return Disease/Symptom/Unknown standard names and aliases."""
+        return self.kg_repository.get_direct_entity_alias_index()
+
+    def get_profile_matched_exclusive_tasks(
+        self,
+        *,
+        base_date: str,
+        age: int | None,
+        min_age: int | None,
+        max_age: int | None,
+        gender: str | None,
+        education: str | None,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return fallback exclusive tasks matching available profile fields."""
+        return self.kg_repository.get_profile_matched_exclusive_tasks(
+            base_date=base_date,
+            age=age,
+            min_age=min_age,
+            max_age=max_age,
+            gender=gender,
+            education=education,
+            limit=limit,
+        )
+
+    def get_global_popular_exclusive_tasks(
+        self,
+        *,
+        base_date: str,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return globally popular exclusive tasks for fallback recommendation."""
+        return self.kg_repository.get_global_popular_exclusive_tasks(
+            base_date=base_date,
+            limit=limit,
         )
 
     def _load_window_statistics(

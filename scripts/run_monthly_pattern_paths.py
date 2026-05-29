@@ -4,7 +4,7 @@
 当天最多 100 个训练患者列表，再逐个调用：
 
     python scripts/build_pattern_paths.py --source-id PATIENT_ID --patterns-from-config \
-        --base-date BASE_DATE --query-family training_order
+        --base-date BASE_DATE --query-family training_order_source_window
 
 默认 keep-going：某个患者或日期失败后记录失败并继续后续任务。
 """
@@ -123,7 +123,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--query-family",
         default=None,
-        choices=("training_order", "date_window"),
+        choices=(
+            "training_order_source_window",
+            "date_window",
+            "training_order_local_sampling_source_window",
+            "training_order_age_source_window",
+            "training_order_age_edu_source_window",
+            "training_order_age_completed_source_window",
+            "training_order_age_edu_completed_source_window",
+            "training_order_age_edu_task_completed_source_window",
+            "training_order_dual_window",
+            "training_order_local_sampling_dual_window",
+            "training_order_age_dual_window",
+            "training_order_age_edu_dual_window",
+            "training_order_age_completed_dual_window",
+            "training_order_age_edu_completed_dual_window",
+            "training_order_age_edu_task_completed_dual_window",
+        ),
         help="Query family passed to build_pattern_paths.py.",
     )
     parser.add_argument(

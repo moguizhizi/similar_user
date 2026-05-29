@@ -8,6 +8,7 @@ base:
   skip_path_build: true
   skip_path_scoring: true
   limit: 100
+  query_family: "training_order_source_window"
 
 baseline_overrides:
   query.candidate_ranking.disease_course_window_days: 14
