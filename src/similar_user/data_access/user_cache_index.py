@@ -1,0 +1,329 @@
+"""SQLite index for patient-centered pipeline cache entries."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+
+SUPPORTED_USER_CACHE_TYPES = frozenset(
+    {
+        "raw_paths",
+        "scored_paths",
+        "topk_candidates",
+    }
+)
+
+
+@dataclass(frozen=True)
+class UserCacheEntry:
+    """One patient-centered cache index entry."""
+
+    cache_type: str
+    patient_id: str
+    query_family: str
+    window_days: int
+    config_hash: str
+    cached_base_date: str
+    valid_days: int
+    data_path: str
+    payload: dict[str, Any]
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    def is_valid_for(self, request_base_date: str) -> bool:
+        """Return whether the entry can be reused for request_base_date."""
+        request_date = _parse_iso_date(request_base_date, "request_base_date")
+        cached_date = _parse_iso_date(self.cached_base_date, "cached_base_date")
+        return timedelta(days=0) <= request_date - cached_date <= timedelta(
+            days=self.valid_days
+        )
+
+
+class UserCacheIndexStore:
+    """Read and write patient-centered cache index entries."""
+
+    def __init__(self, sqlite_path: str | Path) -> None:
+        self.sqlite_path = Path(sqlite_path)
+
+    @property
+    def exists(self) -> bool:
+        """Return whether the SQLite index file already exists."""
+        return self.sqlite_path.exists()
+
+    def initialize(self) -> None:
+        """Create cache index tables and indexes when missing."""
+        self.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_cache_entries (
+                    cache_type TEXT NOT NULL,
+                    patient_id TEXT NOT NULL,
+                    query_family TEXT NOT NULL,
+                    window_days INTEGER NOT NULL,
+                    config_hash TEXT NOT NULL,
+                    cached_base_date TEXT NOT NULL,
+                    valid_days INTEGER NOT NULL,
+                    data_path TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (
+                        cache_type,
+                        patient_id,
+                        query_family,
+                        window_days,
+                        config_hash,
+                        cached_base_date,
+                        data_path
+                    )
+                )
+                """.strip()
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_user_cache_lookup
+                ON user_cache_entries (
+                    cache_type,
+                    patient_id,
+                    query_family,
+                    window_days,
+                    config_hash,
+                    cached_base_date
+                )
+                """.strip()
+            )
+
+    def upsert_entry(self, entry: UserCacheEntry) -> UserCacheEntry:
+        """Insert or update one cache index entry."""
+        normalized = _normalize_entry(entry)
+        self.initialize()
+        now = _utc_now()
+        created_at = normalized.created_at or now
+        updated_at = now
+        payload_json = json.dumps(
+            normalized.payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO user_cache_entries (
+                    cache_type,
+                    patient_id,
+                    query_family,
+                    window_days,
+                    config_hash,
+                    cached_base_date,
+                    valid_days,
+                    data_path,
+                    payload_json,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (
+                    cache_type,
+                    patient_id,
+                    query_family,
+                    window_days,
+                    config_hash,
+                    cached_base_date,
+                    data_path
+                )
+                DO UPDATE SET
+                    valid_days = excluded.valid_days,
+                    payload_json = excluded.payload_json,
+                    updated_at = excluded.updated_at
+                """.strip(),
+                (
+                    normalized.cache_type,
+                    normalized.patient_id,
+                    normalized.query_family,
+                    normalized.window_days,
+                    normalized.config_hash,
+                    normalized.cached_base_date,
+                    normalized.valid_days,
+                    normalized.data_path,
+                    payload_json,
+                    created_at,
+                    updated_at,
+                ),
+            )
+        return UserCacheEntry(
+            cache_type=normalized.cache_type,
+            patient_id=normalized.patient_id,
+            query_family=normalized.query_family,
+            window_days=normalized.window_days,
+            config_hash=normalized.config_hash,
+            cached_base_date=normalized.cached_base_date,
+            valid_days=normalized.valid_days,
+            data_path=normalized.data_path,
+            payload=normalized.payload,
+            created_at=created_at,
+            updated_at=updated_at,
+        )
+
+    def find_latest_valid_entry(
+        self,
+        *,
+        cache_type: str,
+        patient_id: str,
+        query_family: str,
+        window_days: int,
+        config_hash: str,
+        request_base_date: str,
+    ) -> UserCacheEntry | None:
+        """Return the newest unexpired entry matching the patient and config."""
+        if not self.exists:
+            return None
+        normalized_cache_type = _normalize_cache_type(cache_type)
+        normalized_patient_id = _normalize_required_text(patient_id, "patient_id")
+        normalized_query_family = _normalize_required_text(query_family, "query_family")
+        normalized_window_days = _normalize_positive_int(window_days, "window_days")
+        normalized_config_hash = _normalize_required_text(config_hash, "config_hash")
+        request_date = _parse_iso_date(request_base_date, "request_base_date")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM user_cache_entries
+                WHERE cache_type = ?
+                  AND patient_id = ?
+                  AND query_family = ?
+                  AND window_days = ?
+                  AND config_hash = ?
+                  AND cached_base_date <= ?
+                ORDER BY cached_base_date DESC, updated_at DESC
+                """.strip(),
+                (
+                    normalized_cache_type,
+                    normalized_patient_id,
+                    normalized_query_family,
+                    normalized_window_days,
+                    normalized_config_hash,
+                    request_date.isoformat(),
+                ),
+            ).fetchall()
+        for row in rows:
+            entry = _entry_from_row(row)
+            if entry.is_valid_for(request_date.isoformat()):
+                return entry
+        return None
+
+    def delete_entry(self, entry: UserCacheEntry) -> int:
+        """Delete a single cache index entry and return affected row count."""
+        normalized = _normalize_entry(entry)
+        if not self.exists:
+            return 0
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM user_cache_entries
+                WHERE cache_type = ?
+                  AND patient_id = ?
+                  AND query_family = ?
+                  AND window_days = ?
+                  AND config_hash = ?
+                  AND cached_base_date = ?
+                  AND data_path = ?
+                """.strip(),
+                (
+                    normalized.cache_type,
+                    normalized.patient_id,
+                    normalized.query_family,
+                    normalized.window_days,
+                    normalized.config_hash,
+                    normalized.cached_base_date,
+                    normalized.data_path,
+                ),
+            )
+            return int(cursor.rowcount)
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.sqlite_path)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+
+def _normalize_entry(entry: UserCacheEntry) -> UserCacheEntry:
+    return UserCacheEntry(
+        cache_type=_normalize_cache_type(entry.cache_type),
+        patient_id=_normalize_required_text(entry.patient_id, "patient_id"),
+        query_family=_normalize_required_text(entry.query_family, "query_family"),
+        window_days=_normalize_positive_int(entry.window_days, "window_days"),
+        config_hash=_normalize_required_text(entry.config_hash, "config_hash"),
+        cached_base_date=_parse_iso_date(
+            entry.cached_base_date,
+            "cached_base_date",
+        ).isoformat(),
+        valid_days=_normalize_non_negative_int(entry.valid_days, "valid_days"),
+        data_path=_normalize_required_text(entry.data_path, "data_path"),
+        payload=dict(entry.payload),
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+    )
+
+
+def _entry_from_row(row: sqlite3.Row) -> UserCacheEntry:
+    payload = json.loads(row["payload_json"])
+    if not isinstance(payload, dict):
+        raise ValueError("user cache payload_json must decode to an object.")
+    return UserCacheEntry(
+        cache_type=str(row["cache_type"]),
+        patient_id=str(row["patient_id"]),
+        query_family=str(row["query_family"]),
+        window_days=int(row["window_days"]),
+        config_hash=str(row["config_hash"]),
+        cached_base_date=str(row["cached_base_date"]),
+        valid_days=int(row["valid_days"]),
+        data_path=str(row["data_path"]),
+        payload=payload,
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+    )
+
+
+def _normalize_cache_type(value: str) -> str:
+    normalized = _normalize_required_text(value, "cache_type")
+    if normalized not in SUPPORTED_USER_CACHE_TYPES:
+        supported = ", ".join(sorted(SUPPORTED_USER_CACHE_TYPES))
+        raise ValueError(f"cache_type must be one of: {supported}.")
+    return normalized
+
+
+def _normalize_required_text(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string.")
+    return value.strip()
+
+
+def _normalize_positive_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer.")
+    return value
+
+
+def _normalize_non_negative_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer.")
+    return value
+
+
+def _parse_iso_date(value: str, field_name: str) -> date:
+    text = _normalize_required_text(value, field_name)
+    try:
+        return date.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO date.") from exc
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")

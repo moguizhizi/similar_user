@@ -141,6 +141,19 @@ class DirectPathCacheSettings:
 
 
 @dataclass(frozen=True)
+class UserCacheSettings:
+    """Configuration for patient-centered pipeline cache indexing."""
+
+    enabled: bool = False
+    sqlite_path: str = "data/user_cache/cache_index.sqlite"
+    raw_paths_valid_days: int = 30
+    scored_paths_valid_days: int = 14
+    topk_candidates_valid_days: int = 7
+    cleanup_max_age_days: int = 30
+    keep_latest_per_user: int = 2
+
+
+@dataclass(frozen=True)
 class DirectEntityPathSettings:
     """Configuration for building direct entity-start pattern path files."""
 
@@ -613,6 +626,73 @@ def load_direct_path_cache_settings(
         incremental_enabled=incremental_enabled,
         overlap_days=overlap_days,
     )
+
+
+def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
+    """Load patient-centered cache index settings from YAML."""
+    data = _extract_config_section(load_yaml_config(config_path), "user_cache")
+
+    enabled = data.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("user_cache enabled must be a boolean.")
+
+    sqlite_path = data.get("sqlite_path", "data/user_cache/cache_index.sqlite")
+    if not isinstance(sqlite_path, str) or not sqlite_path.strip():
+        raise ValueError("user_cache sqlite_path must be a non-empty string.")
+
+    raw_paths_valid_days = _parse_user_cache_valid_days(
+        data,
+        "raw_paths_valid_days",
+        default=30,
+    )
+    scored_paths_valid_days = _parse_user_cache_valid_days(
+        data,
+        "scored_paths_valid_days",
+        default=14,
+    )
+    topk_candidates_valid_days = _parse_user_cache_valid_days(
+        data,
+        "topk_candidates_valid_days",
+        default=7,
+    )
+
+    cleanup_max_age_days = data.get("cleanup_max_age_days", 30)
+    if (
+        not isinstance(cleanup_max_age_days, int)
+        or isinstance(cleanup_max_age_days, bool)
+        or cleanup_max_age_days < 0
+    ):
+        raise ValueError("user_cache cleanup_max_age_days must be a non-negative integer.")
+
+    keep_latest_per_user = data.get("keep_latest_per_user", 2)
+    if (
+        not isinstance(keep_latest_per_user, int)
+        or isinstance(keep_latest_per_user, bool)
+        or keep_latest_per_user <= 0
+    ):
+        raise ValueError("user_cache keep_latest_per_user must be a positive integer.")
+
+    return UserCacheSettings(
+        enabled=enabled,
+        sqlite_path=sqlite_path.strip(),
+        raw_paths_valid_days=raw_paths_valid_days,
+        scored_paths_valid_days=scored_paths_valid_days,
+        topk_candidates_valid_days=topk_candidates_valid_days,
+        cleanup_max_age_days=cleanup_max_age_days,
+        keep_latest_per_user=keep_latest_per_user,
+    )
+
+
+def _parse_user_cache_valid_days(
+    data: dict[str, Any],
+    field_name: str,
+    *,
+    default: int,
+) -> int:
+    value = data.get(field_name, default)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"user_cache {field_name} must be a non-negative integer.")
+    return value
 
 
 def _parse_candidate_scoring_settings(value: object) -> CandidateScoringSettings:
