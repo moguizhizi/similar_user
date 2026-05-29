@@ -37,25 +37,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             "predict_training_tasks_analysis.json",
         )
         self.assertEqual(args.patient_list_dir, "data/patient_ids")
-        self.assertEqual(args.workers, 1)
-
-    def test_parse_args_accepts_workers(self) -> None:
-        with patch.object(
-            sys,
-            "argv",
-            [
-                "evaluate_predict_training_tasks.py",
-                "--patient-id",
-                "40",
-                "--base-date",
-                "2022-05-22",
-                "--workers",
-                "4",
-            ],
-        ):
-            args = evaluate_predict_training_tasks.parse_args()
-
-        self.assertEqual(args.workers, 4)
 
     def test_build_patient_ids_file_from_base_date_uses_export_path_rule(self) -> None:
         patient_ids_file = (
@@ -544,6 +525,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             ),
             training_task_evaluation=Mock(
                 validation_mode="set",
+                workers=3,
                 score_validation_url="http://score.test/training_task_score",
                 algorithm_request_results_csv="/tmp/request_results.csv",
                 score_validation_timeout=3.0,
@@ -559,6 +541,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             query_family="date_window",
             task_top_k=7,
             use_llm=False,
+            workers=3,
         )
 
         self.assertEqual(config["disease_course_window_days"], 180)
@@ -567,6 +550,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertNotIn("effective_candidate_task_window_days", config)
         self.assertEqual(config["base_date"], "2022-05-22")
         self.assertEqual(config["task_top_k"], 7)
+        self.assertEqual(config["workers"], 3)
         self.assertTrue(config["skip_path_scoring"])
         self.assertFalse(config["use_llm"])
         self.assertEqual(

@@ -114,6 +114,7 @@ class TrainingTaskEvaluationSettings:
     """Configuration for evaluating predicted training tasks."""
 
     validation_mode: str = "set"
+    workers: int = 1
     score_validation_url: str = "http://172.21.133.142:5008/training_task_score"
     algorithm_request_results_csv: str = (
         "/home/temp/dataset/20260525_Algorithm_Request_Results/"
@@ -443,6 +444,13 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_evaluation validation_mode must be one of: set, score."
         )
+    evaluation_workers = training_task_evaluation_data.get("workers", 1)
+    if (
+        not isinstance(evaluation_workers, int)
+        or isinstance(evaluation_workers, bool)
+        or evaluation_workers <= 0
+    ):
+        raise ValueError("training_task_evaluation workers must be a positive integer.")
     score_validation_url = training_task_evaluation_data.get(
         "score_validation_url",
         "http://172.21.133.142:5008/training_task_score",
@@ -549,6 +557,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         ),
         training_task_evaluation=TrainingTaskEvaluationSettings(
             validation_mode=validation_mode.strip(),
+            workers=evaluation_workers,
             score_validation_url=score_validation_url.strip(),
             algorithm_request_results_csv=algorithm_request_results_csv.strip(),
             score_validation_timeout=float(score_validation_timeout),

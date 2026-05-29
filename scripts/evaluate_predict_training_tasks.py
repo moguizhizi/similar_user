@@ -10,7 +10,6 @@
 
     python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22
     python scripts/evaluate_predict_training_tasks.py --patient-id 40 --base-date 2022-05-22
-    python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --workers 4
 """
 
 from __future__ import annotations
@@ -188,15 +187,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Evaluate at most this many patient IDs after loading them.",
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=1,
-        help=(
-            "Number of patient evaluations to run concurrently. Defaults to 1 "
-            "for serial execution."
-        ),
     )
     return parser.parse_args()
 
@@ -1262,6 +1252,7 @@ def build_experiment_config(
     query_family: str | None,
     task_top_k: int,
     use_llm: bool,
+    workers: int,
 ) -> dict[str, Any]:
     """Build experiment metadata saved with evaluation outputs."""
     query_settings = load_query_settings(config_path)
@@ -1314,6 +1305,7 @@ def build_experiment_config(
         "query_family": query_family,
         "task_top_k": task_top_k,
         "use_llm": use_llm,
+        "workers": workers,
         "prompt_template": prompt_template_name,
         "similar_user_game_counts_weighting_enabled": similar_user_game_counts_weighting_enabled,
         "similar_user_game_counts_weighted_sort_enabled": similar_user_game_counts_weighted_sort_enabled,
@@ -1365,7 +1357,7 @@ def run_batch_evaluation(
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     limit: int | None = None,
-    workers: int = 1,
+    workers: int | None = None,
     save_prompt: bool = True,
     prompt_output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
 ) -> list[dict[str, Any]]:
@@ -1373,11 +1365,13 @@ def run_batch_evaluation(
     started_at = time.perf_counter()
     query_settings = load_query_settings(config_path)
     patient_path_window_days = query_settings.patient_path.window_days
-    validation_mode = query_settings.training_task_evaluation.validation_mode
+    evaluation_settings = query_settings.training_task_evaluation
+    validation_mode = evaluation_settings.validation_mode
+    resolved_workers = evaluation_settings.workers if workers is None else workers
     if limit is not None and limit <= 0:
         raise ValueError(f"limit must be a positive integer, got {limit}.")
-    if workers <= 0:
-        raise ValueError(f"workers must be a positive integer, got {workers}.")
+    if resolved_workers <= 0:
+        raise ValueError(f"workers must be a positive integer, got {resolved_workers}.")
     if not patient_ids:
         raise ValueError("patient_ids must contain at least one patient ID.")
     details: list[dict[str, Any]] = []
@@ -1400,9 +1394,9 @@ def run_batch_evaluation(
             task_top_k,
             use_llm,
             validation_mode,
-            workers,
+            resolved_workers,
         )
-        if workers == 1 or len(resolved_patient_ids) == 1:
+        if resolved_workers == 1 or len(resolved_patient_ids) == 1:
             for index, patient_id in enumerate(resolved_patient_ids, start=1):
                 detail = evaluate_patient(
                     patient_id,
@@ -1427,7 +1421,7 @@ def run_batch_evaluation(
                     detail.get("status"),
                 )
         else:
-            max_workers = min(workers, len(resolved_patient_ids))
+            max_workers = min(resolved_workers, len(resolved_patient_ids))
             details_by_index: dict[int, dict[str, Any]] = {}
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {
@@ -1546,16 +1540,19 @@ def percentile(values: list[float], ratio: float) -> float:
 def main() -> int:
     """Run same-day prediction evaluation and write metrics outputs."""
     args = parse_args()
-    patient_path_window_days = load_query_settings(args.config).patient_path.window_days
+    query_settings = load_query_settings(args.config)
+    patient_path_window_days = query_settings.patient_path.window_days
+    evaluation_workers = query_settings.training_task_evaluation.workers
     started_at = time.perf_counter()
     LOGGER.info(
-        "Starting prediction evaluation: patient_id=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, output_dir=%s",
+        "Starting prediction evaluation: patient_id=%s, base_date=%s, window_days=%s, query_family=%s, task_top_k=%s, use_llm=%s, workers=%s, output_dir=%s",
         args.patient_id,
         args.base_date,
         patient_path_window_days,
         args.query_family,
         args.task_top_k,
         not args.dry_run,
+        evaluation_workers,
         args.output_dir,
     )
     try:
@@ -1589,7 +1586,7 @@ def main() -> int:
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             limit=args.limit,
-            workers=args.workers,
+            workers=evaluation_workers,
             save_prompt=not args.no_save_prompt,
             prompt_output_dir=args.prompt_output_dir,
         )
@@ -1604,6 +1601,7 @@ def main() -> int:
             query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
+            workers=evaluation_workers,
         )
         summary["experiment_config"] = experiment_config
         resolved_output_dir = build_experiment_output_dir(
