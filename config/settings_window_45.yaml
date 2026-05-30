@@ -25,7 +25,7 @@ query:
   pattern_path_storage:
     output_dir: "data/pattern_paths"
   patient_path:
-    window_days: 90
+    window_days: 45
   score_pattern_paths:
     top_k: 150
   candidate_ranking:
