@@ -75,6 +75,7 @@ from scripts.build_similar_user_candidates import (  # noqa: E402
     load_cached_topk_candidate_result,
     save_similar_user_candidates_result,
 )
+from scripts.build_direct_entity_paths import build_direct_entity_paths  # noqa: E402
 from similar_user.data_access.algorithm_request_results import (  # noqa: E402
     normalize_algorithm_request_education,
     normalize_algorithm_request_gender,
@@ -266,7 +267,7 @@ def predict_training_tasks_from_direct_entity(
     }
 
     if has_direct_entities:
-        direct_score_result = score_direct_entity_paths(
+        direct_score_result = _score_direct_entity_paths_with_auto_refresh(
             config_path=resolved_config_path,
             patient_id=normalized_patient_id,
             base_date=base_date,
@@ -277,7 +278,6 @@ def predict_training_tasks_from_direct_entity(
             symptom_ids=resolved_symptom_ids,
             unknown_ids=resolved_unknown_ids,
             top_k=query_settings.score_pattern_paths.top_k,
-            force_manual_input=True,
         )
         LOGGER.info(
             "Scored direct entity paths: patient_id=%s, source_count=%s, path_count=%s, scored_path_count=%s, missing_source_count=%s",
@@ -506,6 +506,113 @@ def normalize_direct_entity_gender(value: object) -> str:
 def normalize_direct_entity_education(value: object) -> str:
     """Normalize direct-entity CLI education input into KG-facing text."""
     return normalize_algorithm_request_education(value)
+
+
+def _score_direct_entity_paths_with_auto_refresh(
+    *,
+    config_path: str | Path,
+    patient_id: str,
+    base_date: str,
+    age: int | str,
+    education: str,
+    gender: str,
+    disease_ids: list[str],
+    symptom_ids: list[str],
+    unknown_ids: list[str],
+    top_k: int | None,
+) -> dict[str, Any]:
+    try:
+        result = score_direct_entity_paths(
+            config_path=config_path,
+            patient_id=patient_id,
+            base_date=base_date,
+            age=age,
+            education=education,
+            gender=gender,
+            disease_ids=disease_ids,
+            symptom_ids=symptom_ids,
+            unknown_ids=unknown_ids,
+            top_k=top_k,
+            force_manual_input=True,
+        )
+    except FileNotFoundError:
+        LOGGER.info(
+            "Direct raw path index missing; rebuilding direct entity paths before scoring: patient_id=%s, base_date=%s",
+            patient_id,
+            base_date,
+        )
+        build_direct_entity_paths(
+            config_path=config_path,
+            disease_ids=disease_ids,
+            symptom_ids=symptom_ids,
+            unknown_ids=unknown_ids,
+        )
+        return score_direct_entity_paths(
+            config_path=config_path,
+            patient_id=patient_id,
+            base_date=base_date,
+            age=age,
+            education=education,
+            gender=gender,
+            disease_ids=disease_ids,
+            symptom_ids=symptom_ids,
+            unknown_ids=unknown_ids,
+            top_k=top_k,
+            force_manual_input=True,
+        )
+
+    missing_sources = result.get("missing_sources")
+    if isinstance(missing_sources, list) and missing_sources:
+        refresh_ids = _direct_refresh_ids_from_missing_sources(missing_sources)
+        LOGGER.info(
+            "Direct raw paths missing or expired; rebuilding before scoring: patient_id=%s, missing_sources=%s",
+            patient_id,
+            missing_sources,
+        )
+        build_direct_entity_paths(
+            config_path=config_path,
+            disease_ids=refresh_ids["disease_ids"],
+            symptom_ids=refresh_ids["symptom_ids"],
+            unknown_ids=refresh_ids["unknown_ids"],
+        )
+        result = score_direct_entity_paths(
+            config_path=config_path,
+            patient_id=patient_id,
+            base_date=base_date,
+            age=age,
+            education=education,
+            gender=gender,
+            disease_ids=disease_ids,
+            symptom_ids=symptom_ids,
+            unknown_ids=unknown_ids,
+            top_k=top_k,
+            force_manual_input=True,
+        )
+    return result
+
+
+def _direct_refresh_ids_from_missing_sources(
+    missing_sources: list[object],
+) -> dict[str, list[str]]:
+    refresh_ids = {
+        "disease_ids": [],
+        "symptom_ids": [],
+        "unknown_ids": [],
+    }
+    for item in missing_sources:
+        if not isinstance(item, dict):
+            continue
+        source_id = item.get("source_id")
+        pattern = item.get("pattern")
+        if not isinstance(source_id, str) or not source_id.strip():
+            continue
+        if pattern == "DISEASE_TASKSET_PATIENT":
+            refresh_ids["disease_ids"].append(source_id.strip())
+        elif pattern == "SYMPTOM_TASKSET_PATIENT":
+            refresh_ids["symptom_ids"].append(source_id.strip())
+        elif pattern == "UNKNOWN_TASKSET_PATIENT":
+            refresh_ids["unknown_ids"].append(source_id.strip())
+    return {key: _dedupe_texts(value) for key, value in refresh_ids.items()}
 
 
 def resolve_direct_entity_names(

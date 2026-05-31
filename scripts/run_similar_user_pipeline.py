@@ -169,11 +169,12 @@ def run_similar_user_pipeline(
         )
 
     if not skip_path_scoring:
-        score_and_save_configured_pattern_paths(
+        _score_patient_paths_with_auto_refresh(
             patient_id,
             config_path=resolved_config_path,
             base_date=base_date,
             query_family=query_family or "training_order_source_window",
+            allow_path_build=skip_path_build,
         )
         direct_entity_scoring = _score_direct_entity_paths_if_enabled(
             patient_id,
@@ -183,11 +184,13 @@ def run_similar_user_pipeline(
     else:
         direct_entity_scoring = None
 
-    candidate_result = build_similar_user_candidates(
+    candidate_result = _build_patient_candidates_with_auto_refresh(
         patient_id,
         config_path=resolved_config_path,
         base_date=base_date,
         query_family=query_family or "training_order_source_window",
+        skip_path_build=skip_path_build,
+        skip_path_scoring=skip_path_scoring,
     )
     candidate_output_paths = save_similar_user_candidates_result(candidate_result)
     LOGGER.info(
@@ -266,6 +269,84 @@ def _resolve_patient_path_window_days(
     config_path: str | Path,
 ) -> int:
     return load_query_settings(config_path).patient_path.window_days
+
+
+def _score_patient_paths_with_auto_refresh(
+    patient_id: str,
+    *,
+    config_path: str | Path,
+    base_date: str,
+    query_family: str,
+    allow_path_build: bool,
+) -> None:
+    try:
+        score_and_save_configured_pattern_paths(
+            patient_id,
+            config_path=config_path,
+            base_date=base_date,
+            query_family=query_family,
+        )
+    except FileNotFoundError:
+        if not allow_path_build:
+            raise
+        LOGGER.info(
+            "Patient raw paths missing or expired; rebuilding before scoring: patient_id=%s, base_date=%s, query_family=%s",
+            patient_id,
+            base_date,
+            query_family,
+        )
+        run_configured_pattern_path_flows(
+            patient_id,
+            config_path=config_path,
+            base_date=base_date,
+            query_family=query_family,
+        )
+        score_and_save_configured_pattern_paths(
+            patient_id,
+            config_path=config_path,
+            base_date=base_date,
+            query_family=query_family,
+        )
+
+
+def _build_patient_candidates_with_auto_refresh(
+    patient_id: str,
+    *,
+    config_path: str | Path,
+    base_date: str,
+    query_family: str,
+    skip_path_build: bool,
+    skip_path_scoring: bool,
+) -> dict[str, Any]:
+    try:
+        return build_similar_user_candidates(
+            patient_id,
+            config_path=config_path,
+            base_date=base_date,
+            query_family=query_family,
+        )
+    except FileNotFoundError:
+        if not skip_path_scoring:
+            raise
+        LOGGER.info(
+            "Patient scored paths missing or expired; rescoring before candidate build: patient_id=%s, base_date=%s, query_family=%s",
+            patient_id,
+            base_date,
+            query_family,
+        )
+        _score_patient_paths_with_auto_refresh(
+            patient_id,
+            config_path=config_path,
+            base_date=base_date,
+            query_family=query_family,
+            allow_path_build=skip_path_build,
+        )
+        return build_similar_user_candidates(
+            patient_id,
+            config_path=config_path,
+            base_date=base_date,
+            query_family=query_family,
+        )
 
 
 def _score_direct_entity_paths_if_enabled(

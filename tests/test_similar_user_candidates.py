@@ -33,6 +33,7 @@ from scripts.score_pattern_paths import (
 )
 from scripts.run_similar_user_pipeline import (
     EmptyPathResultsError,
+    _build_patient_candidates_with_auto_refresh,
     main as pipeline_main,
     run_similar_user_pipeline,
     summarize_pipeline_result,
@@ -2545,6 +2546,41 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             query_family="training_order_source_window",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
+
+    @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
+    @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
+    def test_patient_candidate_auto_refreshes_missing_scored_paths(
+        self,
+        mock_build_candidates: Mock,
+        mock_score_and_save: Mock,
+    ) -> None:
+        refreshed_result = {
+            "patient_id": "30010096",
+            "candidate_count": 1,
+            "candidates": [{"patient_id": "20113562"}],
+        }
+        mock_build_candidates.side_effect = [
+            FileNotFoundError("missing scored paths"),
+            refreshed_result,
+        ]
+
+        result = _build_patient_candidates_with_auto_refresh(
+            "30010096",
+            config_path="config/settings.yaml",
+            base_date="2022-01-17",
+            query_family="training_order_source_window",
+            skip_path_build=False,
+            skip_path_scoring=True,
+        )
+
+        self.assertEqual(result, refreshed_result)
+        mock_score_and_save.assert_called_once_with(
+            "30010096",
+            config_path="config/settings.yaml",
+            base_date="2022-01-17",
+            query_family="training_order_source_window",
+        )
+        self.assertEqual(mock_build_candidates.call_count, 2)
 
     @patch("scripts.run_similar_user_pipeline.LOGGER")
     @patch("scripts.run_similar_user_pipeline.parse_args")
