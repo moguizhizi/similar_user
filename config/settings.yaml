@@ -85,5 +85,6 @@ user_cache:
   raw_paths_valid_days: 30
   scored_paths_valid_days: 14
   topk_candidates_valid_days: 7
+  refresh_candidate_base_date_on_hit: true
   cleanup_max_age_days: 30
   keep_latest_per_user: 2

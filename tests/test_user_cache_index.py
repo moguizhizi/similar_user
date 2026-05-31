@@ -27,6 +27,7 @@ class UserCacheSettingsTest(unittest.TestCase):
                         "  raw_paths_valid_days: 21",
                         "  scored_paths_valid_days: 10",
                         "  topk_candidates_valid_days: 5",
+                        "  refresh_candidate_base_date_on_hit: false",
                         "  cleanup_max_age_days: 21",
                         "  keep_latest_per_user: 3",
                     ]
@@ -41,6 +42,7 @@ class UserCacheSettingsTest(unittest.TestCase):
             self.assertEqual(settings.raw_paths_valid_days, 21)
             self.assertEqual(settings.scored_paths_valid_days, 10)
             self.assertEqual(settings.topk_candidates_valid_days, 5)
+            self.assertFalse(settings.refresh_candidate_base_date_on_hit)
             self.assertEqual(settings.cleanup_max_age_days, 21)
             self.assertEqual(settings.keep_latest_per_user, 3)
 

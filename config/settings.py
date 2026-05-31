@@ -149,6 +149,7 @@ class UserCacheSettings:
     raw_paths_valid_days: int = 30
     scored_paths_valid_days: int = 14
     topk_candidates_valid_days: int = 7
+    refresh_candidate_base_date_on_hit: bool = True
     cleanup_max_age_days: int = 30
     keep_latest_per_user: int = 2
 
@@ -655,6 +656,14 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         "topk_candidates_valid_days",
         default=7,
     )
+    refresh_candidate_base_date_on_hit = data.get(
+        "refresh_candidate_base_date_on_hit",
+        True,
+    )
+    if not isinstance(refresh_candidate_base_date_on_hit, bool):
+        raise ValueError(
+            "user_cache refresh_candidate_base_date_on_hit must be a boolean."
+        )
 
     cleanup_max_age_days = data.get("cleanup_max_age_days", 30)
     if (
@@ -678,6 +687,7 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         raw_paths_valid_days=raw_paths_valid_days,
         scored_paths_valid_days=scored_paths_valid_days,
         topk_candidates_valid_days=topk_candidates_valid_days,
+        refresh_candidate_base_date_on_hit=refresh_candidate_base_date_on_hit,
         cleanup_max_age_days=cleanup_max_age_days,
         keep_latest_per_user=keep_latest_per_user,
     )

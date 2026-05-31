@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from scripts.score_pattern_paths import (
+    build_scored_path_user_cache_context,
     build_scored_key,
     build_scored_pattern_summary,
     main,
@@ -19,6 +20,7 @@ from scripts.score_pattern_paths import (
     score_configured_pattern_paths,
     score_pattern_paths as _score_pattern_paths,
 )
+from src.similar_user.data_access.user_cache_index import UserCacheIndexStore
 from src.similar_user.data_access.pattern_registry import available_path_pattern_aliases
 from src.similar_user.domain import (
     DiseaseNode,
@@ -70,6 +72,29 @@ def score_pattern_paths(*args: object, **kwargs: object) -> dict[str, object]:
     kwargs.setdefault("base_date", "2024-01-31")
     kwargs.setdefault("query_family", "training_order_source_window")
     return _score_pattern_paths(*args, **kwargs)
+
+
+def _write_user_cache_config(root: Path) -> Path:
+    config_path = root / "settings.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "graph_path_limit:",
+                "  bands:",
+                "    - per_g: 1",
+                "patient_path:",
+                "  window_days: 14",
+                "score_pattern_paths:",
+                "  top_k: 150",
+                "user_cache:",
+                "  enabled: true",
+                f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                "  scored_paths_valid_days: 14",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return config_path
 
 
 class PathScoringTest(unittest.TestCase):
@@ -950,6 +975,60 @@ class PathScoringTest(unittest.TestCase):
             / "30"
             / "30010096.detail.json",
         )
+
+    def test_save_scored_pattern_result_registers_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(root)
+            path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+            )
+            scored_key = build_scored_key(path_key, 150)
+            cache_context = {
+                "cache_type": "scored_pattern_paths",
+                "path_key": path_key,
+                "scored_key": scored_key,
+                "score_top_k": 150,
+            }
+            user_cache_context = build_scored_path_user_cache_context(
+                config_path,
+                source_id="30010096",
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+                scored_cache_context=cache_context,
+            )
+            output_paths = save_scored_pattern_result(
+                {
+                    "source_id": "30010096",
+                    "source_parameter": "patient_id",
+                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                    "path_count": 1,
+                    "scored_path_count": 1,
+                    "retrieval_context": {"score_end_date": "2024-01-31"},
+                    "scores": [],
+                    "cache_context": cache_context,
+                    "user_cache_context": user_cache_context,
+                },
+                root / "scored_pattern_paths",
+            )
+            found = UserCacheIndexStore(
+                root / "user_cache" / "cache_index.sqlite"
+            ).find_latest_valid_entry(
+                cache_type="scored_paths",
+                patient_id="30010096",
+                query_family="training_order_source_window",
+                window_days=14,
+                config_hash=str(user_cache_context["config_hash"]),
+                request_base_date="2024-02-03",
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.cached_base_date, "2024-01-31")
+        self.assertEqual(found.data_path, str(output_paths["detail"]))
+        self.assertEqual(found.payload["scored_key"], scored_key)
 
     @patch("scripts.score_pattern_paths.save_scored_pattern_result")
     def test_save_scored_pattern_results_saves_each_result(

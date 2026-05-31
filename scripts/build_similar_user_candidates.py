@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -138,7 +139,7 @@ def build_similar_user_candidates(
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     query_settings = load_query_settings(resolved_config_path)
     ranking_settings = query_settings.candidate_ranking
-    scored_key = build_expected_scored_key(
+    expected_scored_key = build_expected_scored_key(
         resolved_config_path,
         base_date=base_date,
         query_family=query_family,
@@ -152,9 +153,10 @@ def build_similar_user_candidates(
         resolved_disease_course_window_days,
         "disease_course_window_days",
     )
+    selected_patterns = tuple(ranking_settings.patterns)
     candidate_cache_context = build_candidate_cache_context(
         resolved_config_path,
-        scored_key=scored_key,
+        scored_key=expected_scored_key,
         disease_course_window_days=resolved_disease_course_window_days,
     )
     user_cache_context = build_topk_candidate_user_cache_context(
@@ -162,7 +164,7 @@ def build_similar_user_candidates(
         patient_id=patient_id,
         base_date=base_date,
         query_family=query_family,
-        scored_key=scored_key,
+        scored_key=expected_scored_key,
         candidate_cache_context=candidate_cache_context,
     )
     cached_result = load_cached_topk_candidate_result(
@@ -171,6 +173,11 @@ def build_similar_user_candidates(
         request_base_date=base_date,
     )
     if cached_result is not None:
+        cached_result = refresh_cached_candidate_base_dates_on_hit(
+            cached_result,
+            config_path=resolved_config_path,
+            request_base_date=base_date,
+        )
         LOGGER.info(
             "Loaded topK similar-user candidates from user cache: patient_id=%s, query_family=%s, cached_base_date=%s, request_base_date=%s, data_path=%s",
             patient_id,
@@ -181,7 +188,36 @@ def build_similar_user_candidates(
         )
         return cached_result
 
-    selected_patterns = tuple(ranking_settings.patterns)
+    scored_key = expected_scored_key
+    if not _has_any_saved_scored_pattern_result(
+        patient_id,
+        patterns=selected_patterns,
+        scored_paths_dir=scored_paths_dir,
+        scored_key=expected_scored_key,
+    ):
+        scored_key = resolve_scored_key_from_user_cache(
+            resolved_config_path,
+            patient_id=patient_id,
+            base_date=base_date,
+            query_family=query_family,
+            expected_scored_key=expected_scored_key,
+            scored_paths_dir=scored_paths_dir,
+        )
+    if scored_key != expected_scored_key:
+        candidate_cache_context = build_candidate_cache_context(
+            resolved_config_path,
+            scored_key=scored_key,
+            disease_course_window_days=resolved_disease_course_window_days,
+        )
+        user_cache_context = build_topk_candidate_user_cache_context(
+            resolved_config_path,
+            patient_id=patient_id,
+            base_date=base_date,
+            query_family=query_family,
+            scored_key=scored_key,
+            candidate_cache_context=candidate_cache_context,
+        )
+
     LOGGER.info(
         "Starting similar-user candidate build from saved scored paths: patient_id=%s, patterns=%s, candidate_top_k=%s, disease_course_window_days=%s, config_path=%s, scored_paths_dir=%s",
         patient_id,
@@ -304,6 +340,30 @@ def load_saved_scored_pattern_result(
     return data
 
 
+def _has_any_saved_scored_pattern_result(
+    source_id: str,
+    *,
+    patterns: tuple[str, ...],
+    scored_paths_dir: str | Path,
+    scored_key: str,
+) -> bool:
+    normalized_source_id = _normalize_required_string(source_id, "source_id")
+    resolved_scored_key = _normalize_required_string(scored_key, "scored_key")
+    bucket = normalized_source_id[:2] or "unknown"
+    for pattern in patterns:
+        normalized_pattern = resolve_path_pattern(pattern).value
+        detail_path = (
+            Path(scored_paths_dir)
+            / resolved_scored_key
+            / normalized_pattern
+            / bucket
+            / f"{normalized_source_id}.detail.json"
+        )
+        if detail_path.exists():
+            return True
+    return False
+
+
 def load_saved_direct_entity_scored_results(
     source_id: str,
     *,
@@ -382,6 +442,57 @@ def build_expected_scored_key(
         query_family=query_family,
     )
     return build_scored_key(path_key, query_settings.score_pattern_paths.top_k)
+
+
+def resolve_scored_key_from_user_cache(
+    config_path: str | Path,
+    *,
+    patient_id: str,
+    base_date: str | None,
+    query_family: str | None,
+    expected_scored_key: str,
+    scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+) -> str:
+    """Return a recent valid scored_key when exact scored paths are not available."""
+    settings = load_user_cache_settings(config_path)
+    if not settings.enabled:
+        return expected_scored_key
+    normalized_base_date = _normalize_required_string(base_date, "base_date")
+    query_settings = load_query_settings(config_path)
+    store = UserCacheIndexStore(settings.sqlite_path)
+    entry = store.find_latest_valid_entry(
+        cache_type="scored_paths",
+        patient_id=_normalize_required_string(patient_id, "patient_id"),
+        query_family=_normalize_user_cache_query_family(query_family),
+        window_days=query_settings.patient_path.window_days,
+        config_hash=_scored_paths_user_cache_config_hash(expected_scored_key),
+        request_base_date=normalized_base_date,
+    )
+    if entry is None:
+        return expected_scored_key
+    detail_path = Path(entry.data_path)
+    if not detail_path.exists():
+        store.delete_entry(entry)
+        LOGGER.warning(
+            "Deleted stale scored-path user-cache index entry because detail file is missing: patient_id=%s, detail_path=%s",
+            entry.patient_id,
+            detail_path,
+        )
+        return expected_scored_key
+    scored_key = entry.payload.get("scored_key")
+    if not isinstance(scored_key, str) or not scored_key.strip():
+        return expected_scored_key
+    resolved_scored_key = scored_key.strip()
+    LOGGER.info(
+        "Using scored paths from user cache: patient_id=%s, expected_scored_key=%s, cached_scored_key=%s, cached_base_date=%s, data_path=%s, scored_paths_dir=%s",
+        patient_id,
+        expected_scored_key,
+        resolved_scored_key,
+        entry.cached_base_date,
+        detail_path,
+        scored_paths_dir,
+    )
+    return resolved_scored_key
 
 
 def save_similar_user_candidates_result(
@@ -627,6 +738,86 @@ def load_cached_topk_candidate_result(
     return result
 
 
+def refresh_cached_candidate_base_dates_on_hit(
+    result: dict[str, Any],
+    *,
+    config_path: str | Path,
+    request_base_date: str | None,
+) -> dict[str, Any]:
+    """Refresh cached candidate disease-course base dates for the request date."""
+    settings = load_user_cache_settings(config_path)
+    query_settings = load_query_settings(config_path)
+    if (
+        not settings.enabled
+        or not settings.refresh_candidate_base_date_on_hit
+        or not query_settings.candidate_ranking.scoring.disease_course_secondary_ability
+    ):
+        return result
+
+    source_patient_id = _normalize_optional_string(result.get("source_id"))
+    request_date = _normalize_optional_string(request_base_date)
+    candidate_ids = _extract_cached_candidate_ids(result)
+    if source_patient_id is None or request_date is None or not candidate_ids:
+        return result
+
+    with Neo4jClient.from_config(config_path) as client:
+        user_service = UserService(
+            kg_repository=KgRepository(
+                client=client,
+                config_path=Path(config_path),
+            )
+        )
+        matches = user_service.find_patient_total_score_timepoint_matches(
+            source_patient_id=source_patient_id,
+            source_training_date=request_date,
+            comparison_patient_ids=candidate_ids,
+        )
+    refreshed = refresh_cached_candidate_base_dates_from_matches(
+        result,
+        matches=matches,
+        request_base_date=request_date,
+    )
+    LOGGER.info(
+        "Refreshed cached candidate base dates: patient_id=%s, request_base_date=%s, refreshed_count=%s, candidate_count=%s",
+        source_patient_id,
+        request_date,
+        refreshed.get("candidate_base_date_refresh", {}).get("refreshed_count"),
+        len(candidate_ids),
+    )
+    return refreshed
+
+
+def refresh_cached_candidate_base_dates_from_matches(
+    result: dict[str, Any],
+    *,
+    matches: list[dict[str, Any]] | object,
+    request_base_date: str,
+) -> dict[str, Any]:
+    """Return cached candidate result with candidate_base_date refreshed from matches."""
+    refreshed = copy.deepcopy(result)
+    recommended_dates = _build_recommended_dates_by_candidate(matches)
+    candidates = refreshed.get("candidates")
+    refreshed_count = 0
+    if isinstance(candidates, list):
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            patient_id = _normalize_optional_string(candidate.get("patient_id"))
+            if patient_id is None:
+                continue
+            candidate_date = recommended_dates.get(patient_id)
+            if candidate_date is not None:
+                refreshed_count += 1
+            _set_candidate_base_date(candidate, candidate_date)
+    refreshed["candidate_base_date_refresh"] = {
+        "enabled": True,
+        "request_base_date": request_base_date,
+        "refreshed_count": refreshed_count,
+        "matched_candidate_count": len(recommended_dates),
+    }
+    return refreshed
+
+
 def _build_candidate_score_summary(score_details: object) -> dict[str, Any]:
     details = score_details if isinstance(score_details, dict) else {}
     common_game_score_similarity = _extract_nested_value(
@@ -777,6 +968,58 @@ def _validate_cached_topk_candidate_result(
         )
 
 
+def _extract_cached_candidate_ids(result: dict[str, Any]) -> list[str]:
+    candidates = result.get("candidates")
+    if not isinstance(candidates, list):
+        return []
+    candidate_ids: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        patient_id = _normalize_optional_string(candidate.get("patient_id"))
+        if patient_id is None or patient_id in seen:
+            continue
+        candidate_ids.append(patient_id)
+        seen.add(patient_id)
+    return candidate_ids
+
+
+def _build_recommended_dates_by_candidate(matches: object) -> dict[str, str]:
+    if not isinstance(matches, list):
+        return {}
+    recommended_dates: dict[str, str] = {}
+    for match in matches:
+        if not isinstance(match, dict):
+            continue
+        matched = match.get("matched")
+        if not isinstance(matched, dict):
+            continue
+        patient_id = _normalize_optional_string(matched.get("patient_id"))
+        recommended_date = _normalize_optional_string(matched.get("recommended_date"))
+        if patient_id is None or recommended_date is None:
+            continue
+        recommended_dates.setdefault(patient_id, recommended_date)
+    return recommended_dates
+
+
+def _set_candidate_base_date(
+    candidate: dict[str, Any],
+    candidate_base_date: str | None,
+) -> None:
+    for score_key in ("score_details", "score_summary"):
+        score_data = candidate.get(score_key)
+        if not isinstance(score_data, dict):
+            continue
+        disease_course = score_data.get("disease_course_secondary_ability")
+        if not isinstance(disease_course, dict):
+            continue
+        if candidate_base_date is None:
+            disease_course.pop("candidate_base_date", None)
+            continue
+        disease_course["candidate_base_date"] = candidate_base_date
+
+
 def _candidate_config_payload(
     config_path: str | Path,
     *,
@@ -819,6 +1062,13 @@ def _normalize_required_string(value: object, field_name: str) -> str:
     return value.strip()
 
 
+def _normalize_optional_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
 def _normalize_positive_int(value: object, field_name: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ValueError(f"{field_name} must be a positive integer.")
@@ -842,6 +1092,15 @@ def _strip_base_date_from_key(value: str) -> str:
     if len(parts) == 3 and parts[0] == "base":
         return parts[2]
     return value
+
+
+def _scored_paths_user_cache_config_hash(scored_key: str) -> str:
+    return _short_hash(
+        {
+            "cache_type": "scored_paths",
+            "cache_key_without_base_date": _strip_base_date_from_key(scored_key),
+        }
+    )
 
 
 def _validate_optional_positive_int(value: object, field_name: str) -> None:
