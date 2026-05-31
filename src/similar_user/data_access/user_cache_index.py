@@ -250,6 +250,29 @@ class UserCacheIndexStore:
                 return entry
         return None
 
+    def list_entries(self) -> list[UserCacheEntry]:
+        """Return all indexed cache entries ordered by source and cached date."""
+        if not self.exists:
+            return []
+        self.initialize()
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM user_cache_entries
+                ORDER BY
+                    cache_type,
+                    source_type,
+                    source_id,
+                    query_family,
+                    window_days,
+                    config_hash,
+                    cached_base_date DESC,
+                    updated_at DESC
+                """.strip()
+            ).fetchall()
+        return [_entry_from_row(row) for row in rows]
+
     def delete_entry(self, entry: UserCacheEntry) -> int:
         """Delete a single cache index entry and return affected row count."""
         normalized = _normalize_entry(entry)

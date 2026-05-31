@@ -153,7 +153,12 @@ class UserCacheSettings:
     topk_candidates_valid_days: int = 7
     refresh_candidate_base_date_on_hit: bool = True
     cleanup_max_age_days: int = 30
-    keep_latest_per_user: int = 2
+    keep_latest_per_source: int = 2
+
+    @property
+    def keep_latest_per_user(self) -> int:
+        """Backward-compatible alias for source-centered cache retention."""
+        return self.keep_latest_per_source
 
 
 @dataclass(frozen=True)
@@ -689,13 +694,16 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
     ):
         raise ValueError("user_cache cleanup_max_age_days must be a non-negative integer.")
 
-    keep_latest_per_user = data.get("keep_latest_per_user", 2)
+    keep_latest_per_source = data.get(
+        "keep_latest_per_source",
+        data.get("keep_latest_per_user", 2),
+    )
     if (
-        not isinstance(keep_latest_per_user, int)
-        or isinstance(keep_latest_per_user, bool)
-        or keep_latest_per_user <= 0
+        not isinstance(keep_latest_per_source, int)
+        or isinstance(keep_latest_per_source, bool)
+        or keep_latest_per_source <= 0
     ):
-        raise ValueError("user_cache keep_latest_per_user must be a positive integer.")
+        raise ValueError("user_cache keep_latest_per_source must be a positive integer.")
 
     return UserCacheSettings(
         enabled=enabled,
@@ -707,7 +715,7 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         topk_candidates_valid_days=topk_candidates_valid_days,
         refresh_candidate_base_date_on_hit=refresh_candidate_base_date_on_hit,
         cleanup_max_age_days=cleanup_max_age_days,
-        keep_latest_per_user=keep_latest_per_user,
+        keep_latest_per_source=keep_latest_per_source,
     )
 
 

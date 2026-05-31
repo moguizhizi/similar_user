@@ -31,7 +31,7 @@ class UserCacheSettingsTest(unittest.TestCase):
                         "  topk_candidates_valid_days: 5",
                         "  refresh_candidate_base_date_on_hit: false",
                         "  cleanup_max_age_days: 21",
-                        "  keep_latest_per_user: 3",
+                        "  keep_latest_per_source: 3",
                     ]
                 ),
                 encoding="utf-8",
@@ -48,6 +48,7 @@ class UserCacheSettingsTest(unittest.TestCase):
             self.assertEqual(settings.topk_candidates_valid_days, 5)
             self.assertFalse(settings.refresh_candidate_base_date_on_hit)
             self.assertEqual(settings.cleanup_max_age_days, 21)
+            self.assertEqual(settings.keep_latest_per_source, 3)
             self.assertEqual(settings.keep_latest_per_user, 3)
 
     def test_load_user_cache_settings_rejects_invalid_topk_valid_days(self) -> None:
