@@ -62,6 +62,10 @@ from similar_user.utils.pattern_storage import (
     build_path_key,
     build_raw_path_user_cache_config_hash,
 )
+from similar_user.utils.user_cache_paths import (
+    files_root_from_sqlite_path,
+    patient_cache_leaf_dir,
+)
 
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
@@ -394,6 +398,26 @@ def get_scored_pattern_output_paths(
     source_id = _normalize_result_string(result.get("source_id"), "source_id")
     pattern = _normalize_result_string(result.get("pattern"), "pattern")
     scored_key = _extract_scored_key(result.get("cache_context"))
+    user_cache_context = result.get("user_cache_context")
+    if isinstance(user_cache_context, dict) and user_cache_context.get("enabled"):
+        output_base = patient_cache_leaf_dir(
+            files_root_from_sqlite_path(
+                _normalize_result_string(
+                    user_cache_context.get("sqlite_path"),
+                    "sqlite_path",
+                )
+            ),
+            patient_id=user_cache_context.get("patient_id") or source_id,
+            cache_type="scored_paths",
+            query_family=user_cache_context.get("query_family"),
+            window_days=user_cache_context.get("window_days"),
+            config_hash=user_cache_context.get("config_hash"),
+            cached_base_date=user_cache_context.get("cached_base_date"),
+        )
+        return (
+            output_base / f"{_slug_part(pattern)}.detail.json",
+            output_base / f"{_slug_part(pattern)}.summary.json",
+        )
     bucket = source_id[:2] or "unknown"
     output_base = Path(output_dir) / scored_key / pattern / bucket
     return (

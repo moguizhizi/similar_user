@@ -489,6 +489,11 @@ class PatternStorageTest(unittest.TestCase):
         self.assertEqual(found.valid_days, 30)
         self.assertEqual(found.data_path, str(output_path))
         self.assertEqual(found.payload["path_key"], path_key)
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "30" / "30010096"),
+            str(output_path),
+        )
+        self.assertIn("raw_paths/training_order_source_window/window_14", str(output_path))
 
     def test_save_direct_pattern_result_registers_source_raw_path_user_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -549,6 +554,17 @@ class PatternStorageTest(unittest.TestCase):
         self.assertEqual(found.valid_days, 60)
         self.assertEqual(found.data_path, str(output_path))
         self.assertEqual(found.payload["path_key"], path_context["path_key"])
+        self.assertIn(
+            str(
+                root
+                / "user_cache"
+                / "files"
+                / "direct_entity_profile"
+                / "disease_taskset_patient__au_dis_0029"
+            ),
+            str(output_path),
+        )
+        self.assertIn("raw_paths/direct_entity/window_90", str(output_path))
 
 
 if __name__ == "__main__":

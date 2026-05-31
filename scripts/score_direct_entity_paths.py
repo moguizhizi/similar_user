@@ -49,6 +49,10 @@ from similar_user.services.direct_entity_scoring_input import (  # noqa: E402
 from similar_user.services.path_scoring import PathScoringRules  # noqa: E402
 from similar_user.utils.logger import get_logger  # noqa: E402
 from similar_user.utils.pattern_storage import StoredPatternResult  # noqa: E402
+from similar_user.utils.user_cache_paths import (  # noqa: E402
+    files_root_from_sqlite_path,
+    patient_cache_leaf_dir,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -513,6 +517,10 @@ def save_scored_direct_entity_result(
     output_paths = []
     for pattern, scores in _group_scores_by_pattern(result.get("scores")).items():
         pattern_result = _build_pattern_scored_result(result, pattern, scores)
+        pattern_result["user_cache_context"] = build_scored_direct_entity_user_cache_context(
+            pattern_result,
+            config_path=config_path,
+        )
         detail_path, summary_path = get_scored_direct_entity_output_paths(
             pattern_result,
             output_dir,
@@ -551,6 +559,27 @@ def get_scored_direct_entity_output_paths(
         result.get("direct_path_source_key"),
         "direct_path_source_key",
     )
+    user_cache_context = result.get("user_cache_context")
+    if isinstance(user_cache_context, dict) and user_cache_context.get("enabled"):
+        output_base = patient_cache_leaf_dir(
+            files_root_from_sqlite_path(
+                _normalize_required_text(
+                    user_cache_context.get("sqlite_path"),
+                    "sqlite_path",
+                )
+            ),
+            patient_id=user_cache_context.get("patient_id") or source_id,
+            cache_type="scored_paths",
+            query_family=user_cache_context.get("query_family"),
+            window_days=user_cache_context.get("window_days"),
+            config_hash=user_cache_context.get("config_hash"),
+            cached_base_date=user_cache_context.get("cached_base_date"),
+        )
+        file_stem = f"{_slug_part(pattern)}__{_slug_part(source_key)}"
+        return (
+            output_base / f"{file_stem}.detail.json",
+            output_base / f"{file_stem}.summary.json",
+        )
     bucket = source_id[:2] or "unknown"
     output_base = Path(output_dir) / scored_key / pattern / source_key / bucket
     return (

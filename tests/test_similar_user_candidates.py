@@ -1899,6 +1899,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         assert found is not None
         self.assertEqual(found.cached_base_date, "2024-01-31")
         self.assertEqual(found.data_path, str(output_paths["detail"]))
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "30" / "30010096"),
+            str(output_paths["detail"]),
+        )
+        self.assertIn(
+            "topk_candidates/training_order_source_window/window_14",
+            str(output_paths["detail"]),
+        )
 
     def test_save_direct_entity_candidates_registers_source_topk_user_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2000,6 +2008,11 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         assert found is not None
         self.assertEqual(found.data_path, str(output_paths["detail"]))
         self.assertEqual(found.source_type, "direct_entity_profile")
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "20" / "201231885555"),
+            str(output_paths["detail"]),
+        )
+        self.assertIn("topk_candidates/direct_entity/window_14", str(output_paths["detail"]))
         self.assertIsNotNone(cached)
         assert cached is not None
         self.assertTrue(cached["user_cache_hit"])
@@ -2153,7 +2166,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 "scored_key": old_scored_key,
                 "score_top_k": 150,
             }
-            save_scored_pattern_result(
+            scored_output_paths = save_scored_pattern_result(
                 {
                     "source_id": "30010096",
                     "source_parameter": "patient_id",
@@ -2242,6 +2255,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["candidate_count"], 1)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113562")
         self.assertEqual(result["cache_context"]["scored_key"], old_scored_key)
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "30" / "30010096"),
+            str(scored_output_paths["detail"]),
+        )
+        self.assertIn(
+            "scored_paths/training_order_source_window/window_14",
+            str(scored_output_paths["detail"]),
+        )
 
     @patch("scripts.build_similar_user_candidates.LOGGER")
     @patch("scripts.build_similar_user_candidates.parse_args")

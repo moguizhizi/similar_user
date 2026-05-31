@@ -305,6 +305,11 @@ class ScoreDirectEntityPathsTest(unittest.TestCase):
         self.assertEqual(found.source_type, "direct_entity_profile")
         self.assertEqual(found.valid_days, 60)
         self.assertEqual(found.payload["pattern"], "DISEASE_TASKSET_PATIENT")
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "ma" / "manual_abc"),
+            str(output_paths[0]["detail"]),
+        )
+        self.assertIn("scored_paths/direct_entity/window_180", str(output_paths[0]["detail"]))
 
     def test_get_scored_direct_entity_output_paths_requires_cache_context(self) -> None:
         with self.assertRaisesRegex(ValueError, "cache_context"):

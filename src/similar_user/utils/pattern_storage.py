@@ -26,6 +26,10 @@ from ..domain.path_models import (
     UnknownTasksetPatientPath,
 )
 from .logger import get_logger
+from .user_cache_paths import (
+    files_root_from_sqlite_path,
+    source_cache_leaf_dir,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -263,6 +267,47 @@ def get_pattern_result_output_path(
     path_key: str | None = None,
 ) -> Path:
     """Return the bucketed JSON output path for one pattern source."""
+    normalized_pattern = _normalize_required_string(pattern, "pattern")
+    normalized_source_id = _normalize_required_string(source_id, "source_id")
+    settings = load_user_cache_settings(config_path)
+    if settings.enabled:
+        path_key_value = _normalize_required_string(path_key, "path_key")
+        source_parameter = get_path_pattern_spec(normalized_pattern).source_parameter
+        source_type = _source_type_from_parameter(source_parameter)
+        query_family, window_days, config_hash, base_date = _path_parts_from_key(
+            path_key_value,
+            default_query_family="direct_entity"
+            if source_type != "patient"
+            else "default",
+        )
+        output_base = source_cache_leaf_dir(
+            files_root_from_sqlite_path(settings.sqlite_path),
+            source_type=source_type,
+            source_id=normalized_source_id,
+            pattern=normalized_pattern,
+            cache_type="raw_paths",
+            query_family=query_family,
+            window_days=window_days,
+            config_hash=build_raw_path_user_cache_config_hash(path_key_value),
+            cached_base_date=base_date,
+        )
+        return output_base / f"{_slug_part(normalized_pattern)}.json"
+    return get_legacy_pattern_result_output_path(
+        config_path,
+        normalized_pattern,
+        normalized_source_id,
+        path_key=path_key,
+    )
+
+
+def get_legacy_pattern_result_output_path(
+    config_path: str | Path,
+    pattern: str,
+    source_id: str,
+    *,
+    path_key: str | None = None,
+) -> Path:
+    """Return the pre-user-cache bucketed output path for one pattern source."""
     normalized_pattern = _normalize_required_string(pattern, "pattern")
     normalized_source_id = _normalize_required_string(source_id, "source_id")
     bucket = normalized_source_id[:2] or "unknown"
@@ -803,6 +848,59 @@ def _strip_base_date_from_key(value: str) -> str:
     if len(parts) == 3 and parts[0] == "base":
         return parts[2]
     return value
+
+
+def _path_parts_from_key(
+    path_key: str,
+    *,
+    default_query_family: str,
+) -> tuple[str, int, str, str]:
+    normalized_path_key = _normalize_required_string(path_key, "path_key")
+    parts = normalized_path_key.split("_")
+    base_date = _extract_key_value(parts, "base")
+    window_days = _parse_positive_int(_extract_key_value(parts, "window"), "window")
+    query_family = (
+        _extract_key_slice(parts, "qf", ("pathcfg", "directcfg"))
+        or default_query_family
+    )
+    config_hash = (
+        _extract_key_value(parts, "pathcfg")
+        or _extract_key_value(parts, "directcfg")
+        or build_raw_path_user_cache_config_hash(normalized_path_key)
+    )
+    return query_family, window_days, config_hash, base_date
+
+
+def _extract_key_value(parts: list[str], marker: str) -> str:
+    for index, part in enumerate(parts[:-1]):
+        if part == marker:
+            return parts[index + 1]
+    return ""
+
+
+def _extract_key_slice(
+    parts: list[str],
+    start_marker: str,
+    end_markers: tuple[str, ...],
+) -> str:
+    try:
+        start_index = parts.index(start_marker) + 1
+    except ValueError:
+        return ""
+    end_index = len(parts)
+    for marker in end_markers:
+        if marker in parts[start_index:]:
+            marker_index = parts.index(marker, start_index)
+            end_index = min(end_index, marker_index)
+    return "_".join(parts[start_index:end_index]).strip("_")
+
+
+def _parse_positive_int(value: str, field_name: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a positive integer.") from exc
+    return _normalize_positive_int(parsed, field_name)
 
 
 def _slug_part(value: object) -> str:

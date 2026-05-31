@@ -62,6 +62,11 @@ from scripts.score_pattern_paths import (
     validate_scored_cache_context,
 )
 from similar_user.utils.pattern_storage import build_path_key
+from similar_user.utils.user_cache_paths import (
+    files_root_from_sqlite_path,
+    patient_cache_leaf_dir,
+    patient_cache_root,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -194,6 +199,7 @@ def build_similar_user_candidates(
         patterns=selected_patterns,
         scored_paths_dir=scored_paths_dir,
         scored_key=expected_scored_key,
+        config_path=resolved_config_path,
     ):
         scored_key = resolve_scored_key_from_user_cache(
             resolved_config_path,
@@ -245,6 +251,7 @@ def build_similar_user_candidates(
                 pattern=item,
                 scored_paths_dir=scored_paths_dir,
                 scored_key=scored_key,
+                config_path=resolved_config_path,
             )
             if scored_result is not None:
                 scored_results.append(scored_result)
@@ -259,6 +266,7 @@ def build_similar_user_candidates(
                     base_date=base_date,
                     score_top_k=query_settings.score_pattern_paths.top_k,
                 ),
+                config_path=resolved_config_path,
             )
             scored_results.extend(direct_scored_results)
             loaded_patterns.extend(
@@ -313,17 +321,18 @@ def load_saved_scored_pattern_result(
     pattern: str,
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
     scored_key: str | None = None,
+    config_path: str | Path | None = None,
 ) -> dict[str, Any] | None:
     """Load one saved scored detail file produced by score_pattern_paths.py."""
     normalized_source_id = _normalize_required_string(source_id, "source_id")
     normalized_pattern = resolve_path_pattern(pattern).value
     resolved_scored_key = _normalize_required_string(scored_key, "scored_key")
-    detail_path = (
-        Path(scored_paths_dir)
-        / resolved_scored_key
-        / normalized_pattern
-        / (normalized_source_id[:2] or "unknown")
-        / f"{normalized_source_id}.detail.json"
+    detail_path = _resolve_saved_scored_pattern_detail_path(
+        normalized_source_id,
+        pattern=normalized_pattern,
+        scored_paths_dir=scored_paths_dir,
+        scored_key=resolved_scored_key,
+        config_path=config_path,
     )
     if not detail_path.exists():
         LOGGER.warning(
@@ -340,24 +349,82 @@ def load_saved_scored_pattern_result(
     return data
 
 
+def _resolve_saved_scored_pattern_detail_path(
+    source_id: str,
+    *,
+    pattern: str,
+    scored_paths_dir: str | Path,
+    scored_key: str,
+    config_path: str | Path | None,
+) -> Path:
+    if config_path is not None:
+        settings = load_user_cache_settings(config_path)
+        query_settings = load_query_settings(config_path)
+        if settings.enabled:
+            context = build_topk_scored_path_lookup_context(
+                config_path,
+                source_id=source_id,
+                scored_key=scored_key,
+            )
+            return (
+                patient_cache_leaf_dir(
+                    files_root_from_sqlite_path(settings.sqlite_path),
+                    patient_id=source_id,
+                    cache_type="scored_paths",
+                    query_family=context["query_family"],
+                    window_days=query_settings.patient_path.window_days,
+                    config_hash=context["config_hash"],
+                    cached_base_date=context["cached_base_date"],
+                )
+                / f"{_slug_part(pattern)}.detail.json"
+            )
+    return (
+        Path(scored_paths_dir)
+        / scored_key
+        / pattern
+        / (source_id[:2] or "unknown")
+        / f"{source_id}.detail.json"
+    )
+
+
+def build_topk_scored_path_lookup_context(
+    config_path: str | Path,
+    *,
+    source_id: str,
+    scored_key: str,
+) -> dict[str, str]:
+    """Build enough metadata to locate a patient scored-path file."""
+    path_key = _strip_score_suffix(scored_key)
+    base_date = _extract_key_part(path_key, "base")
+    query_family = _extract_key_slice(path_key.split("_"), "qf", ("pathcfg",))
+    if not query_family:
+        query_family = "default"
+    return {
+        "source_id": source_id,
+        "cached_base_date": base_date,
+        "query_family": query_family,
+        "config_hash": _scored_paths_user_cache_config_hash(scored_key),
+    }
+
+
 def _has_any_saved_scored_pattern_result(
     source_id: str,
     *,
     patterns: tuple[str, ...],
     scored_paths_dir: str | Path,
     scored_key: str,
+    config_path: str | Path | None = None,
 ) -> bool:
     normalized_source_id = _normalize_required_string(source_id, "source_id")
     resolved_scored_key = _normalize_required_string(scored_key, "scored_key")
-    bucket = normalized_source_id[:2] or "unknown"
     for pattern in patterns:
         normalized_pattern = resolve_path_pattern(pattern).value
-        detail_path = (
-            Path(scored_paths_dir)
-            / resolved_scored_key
-            / normalized_pattern
-            / bucket
-            / f"{normalized_source_id}.detail.json"
+        detail_path = _resolve_saved_scored_pattern_detail_path(
+            normalized_source_id,
+            pattern=normalized_pattern,
+            scored_paths_dir=scored_paths_dir,
+            scored_key=resolved_scored_key,
+            config_path=config_path,
         )
         if detail_path.exists():
             return True
@@ -369,6 +436,7 @@ def load_saved_direct_entity_scored_results(
     *,
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
     direct_scored_key: str,
+    config_path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     """Load saved direct-entity scored detail files for one patient."""
     normalized_source_id = _normalize_required_string(source_id, "source_id")
@@ -379,11 +447,15 @@ def load_saved_direct_entity_scored_results(
     bucket = normalized_source_id[:2] or "unknown"
     scored_results: list[dict[str, Any]] = []
     for pattern in DIRECT_ENTITY_PATTERNS:
-        pattern_dir = Path(scored_paths_dir) / normalized_scored_key / pattern
-        detail_paths = sorted(
-            pattern_dir.glob(f"*/{bucket}/{normalized_source_id}.detail.json")
+        detail_paths = _find_direct_entity_scored_detail_paths(
+            normalized_source_id,
+            pattern=pattern,
+            scored_paths_dir=scored_paths_dir,
+            direct_scored_key=normalized_scored_key,
+            config_path=config_path,
         )
         if not detail_paths:
+            pattern_dir = Path(scored_paths_dir) / normalized_scored_key / pattern
             LOGGER.warning(
                 "Saved direct entity scored detail not found for pattern %s: %s",
                 pattern,
@@ -397,8 +469,58 @@ def load_saved_direct_entity_scored_results(
                 raise ValueError(
                     f"Saved direct entity scored detail must contain a JSON object: {detail_path}"
                 )
+            cache_context = data.get("cache_context")
+            if (
+                isinstance(cache_context, dict)
+                and cache_context.get("scored_key") != normalized_scored_key
+            ):
+                continue
             scored_results.append(data)
     return scored_results
+
+
+def _find_direct_entity_scored_detail_paths(
+    source_id: str,
+    *,
+    pattern: str,
+    scored_paths_dir: str | Path,
+    direct_scored_key: str,
+    config_path: str | Path | None,
+) -> list[Path]:
+    paths: list[Path] = []
+    if config_path is not None:
+        settings = load_user_cache_settings(config_path)
+        if settings.enabled:
+            base_date = _extract_key_part(direct_scored_key, "base")
+            patient_root = (
+                patient_cache_root(
+                    files_root_from_sqlite_path(settings.sqlite_path),
+                    source_id,
+                )
+                / "scored_paths"
+                / "direct_entity"
+                / f"window_{load_query_settings(config_path).direct_entity_path.window_days}"
+            )
+            paths.extend(
+                sorted(
+                    patient_root.glob(
+                        f"config_*/base_{_slug_part(base_date)}/{_slug_part(pattern)}__*.detail.json"
+                    )
+                )
+            )
+            return paths
+    legacy_pattern_dir = Path(scored_paths_dir) / direct_scored_key / pattern
+    paths.extend(
+        sorted(legacy_pattern_dir.glob(f"*/{source_id[:2] or 'unknown'}/{source_id}.detail.json"))
+    )
+    deduped: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        if path in seen:
+            continue
+        deduped.append(path)
+        seen.add(path)
+    return deduped
 
 
 def build_direct_entity_scored_key(
@@ -524,6 +646,26 @@ def get_similar_user_candidate_output_paths(
     """Return detail and summary output paths for one candidate result."""
     source_id = _normalize_required_string(result.get("source_id"), "source_id")
     candidate_key = _extract_candidate_key(result.get("cache_context"))
+    user_cache_context = result.get("user_cache_context")
+    if isinstance(user_cache_context, dict) and user_cache_context.get("enabled"):
+        output_base = patient_cache_leaf_dir(
+            files_root_from_sqlite_path(
+                _normalize_required_string(
+                    user_cache_context.get("sqlite_path"),
+                    "sqlite_path",
+                )
+            ),
+            patient_id=user_cache_context.get("patient_id") or source_id,
+            cache_type="topk_candidates",
+            query_family=user_cache_context.get("query_family"),
+            window_days=user_cache_context.get("window_days"),
+            config_hash=user_cache_context.get("config_hash"),
+            cached_base_date=user_cache_context.get("cached_base_date"),
+        )
+        return (
+            output_base / "candidates.detail.json",
+            output_base / "candidates.summary.json",
+        )
     bucket = source_id[:2] or "unknown"
     output_base = Path(output_dir) / candidate_key / bucket
     return (
@@ -1199,6 +1341,38 @@ def _strip_base_date_from_key(value: str) -> str:
     if len(parts) == 3 and parts[0] == "base":
         return parts[2]
     return value
+
+
+def _strip_score_suffix(value: str) -> str:
+    marker = "_scoretopk_"
+    if marker in value:
+        return value.split(marker, 1)[0]
+    return value
+
+
+def _extract_key_part(value: str, marker: str) -> str:
+    parts = value.split("_")
+    for index, part in enumerate(parts[:-1]):
+        if part == marker:
+            return parts[index + 1]
+    raise ValueError(f"{marker} must be present in cache key: {value}")
+
+
+def _extract_key_slice(
+    parts: list[str],
+    start_marker: str,
+    end_markers: tuple[str, ...],
+) -> str:
+    try:
+        start_index = parts.index(start_marker) + 1
+    except ValueError:
+        return ""
+    end_index = len(parts)
+    for marker in end_markers:
+        if marker in parts[start_index:]:
+            marker_index = parts.index(marker, start_index)
+            end_index = min(end_index, marker_index)
+    return "_".join(parts[start_index:end_index]).strip("_")
 
 
 def _scored_paths_user_cache_config_hash(scored_key: str) -> str:
