@@ -139,6 +139,50 @@ class PatternStorageTest(unittest.TestCase):
             / "30010096.json",
         )
 
+    def test_get_pattern_result_output_path_resolves_alias_in_user_cache_layout(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+            )
+
+            alias_path = get_pattern_result_output_path(
+                config_path,
+                "patient_game_patient",
+                "30010096",
+                path_key=path_key,
+            )
+            resolved_path = get_pattern_result_output_path(
+                config_path,
+                "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "30010096",
+                path_key=path_key,
+            )
+
+        self.assertEqual(alias_path, resolved_path)
+        self.assertEqual(
+            alias_path.name,
+            "patient_taskset_task_game_task_taskset_patient.json",
+        )
+
     def test_get_pattern_result_output_path_requires_path_key(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"

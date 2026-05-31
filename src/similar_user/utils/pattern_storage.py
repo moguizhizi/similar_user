@@ -269,10 +269,11 @@ def get_pattern_result_output_path(
     """Return the bucketed JSON output path for one pattern source."""
     normalized_pattern = _normalize_required_string(pattern, "pattern")
     normalized_source_id = _normalize_required_string(source_id, "source_id")
+    resolved_pattern = resolve_path_pattern(normalized_pattern).value
     settings = load_user_cache_settings(config_path)
     if settings.enabled:
         path_key_value = _normalize_required_string(path_key, "path_key")
-        source_parameter = get_path_pattern_spec(normalized_pattern).source_parameter
+        source_parameter = get_path_pattern_spec(resolved_pattern).source_parameter
         source_type = _source_type_from_parameter(source_parameter)
         query_family, window_days, config_hash, base_date = _path_parts_from_key(
             path_key_value,
@@ -284,14 +285,14 @@ def get_pattern_result_output_path(
             files_root_from_sqlite_path(settings.sqlite_path),
             source_type=source_type,
             source_id=normalized_source_id,
-            pattern=normalized_pattern,
+            pattern=resolved_pattern,
             cache_type="raw_paths",
             query_family=query_family,
             window_days=window_days,
             config_hash=build_raw_path_user_cache_config_hash(path_key_value),
             cached_base_date=base_date,
         )
-        return output_base / f"{_slug_part(normalized_pattern)}.json"
+        return output_base / f"{_slug_part(resolved_pattern)}.json"
     return get_legacy_pattern_result_output_path(
         config_path,
         normalized_pattern,

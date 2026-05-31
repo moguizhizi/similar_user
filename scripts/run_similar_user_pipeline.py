@@ -383,6 +383,15 @@ def _build_patient_candidates_with_auto_refresh(
     base_date: str,
     query_family: str,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """构建患者候选用户，并在缓存缺失时自动补齐依赖数据。
+
+    流程：
+    1. 先尝试构建 topK 候选用户，内部会优先读取 topK candidates 缓存。
+    2. 如果 topK 缓存命中，直接返回候选用户结果。
+    3. 如果 topK 未命中但 scored paths 可用，则用 scored paths 构建并保存 topK。
+    4. 如果 scored paths 缺失或过期，则先重新评分并保存 scored paths，再重试候选用户构建。
+    5. 如果配置开启 direct entity path scoring，则在候选用户流程成功后补充该部分评分。
+    """
     try:
         result = build_similar_user_candidates(
             patient_id,
@@ -392,6 +401,7 @@ def _build_patient_candidates_with_auto_refresh(
         )
         if result.get("user_cache_hit"):
             return result, None
+
         direct_entity_scoring = _score_direct_entity_paths_if_enabled(
             patient_id,
             config_path=config_path,
