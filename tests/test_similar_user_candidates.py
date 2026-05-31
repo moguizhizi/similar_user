@@ -15,10 +15,13 @@ from config.settings import (
 )
 from scripts.build_similar_user_candidates import (
     build_candidate_cache_context,
+    build_direct_entity_candidate_cache_context,
     build_direct_entity_scored_key,
+    build_direct_entity_topk_candidate_user_cache_context,
     build_topk_candidate_user_cache_context,
     build_similar_user_candidate_summary,
     build_similar_user_candidates as _build_similar_user_candidates,
+    load_cached_topk_candidate_result,
     load_saved_scored_pattern_result,
     main,
     save_similar_user_candidates_result,
@@ -1881,9 +1884,10 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             )
             found = UserCacheIndexStore(
                 root / "user_cache" / "cache_index.sqlite"
-            ).find_latest_valid_entry(
+            ).find_latest_valid_source_entry(
                 cache_type="topk_candidates",
-                patient_id="30010096",
+                source_type="patient",
+                source_id="30010096",
                 query_family="training_order_source_window",
                 window_days=14,
                 config_hash=str(user_cache_context["config_hash"]),
@@ -1894,6 +1898,112 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         assert found is not None
         self.assertEqual(found.cached_base_date, "2024-01-31")
         self.assertEqual(found.data_path, str(output_paths["detail"]))
+
+    def test_save_direct_entity_candidates_registers_source_topk_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(
+                root,
+                refresh_candidate_base_date_on_hit=False,
+            )
+            output_dir = root / "similar_user_candidates"
+            scored_result = {
+                "source_id": "201231885555",
+                "source_parameter": "manual_profile",
+                "base_date": "2024-01-31",
+                "scoring_input": {
+                    "age": 66,
+                    "education": "本科",
+                    "gender": "男",
+                    "disease_ids": ["D1"],
+                    "symptom_ids": [],
+                    "unknown_ids": [],
+                },
+                "path_count": 1,
+                "scored_path_count": 1,
+                "cache_context": {
+                    "scored_key": "base_2024-01-31_qf_direct_entity_scoretopk_150",
+                    "score_top_k": 150,
+                    "pattern_source_keys": {
+                        "DISEASE_TASKSET_PATIENT": (
+                            "entitybase_2024-01-30_entitywindow_180_pathcfg_abcdef12"
+                        )
+                    },
+                    "source_entries": [
+                        {
+                            "pattern": "DISEASE_TASKSET_PATIENT",
+                            "source_id": "D1",
+                            "base_date": "2024-01-30",
+                            "window_days": 180,
+                            "path_key": "base_2024-01-30_window_180_directcfg_abcdef12",
+                        }
+                    ],
+                },
+            }
+            cache_context = build_direct_entity_candidate_cache_context(
+                config_path,
+                scored_result=scored_result,
+                disease_course_window_days=14,
+            )
+            user_cache_context = build_direct_entity_topk_candidate_user_cache_context(
+                config_path,
+                source_id="201231885555",
+                base_date="2024-01-31",
+                candidate_cache_context=cache_context,
+            )
+            candidate_result = {
+                "source_id": "201231885555",
+                "source_parameter": "manual_profile",
+                "candidate_top_k": 10,
+                "path_count": 1,
+                "scored_path_count": 1,
+                "candidate_count": 1,
+                "pre_score_candidate_count": 1,
+                "ranking": "direct_entity_best_score_avg_score_match_count",
+                "cache_context": cache_context,
+                "user_cache_context": user_cache_context,
+                "user_cache_hit": False,
+                "candidates": [
+                    {
+                        "patient_id": "P1",
+                        "candidate_score": 95.0,
+                        "match_count": 1,
+                        "best_score": 95.0,
+                        "avg_score": 95.0,
+                    }
+                ],
+            }
+
+            output_paths = save_similar_user_candidates_result(
+                candidate_result,
+                output_dir,
+            )
+            cached = load_cached_topk_candidate_result(
+                user_cache_context,
+                candidates_dir=output_dir,
+                request_base_date="2024-02-03",
+            )
+            found = UserCacheIndexStore(
+                root / "user_cache" / "cache_index.sqlite"
+            ).find_latest_valid_source_entry(
+                cache_type="topk_candidates",
+                source_type="direct_entity_profile",
+                source_id="201231885555",
+                query_family="direct_entity",
+                window_days=14,
+                config_hash=str(user_cache_context["config_hash"]),
+                request_base_date="2024-02-03",
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.data_path, str(output_paths["detail"]))
+        self.assertEqual(found.source_type, "direct_entity_profile")
+        self.assertIsNotNone(cached)
+        assert cached is not None
+        self.assertTrue(cached["user_cache_hit"])
+        self.assertEqual(cached["source_id"], "201231885555")
+        self.assertEqual(cached["candidate_count"], 1)
 
     def test_build_similar_user_candidates_uses_valid_topk_user_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

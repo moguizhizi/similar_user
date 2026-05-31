@@ -142,12 +142,14 @@ class DirectPathCacheSettings:
 
 @dataclass(frozen=True)
 class UserCacheSettings:
-    """Configuration for patient-centered pipeline cache indexing."""
+    """Configuration for source-centered pipeline cache indexing."""
 
     enabled: bool = False
     sqlite_path: str = "data/user_cache/cache_index.sqlite"
-    raw_paths_valid_days: int = 30
-    scored_paths_valid_days: int = 14
+    patient_raw_paths_valid_days: int = 30
+    direct_raw_paths_valid_days: int = 60
+    patient_scored_paths_valid_days: int = 14
+    direct_scored_paths_valid_days: int = 60
     topk_candidates_valid_days: int = 7
     refresh_candidate_base_date_on_hit: bool = True
     cleanup_max_age_days: int = 30
@@ -641,15 +643,29 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
     if not isinstance(sqlite_path, str) or not sqlite_path.strip():
         raise ValueError("user_cache sqlite_path must be a non-empty string.")
 
-    raw_paths_valid_days = _parse_user_cache_valid_days(
+    patient_raw_paths_valid_days = _parse_user_cache_valid_days(
         data,
-        "raw_paths_valid_days",
+        "patient_raw_paths_valid_days",
         default=30,
+        fallback_field_name="raw_paths_valid_days",
     )
-    scored_paths_valid_days = _parse_user_cache_valid_days(
+    direct_raw_paths_valid_days = _parse_user_cache_valid_days(
         data,
-        "scored_paths_valid_days",
+        "direct_raw_paths_valid_days",
+        default=60,
+        fallback_field_name="raw_paths_valid_days",
+    )
+    patient_scored_paths_valid_days = _parse_user_cache_valid_days(
+        data,
+        "patient_scored_paths_valid_days",
         default=14,
+        fallback_field_name="scored_paths_valid_days",
+    )
+    direct_scored_paths_valid_days = _parse_user_cache_valid_days(
+        data,
+        "direct_scored_paths_valid_days",
+        default=60,
+        fallback_field_name="scored_paths_valid_days",
     )
     topk_candidates_valid_days = _parse_user_cache_valid_days(
         data,
@@ -684,8 +700,10 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
     return UserCacheSettings(
         enabled=enabled,
         sqlite_path=sqlite_path.strip(),
-        raw_paths_valid_days=raw_paths_valid_days,
-        scored_paths_valid_days=scored_paths_valid_days,
+        patient_raw_paths_valid_days=patient_raw_paths_valid_days,
+        direct_raw_paths_valid_days=direct_raw_paths_valid_days,
+        patient_scored_paths_valid_days=patient_scored_paths_valid_days,
+        direct_scored_paths_valid_days=direct_scored_paths_valid_days,
         topk_candidates_valid_days=topk_candidates_valid_days,
         refresh_candidate_base_date_on_hit=refresh_candidate_base_date_on_hit,
         cleanup_max_age_days=cleanup_max_age_days,
@@ -698,8 +716,14 @@ def _parse_user_cache_valid_days(
     field_name: str,
     *,
     default: int,
+    fallback_field_name: str | None = None,
 ) -> int:
-    value = data.get(field_name, default)
+    value = data.get(
+        field_name,
+        data.get(fallback_field_name, default)
+        if fallback_field_name is not None
+        else default,
+    )
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ValueError(f"user_cache {field_name} must be a non-negative integer.")
     return value

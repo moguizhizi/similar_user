@@ -58,6 +58,10 @@ from similar_user.domain.graph_schema import PathPattern
 from similar_user.services.path_scoring import PathScoringRules, get_path_scorer
 from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore
+from similar_user.utils.pattern_storage import (
+    build_path_key,
+    build_raw_path_user_cache_config_hash,
+)
 
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
@@ -184,9 +188,10 @@ def score_pattern_paths(
         top_k,
         config_path,
     )
-    stored_result = PatternResultStore(config_path).load(
-        pattern,
-        source_id,
+    stored_result = load_pattern_result_with_user_cache(
+        config_path,
+        pattern=pattern,
+        source_id=source_id,
         base_date=base_date,
         query_family=query_family,
     )
@@ -473,7 +478,7 @@ def build_scored_path_user_cache_context(
     query_family: str | None,
     scored_cache_context: dict[str, object],
 ) -> dict[str, object]:
-    """Build patient-centered cache metadata for scored path results."""
+    """Build source-centered cache metadata for patient scored path results."""
     settings = load_user_cache_settings(config_path)
     if not settings.enabled:
         return {"enabled": False, "cache_type": "scored_paths"}
@@ -487,6 +492,8 @@ def build_scored_path_user_cache_context(
         "cache_type": "scored_paths",
         "sqlite_path": settings.sqlite_path,
         "patient_id": _normalize_result_string(source_id, "source_id"),
+        "source_type": "patient",
+        "source_id": _normalize_result_string(source_id, "source_id"),
         "query_family": _normalize_user_cache_query_family(query_family),
         "window_days": query_settings.patient_path.window_days,
         "config_hash": _short_hash(
@@ -496,9 +503,101 @@ def build_scored_path_user_cache_context(
             }
         ),
         "cached_base_date": _normalize_result_string(base_date, "base_date"),
-        "valid_days": settings.scored_paths_valid_days,
+        "valid_days": settings.patient_scored_paths_valid_days,
         "scored_key": scored_key,
         "score_top_k": scored_cache_context.get("score_top_k"),
+    }
+
+
+def load_pattern_result_with_user_cache(
+    config_path: str | Path,
+    *,
+    pattern: str,
+    source_id: str,
+    base_date: str | None,
+    query_family: str | None,
+) -> object:
+    """Load raw paths, falling back to a recent valid user-cache entry."""
+    store = PatternResultStore(config_path)
+    try:
+        return store.load(
+            pattern,
+            source_id,
+            base_date=base_date,
+            query_family=query_family,
+        )
+    except FileNotFoundError as exact_error:
+        cached = resolve_raw_path_cache_args_from_user_cache(
+            config_path,
+            patient_id=source_id,
+            base_date=base_date,
+            query_family=query_family,
+        )
+        if cached is None:
+            raise exact_error
+        return store.load(
+            pattern,
+            source_id,
+            base_date=cached["base_date"],
+            query_family=cached["query_family"],
+        )
+
+
+def resolve_raw_path_cache_args_from_user_cache(
+    config_path: str | Path,
+    *,
+    patient_id: str,
+    base_date: str | None,
+    query_family: str | None,
+) -> dict[str, str | None] | None:
+    """Return load arguments for a recent valid raw path cache entry."""
+    settings = load_user_cache_settings(config_path)
+    if not settings.enabled:
+        return None
+    normalized_base_date = _normalize_result_string(base_date, "base_date")
+    query_settings = load_query_settings(config_path)
+    expected_path_key = build_path_key(
+        config_path,
+        base_date=normalized_base_date,
+        query_family=query_family,
+    )
+    store = UserCacheIndexStore(settings.sqlite_path)
+    entry = store.find_latest_valid_source_entry(
+        cache_type="raw_paths",
+        source_type="patient",
+        source_id=_normalize_result_string(patient_id, "patient_id"),
+        query_family=_normalize_user_cache_query_family(query_family),
+        window_days=query_settings.patient_path.window_days,
+        config_hash=build_raw_path_user_cache_config_hash(expected_path_key),
+        request_base_date=normalized_base_date,
+    )
+    if entry is None:
+        return None
+    data_path = Path(entry.data_path)
+    if not data_path.exists():
+        store.delete_entry(entry)
+        LOGGER.warning(
+            "Deleted stale raw-path user-cache index entry because raw file is missing: patient_id=%s, data_path=%s",
+            entry.patient_id,
+            data_path,
+        )
+        return None
+    cached_path_key = entry.payload.get("path_key")
+    if not isinstance(cached_path_key, str) or not cached_path_key.strip():
+        return None
+    cached_query_family = entry.query_family
+    query_family_for_load = None if cached_query_family == "default" else cached_query_family
+    LOGGER.info(
+        "Using raw paths from user cache: patient_id=%s, expected_path_key=%s, cached_path_key=%s, cached_base_date=%s, data_path=%s",
+        patient_id,
+        expected_path_key,
+        cached_path_key,
+        entry.cached_base_date,
+        data_path,
+    )
+    return {
+        "base_date": entry.cached_base_date,
+        "query_family": query_family_for_load,
     }
 
 
@@ -578,6 +677,14 @@ def _register_scored_path_user_cache(
             "score_top_k": user_cache_context.get("score_top_k"),
             "summary_path": str(summary_path),
         },
+        source_type=_normalize_result_string(
+            user_cache_context.get("source_type"),
+            "source_type",
+        ),
+        source_id=_normalize_result_string(
+            user_cache_context.get("source_id"),
+            "source_id",
+        ),
     )
     store.upsert_entry(entry)
 

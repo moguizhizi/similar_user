@@ -89,7 +89,7 @@ def _write_user_cache_config(root: Path) -> Path:
                 "user_cache:",
                 "  enabled: true",
                 f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
-                "  scored_paths_valid_days: 14",
+                "  patient_scored_paths_valid_days: 14",
             ]
         ),
         encoding="utf-8",
@@ -775,6 +775,88 @@ class PathScoringTest(unittest.TestCase):
         self.assertEqual(scored["retrieval_context"]["score_end_date"], "2024-01-31")
         self.assertEqual(scored["scores"][0]["score"]["total_score"], 91.25)
 
+    def test_score_pattern_paths_reuses_recent_raw_path_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "settings.yaml"
+            output_dir = root / "pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "patient_path:",
+                        "  window_days: 14",
+                        "pattern_path_storage:",
+                        f'  output_dir: "{output_dir}"',
+                        "score_pattern_paths:",
+                        "  top_k: 1",
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                        "  patient_raw_paths_valid_days: 30",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "retrieval_context": _retrieval_context(
+                    [
+                        {
+                            "row": {
+                                "p": {"id": "30010096"},
+                                "s1": {
+                                    "id": "30010096_20220522",
+                                    "执行年龄": "66",
+                                    "执行学历": "本科",
+                                },
+                                "i1": {
+                                    "id": "30010096_20220522_348_x",
+                                    "任务类型": "专属",
+                                    "结果": "完成",
+                                    "活跃": "是",
+                                },
+                                "g": {
+                                    "id": "348",
+                                    "name": "真假句辨别",
+                                    "任务类型": "句子识别",
+                                },
+                                "i2": {
+                                    "id": "20113562_20211214_348_y",
+                                    "常模分": "102",
+                                    "结果": "完成",
+                                    "活跃": "是",
+                                    "任务类型": "专属",
+                                    "状态": "完成",
+                                },
+                                "s2": {
+                                    "id": "20113562_20211214",
+                                    "执行年龄": "64",
+                                    "执行学历": "本科",
+                                },
+                                "p2": {"id": "20113562"},
+                            }
+                        }
+                    ]
+                ),
+            }
+            save_pattern_result(result, config_path)
+
+            scored = score_pattern_paths(
+                "30010096",
+                pattern="PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                config_path=config_path,
+                base_date="2024-02-03",
+                query_family="training_order_source_window",
+            )
+
+        self.assertEqual(scored["path_count"], 1)
+        self.assertEqual(scored["retrieval_context"]["score_end_date"], "2024-01-31")
+        self.assertEqual(scored["scores"][0]["score"]["total_score"], 91.25)
+
     def test_score_pattern_paths_returns_top_k_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "settings.yaml"
@@ -1015,9 +1097,10 @@ class PathScoringTest(unittest.TestCase):
             )
             found = UserCacheIndexStore(
                 root / "user_cache" / "cache_index.sqlite"
-            ).find_latest_valid_entry(
+            ).find_latest_valid_source_entry(
                 cache_type="scored_paths",
-                patient_id="30010096",
+                source_type="patient",
+                source_id="30010096",
                 query_family="training_order_source_window",
                 window_days=14,
                 config_hash=str(user_cache_context["config_hash"]),

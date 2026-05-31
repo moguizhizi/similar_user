@@ -1,4 +1,4 @@
-"""Tests for patient-centered user cache index storage."""
+"""Tests for source-centered user cache index storage."""
 
 from __future__ import annotations
 
@@ -24,8 +24,10 @@ class UserCacheSettingsTest(unittest.TestCase):
                         "user_cache:",
                         "  enabled: true",
                         f'  sqlite_path: "{sqlite_path}"',
-                        "  raw_paths_valid_days: 21",
-                        "  scored_paths_valid_days: 10",
+                        "  patient_raw_paths_valid_days: 21",
+                        "  direct_raw_paths_valid_days: 60",
+                        "  patient_scored_paths_valid_days: 10",
+                        "  direct_scored_paths_valid_days: 60",
                         "  topk_candidates_valid_days: 5",
                         "  refresh_candidate_base_date_on_hit: false",
                         "  cleanup_max_age_days: 21",
@@ -39,8 +41,10 @@ class UserCacheSettingsTest(unittest.TestCase):
 
             self.assertTrue(settings.enabled)
             self.assertEqual(settings.sqlite_path, str(sqlite_path))
-            self.assertEqual(settings.raw_paths_valid_days, 21)
-            self.assertEqual(settings.scored_paths_valid_days, 10)
+            self.assertEqual(settings.patient_raw_paths_valid_days, 21)
+            self.assertEqual(settings.direct_raw_paths_valid_days, 60)
+            self.assertEqual(settings.patient_scored_paths_valid_days, 10)
+            self.assertEqual(settings.direct_scored_paths_valid_days, 60)
             self.assertEqual(settings.topk_candidates_valid_days, 5)
             self.assertFalse(settings.refresh_candidate_base_date_on_hit)
             self.assertEqual(settings.cleanup_max_age_days, 21)
@@ -64,7 +68,7 @@ class UserCacheSettingsTest(unittest.TestCase):
 
 
 class UserCacheIndexStoreTest(unittest.TestCase):
-    def test_find_latest_valid_entry_returns_newest_unexpired_match(self) -> None:
+    def test_find_latest_valid_source_entry_returns_newest_unexpired_match(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
             old_entry = _entry(
@@ -78,9 +82,10 @@ class UserCacheIndexStoreTest(unittest.TestCase):
             store.upsert_entry(old_entry)
             store.upsert_entry(new_entry)
 
-            found = store.find_latest_valid_entry(
+            found = store.find_latest_valid_source_entry(
                 cache_type="topk_candidates",
-                patient_id="30012345",
+                source_type="patient",
+                source_id="30012345",
                 query_family="training_order_dual_window",
                 window_days=90,
                 config_hash="abc12345",
@@ -91,8 +96,43 @@ class UserCacheIndexStoreTest(unittest.TestCase):
             assert found is not None
             self.assertEqual(found.cached_base_date, "2026-05-25")
             self.assertEqual(found.data_path, "data/user_cache/30012345/new.json")
+            self.assertEqual(found.source_type, "patient")
+            self.assertEqual(found.source_id, "30012345")
 
-    def test_find_latest_valid_entry_ignores_expired_entry(self) -> None:
+    def test_find_latest_valid_source_entry_matches_non_patient_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.upsert_entry(
+                _entry(
+                    cache_type="raw_paths",
+                    patient_id="AU_DIS_0029",
+                    query_family="direct_entity",
+                    window_days=180,
+                    config_hash="direct12",
+                    cached_base_date="2026-05-25",
+                    data_path="data/pattern_paths/direct/D1.json",
+                    source_type="disease",
+                    source_id="AU_DIS_0029",
+                )
+            )
+
+            found = store.find_latest_valid_source_entry(
+                cache_type="raw_paths",
+                source_type="disease",
+                source_id="AU_DIS_0029",
+                query_family="direct_entity",
+                window_days=180,
+                config_hash="direct12",
+                request_base_date="2026-05-29",
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.patient_id, "AU_DIS_0029")
+        self.assertEqual(found.source_type, "disease")
+        self.assertEqual(found.source_id, "AU_DIS_0029")
+
+    def test_find_latest_valid_source_entry_ignores_expired_entry(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
             store.upsert_entry(
@@ -103,9 +143,10 @@ class UserCacheIndexStoreTest(unittest.TestCase):
                 )
             )
 
-            found = store.find_latest_valid_entry(
+            found = store.find_latest_valid_source_entry(
                 cache_type="topk_candidates",
-                patient_id="30012345",
+                source_type="patient",
+                source_id="30012345",
                 query_family="training_order_dual_window",
                 window_days=90,
                 config_hash="abc12345",
@@ -114,14 +155,15 @@ class UserCacheIndexStoreTest(unittest.TestCase):
 
             self.assertIsNone(found)
 
-    def test_find_latest_valid_entry_requires_matching_config(self) -> None:
+    def test_find_latest_valid_source_entry_requires_matching_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
             store.upsert_entry(_entry(config_hash="abc12345"))
 
-            found = store.find_latest_valid_entry(
+            found = store.find_latest_valid_source_entry(
                 cache_type="topk_candidates",
-                patient_id="30012345",
+                source_type="patient",
+                source_id="30012345",
                 query_family="training_order_dual_window",
                 window_days=90,
                 config_hash="different",
@@ -137,9 +179,10 @@ class UserCacheIndexStoreTest(unittest.TestCase):
 
             self.assertEqual(store.delete_entry(entry), 1)
             self.assertIsNone(
-                store.find_latest_valid_entry(
+                store.find_latest_valid_source_entry(
                     cache_type="topk_candidates",
-                    patient_id="30012345",
+                    source_type="patient",
+                    source_id="30012345",
                     query_family="training_order_dual_window",
                     window_days=90,
                     config_hash="abc12345",
@@ -158,6 +201,8 @@ def _entry(
     cached_base_date: str = "2026-05-25",
     valid_days: int = 7,
     data_path: str = "data/user_cache/30012345/topk.json",
+    source_type: str = "patient",
+    source_id: str | None = None,
 ) -> UserCacheEntry:
     return UserCacheEntry(
         cache_type=cache_type,
@@ -171,6 +216,8 @@ def _entry(
         payload={
             "candidate_key": "base_2026-05-25_window_90_candcfg_abc12345",
         },
+        source_type=source_type,
+        source_id=source_id,
     )
 
 

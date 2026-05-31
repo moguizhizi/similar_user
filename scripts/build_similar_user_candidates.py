@@ -460,9 +460,10 @@ def resolve_scored_key_from_user_cache(
     normalized_base_date = _normalize_required_string(base_date, "base_date")
     query_settings = load_query_settings(config_path)
     store = UserCacheIndexStore(settings.sqlite_path)
-    entry = store.find_latest_valid_entry(
+    entry = store.find_latest_valid_source_entry(
         cache_type="scored_paths",
-        patient_id=_normalize_required_string(patient_id, "patient_id"),
+        source_type="patient",
+        source_id=_normalize_required_string(patient_id, "patient_id"),
         query_family=_normalize_user_cache_query_family(query_family),
         window_days=query_settings.patient_path.window_days,
         config_hash=_scored_paths_user_cache_config_hash(expected_scored_key),
@@ -622,6 +623,46 @@ def build_candidate_cache_context(
     }
 
 
+def build_direct_entity_candidate_cache_context(
+    config_path: str | Path,
+    *,
+    scored_result: dict[str, Any],
+    disease_course_window_days: int | None,
+) -> dict[str, Any]:
+    """Build cache metadata for direct-entity similar-user candidate results."""
+    scored_cache_context = scored_result.get("cache_context")
+    if not isinstance(scored_cache_context, dict):
+        raise ValueError("direct entity candidate cache requires score cache_context.")
+    scored_key = _normalize_required_string(
+        scored_cache_context.get("scored_key"),
+        "scored_key",
+    )
+    scored_source_hash = _short_hash(
+        {
+            "cache_type": "scored_direct_entity_paths",
+            "scored_key_without_base_date": _strip_base_date_from_key(scored_key),
+            "pattern_source_keys": scored_cache_context.get("pattern_source_keys"),
+            "source_entries": scored_cache_context.get("source_entries"),
+            "scoring_input_signature": _short_hash(
+                _to_plain_data(scored_result.get("scoring_input"))
+            ),
+        }
+    )
+    direct_scored_key = f"{scored_key}_directsrc_{scored_source_hash}"
+    candidate_context = build_candidate_cache_context(
+        config_path,
+        scored_key=direct_scored_key,
+        disease_course_window_days=disease_course_window_days,
+    )
+    candidate_context["direct_entity_scored_source_hash"] = scored_source_hash
+    candidate_context["direct_entity_scored_context"] = {
+        "scored_key": scored_key,
+        "pattern_source_keys": scored_cache_context.get("pattern_source_keys"),
+        "source_entries": scored_cache_context.get("source_entries"),
+    }
+    return candidate_context
+
+
 def build_topk_candidate_user_cache_context(
     config_path: str | Path,
     *,
@@ -631,7 +672,7 @@ def build_topk_candidate_user_cache_context(
     scored_key: str,
     candidate_cache_context: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build patient-centered cache metadata for final topK candidates."""
+    """Build source-centered cache metadata for final patient topK candidates."""
     settings = load_user_cache_settings(config_path)
     if not settings.enabled:
         return {"enabled": False, "cache_type": "topk_candidates"}
@@ -659,6 +700,8 @@ def build_topk_candidate_user_cache_context(
         "cache_type": "topk_candidates",
         "sqlite_path": settings.sqlite_path,
         "patient_id": normalized_patient_id,
+        "source_type": "patient",
+        "source_id": normalized_patient_id,
         "query_family": query_family_key,
         "window_days": query_settings.patient_path.window_days,
         "config_hash": config_hash,
@@ -666,6 +709,58 @@ def build_topk_candidate_user_cache_context(
         "valid_days": settings.topk_candidates_valid_days,
         "candidate_key": candidate_key,
         "scored_key": normalized_scored_key,
+        "candidate_config_hash": candidate_config_hash,
+    }
+
+
+def build_direct_entity_topk_candidate_user_cache_context(
+    config_path: str | Path,
+    *,
+    source_id: str,
+    base_date: str | None,
+    candidate_cache_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Build source-centered metadata for direct-entity topK candidates."""
+    settings = load_user_cache_settings(config_path)
+    if not settings.enabled:
+        return {"enabled": False, "cache_type": "topk_candidates"}
+    query_settings = load_query_settings(config_path)
+    normalized_source_id = _normalize_required_string(source_id, "source_id")
+    normalized_base_date = _normalize_required_string(base_date, "base_date")
+    candidate_key = _normalize_required_string(
+        candidate_cache_context.get("candidate_key"),
+        "candidate_key",
+    )
+    candidate_config_hash = _normalize_required_string(
+        candidate_cache_context.get("candidate_config_hash"),
+        "candidate_config_hash",
+    )
+    config_hash = _short_hash(
+        {
+            "cache_type": "topk_candidates",
+            "source_type": "direct_entity_profile",
+            "cache_key_without_base_date": _strip_base_date_from_key(candidate_key),
+        }
+    )
+    window_days = query_settings.candidate_ranking.disease_course_window_days
+    if window_days is None:
+        raise ValueError(
+            "candidate_ranking disease_course_window_days is required for direct entity topK candidate cache."
+        )
+    return {
+        "enabled": settings.enabled,
+        "cache_type": "topk_candidates",
+        "sqlite_path": settings.sqlite_path,
+        "patient_id": normalized_source_id,
+        "source_type": "direct_entity_profile",
+        "source_id": normalized_source_id,
+        "query_family": "direct_entity",
+        "window_days": window_days,
+        "config_hash": config_hash,
+        "cached_base_date": normalized_base_date,
+        "valid_days": settings.topk_candidates_valid_days,
+        "candidate_key": candidate_key,
+        "scored_key": candidate_cache_context.get("scored_key"),
         "candidate_config_hash": candidate_config_hash,
     }
 
@@ -683,11 +778,15 @@ def load_cached_topk_candidate_result(
     store = UserCacheIndexStore(
         _normalize_required_string(user_cache_context.get("sqlite_path"), "sqlite_path")
     )
-    entry = store.find_latest_valid_entry(
+    entry = store.find_latest_valid_source_entry(
         cache_type="topk_candidates",
-        patient_id=_normalize_required_string(
-            user_cache_context.get("patient_id"),
-            "patient_id",
+        source_type=_normalize_required_string(
+            user_cache_context.get("source_type"),
+            "source_type",
+        ),
+        source_id=_normalize_required_string(
+            user_cache_context.get("source_id"),
+            "source_id",
         ),
         query_family=_normalize_required_string(
             user_cache_context.get("query_family"),
@@ -948,6 +1047,14 @@ def _register_topk_candidate_user_cache(
             "candidate_config_hash": user_cache_context.get("candidate_config_hash"),
             "summary_path": str(summary_path),
         },
+        source_type=_normalize_required_string(
+            user_cache_context.get("source_type"),
+            "source_type",
+        ),
+        source_id=_normalize_required_string(
+            user_cache_context.get("source_id"),
+            "source_id",
+        ),
     )
     store.upsert_entry(entry)
 

@@ -288,7 +288,7 @@ def _score_direct_entity_paths_if_enabled(
         base_date=base_date,
         config_path=config_path,
     )
-    output_paths = save_scored_direct_entity_result(result)
+    output_paths = save_scored_direct_entity_result(result, config_path=config_path)
     LOGGER.info(
         "Completed direct entity path scoring: patient_id=%s, should_score=%s, scored_path_count=%s, saved_file_count=%s",
         patient_id,

@@ -1,4 +1,4 @@
-"""SQLite index for patient-centered pipeline cache entries."""
+"""SQLite index for source-centered pipeline cache entries."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ SUPPORTED_USER_CACHE_TYPES = frozenset(
     {
         "raw_paths",
         "scored_paths",
+        "scored_direct_entity_paths",
         "topk_candidates",
     }
 )
@@ -21,7 +22,7 @@ SUPPORTED_USER_CACHE_TYPES = frozenset(
 
 @dataclass(frozen=True)
 class UserCacheEntry:
-    """One patient-centered cache index entry."""
+    """One source-centered cache index entry."""
 
     cache_type: str
     patient_id: str
@@ -34,6 +35,8 @@ class UserCacheEntry:
     payload: dict[str, Any]
     created_at: str | None = None
     updated_at: str | None = None
+    source_type: str = "patient"
+    source_id: str | None = None
 
     def is_valid_for(self, request_base_date: str) -> bool:
         """Return whether the entry can be reused for request_base_date."""
@@ -45,7 +48,7 @@ class UserCacheEntry:
 
 
 class UserCacheIndexStore:
-    """Read and write patient-centered cache index entries."""
+    """Read and write source-centered cache index entries."""
 
     def __init__(self, sqlite_path: str | Path) -> None:
         self.sqlite_path = Path(sqlite_path)
@@ -64,6 +67,8 @@ class UserCacheIndexStore:
                 CREATE TABLE IF NOT EXISTS user_cache_entries (
                     cache_type TEXT NOT NULL,
                     patient_id TEXT NOT NULL,
+                    source_type TEXT NOT NULL DEFAULT 'patient',
+                    source_id TEXT NOT NULL DEFAULT '',
                     query_family TEXT NOT NULL,
                     window_days INTEGER NOT NULL,
                     config_hash TEXT NOT NULL,
@@ -85,12 +90,27 @@ class UserCacheIndexStore:
                 )
                 """.strip()
             )
+            self._ensure_source_columns(connection)
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_user_cache_lookup
                 ON user_cache_entries (
                     cache_type,
                     patient_id,
+                    query_family,
+                    window_days,
+                    config_hash,
+                    cached_base_date
+                )
+                """.strip()
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_user_cache_source_lookup
+                ON user_cache_entries (
+                    cache_type,
+                    source_type,
+                    source_id,
                     query_family,
                     window_days,
                     config_hash,
@@ -118,6 +138,8 @@ class UserCacheIndexStore:
                 INSERT INTO user_cache_entries (
                     cache_type,
                     patient_id,
+                    source_type,
+                    source_id,
                     query_family,
                     window_days,
                     config_hash,
@@ -128,7 +150,7 @@ class UserCacheIndexStore:
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (
                     cache_type,
                     patient_id,
@@ -139,6 +161,8 @@ class UserCacheIndexStore:
                     data_path
                 )
                 DO UPDATE SET
+                    source_type = excluded.source_type,
+                    source_id = excluded.source_id,
                     valid_days = excluded.valid_days,
                     payload_json = excluded.payload_json,
                     updated_at = excluded.updated_at
@@ -146,6 +170,8 @@ class UserCacheIndexStore:
                 (
                     normalized.cache_type,
                     normalized.patient_id,
+                    normalized.source_type,
+                    normalized.source_id,
                     normalized.query_family,
                     normalized.window_days,
                     normalized.config_hash,
@@ -169,23 +195,27 @@ class UserCacheIndexStore:
             payload=normalized.payload,
             created_at=created_at,
             updated_at=updated_at,
+            source_type=normalized.source_type,
+            source_id=normalized.source_id,
         )
 
-    def find_latest_valid_entry(
+    def find_latest_valid_source_entry(
         self,
         *,
         cache_type: str,
-        patient_id: str,
+        source_type: str,
+        source_id: str,
         query_family: str,
         window_days: int,
         config_hash: str,
         request_base_date: str,
     ) -> UserCacheEntry | None:
-        """Return the newest unexpired entry matching the patient and config."""
+        """Return the newest unexpired entry matching source and config."""
         if not self.exists:
             return None
         normalized_cache_type = _normalize_cache_type(cache_type)
-        normalized_patient_id = _normalize_required_text(patient_id, "patient_id")
+        normalized_source_type = _normalize_required_text(source_type, "source_type")
+        normalized_source_id = _normalize_required_text(source_id, "source_id")
         normalized_query_family = _normalize_required_text(query_family, "query_family")
         normalized_window_days = _normalize_positive_int(window_days, "window_days")
         normalized_config_hash = _normalize_required_text(config_hash, "config_hash")
@@ -196,7 +226,8 @@ class UserCacheIndexStore:
                 SELECT *
                 FROM user_cache_entries
                 WHERE cache_type = ?
-                  AND patient_id = ?
+                  AND source_type = ?
+                  AND source_id = ?
                   AND query_family = ?
                   AND window_days = ?
                   AND config_hash = ?
@@ -205,7 +236,8 @@ class UserCacheIndexStore:
                 """.strip(),
                 (
                     normalized_cache_type,
-                    normalized_patient_id,
+                    normalized_source_type,
+                    normalized_source_id,
                     normalized_query_family,
                     normalized_window_days,
                     normalized_config_hash,
@@ -252,11 +284,33 @@ class UserCacheIndexStore:
         connection.row_factory = sqlite3.Row
         return connection
 
+    def _ensure_source_columns(self, connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(user_cache_entries)")
+        }
+        if "source_type" not in columns:
+            connection.execute(
+                "ALTER TABLE user_cache_entries ADD COLUMN source_type TEXT NOT NULL DEFAULT 'patient'"
+            )
+        if "source_id" not in columns:
+            connection.execute(
+                "ALTER TABLE user_cache_entries ADD COLUMN source_id TEXT NOT NULL DEFAULT ''"
+            )
+            connection.execute(
+                "UPDATE user_cache_entries SET source_id = patient_id WHERE source_id = ''"
+            )
+
 
 def _normalize_entry(entry: UserCacheEntry) -> UserCacheEntry:
+    normalized_patient_id = _normalize_required_text(entry.patient_id, "patient_id")
+    normalized_source_id = _normalize_required_text(
+        entry.source_id or normalized_patient_id,
+        "source_id",
+    )
     return UserCacheEntry(
         cache_type=_normalize_cache_type(entry.cache_type),
-        patient_id=_normalize_required_text(entry.patient_id, "patient_id"),
+        patient_id=normalized_patient_id,
         query_family=_normalize_required_text(entry.query_family, "query_family"),
         window_days=_normalize_positive_int(entry.window_days, "window_days"),
         config_hash=_normalize_required_text(entry.config_hash, "config_hash"),
@@ -269,6 +323,8 @@ def _normalize_entry(entry: UserCacheEntry) -> UserCacheEntry:
         payload=dict(entry.payload),
         created_at=entry.created_at,
         updated_at=entry.updated_at,
+        source_type=_normalize_required_text(entry.source_type, "source_type"),
+        source_id=normalized_source_id,
     )
 
 
@@ -288,6 +344,12 @@ def _entry_from_row(row: sqlite3.Row) -> UserCacheEntry:
         payload=payload,
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+        source_type=str(row["source_type"]) if "source_type" in row.keys() else "patient",
+        source_id=(
+            str(row["source_id"])
+            if "source_id" in row.keys() and row["source_id"]
+            else str(row["patient_id"])
+        ),
     )
 
 
