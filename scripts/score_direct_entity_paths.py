@@ -30,7 +30,15 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
-from config.settings import DEFAULT_CONFIG_PATH, load_query_settings  # noqa: E402
+from config.settings import (  # noqa: E402
+    DEFAULT_CONFIG_PATH,
+    load_query_settings,
+    load_user_cache_settings,
+)
+from similar_user.data_access.user_cache_index import (  # noqa: E402
+    UserCacheEntry,
+    UserCacheIndexStore,
+)
 from similar_user.data_access.kg_repository import KgRepository  # noqa: E402
 from similar_user.data_access.neo4j_client import Neo4jClient  # noqa: E402
 from similar_user.domain.graph_schema import PathPattern  # noqa: E402
@@ -41,6 +49,10 @@ from similar_user.services.direct_entity_scoring_input import (  # noqa: E402
 from similar_user.services.path_scoring import PathScoringRules  # noqa: E402
 from similar_user.utils.logger import get_logger  # noqa: E402
 from similar_user.utils.pattern_storage import StoredPatternResult  # noqa: E402
+from similar_user.utils.user_cache_paths import (  # noqa: E402
+    files_root_from_sqlite_path,
+    patient_cache_leaf_dir,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -498,17 +510,29 @@ def _read_index(index_path: Path) -> dict[str, Any]:
 def save_scored_direct_entity_result(
     result: dict[str, Any],
     output_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    *,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
 ) -> list[dict[str, Path]]:
     """Save full direct-entity score details and compact summary files."""
     output_paths = []
     for pattern, scores in _group_scores_by_pattern(result.get("scores")).items():
         pattern_result = _build_pattern_scored_result(result, pattern, scores)
+        pattern_result["user_cache_context"] = build_scored_direct_entity_user_cache_context(
+            pattern_result,
+            config_path=config_path,
+        )
         detail_path, summary_path = get_scored_direct_entity_output_paths(
             pattern_result,
             output_dir,
         )
         _write_json_atomic(detail_path, pattern_result)
         _write_json_atomic(summary_path, build_scored_direct_entity_summary(pattern_result))
+        _register_scored_direct_entity_user_cache(
+            pattern_result,
+            detail_path,
+            summary_path,
+            config_path=config_path,
+        )
         LOGGER.info(
             "Saved scored direct entity result: source_id=%s, pattern=%s, detail_path=%s, summary_path=%s",
             result.get("source_id"),
@@ -535,6 +559,27 @@ def get_scored_direct_entity_output_paths(
         result.get("direct_path_source_key"),
         "direct_path_source_key",
     )
+    user_cache_context = result.get("user_cache_context")
+    if isinstance(user_cache_context, dict) and user_cache_context.get("enabled"):
+        output_base = patient_cache_leaf_dir(
+            files_root_from_sqlite_path(
+                _normalize_required_text(
+                    user_cache_context.get("sqlite_path"),
+                    "sqlite_path",
+                )
+            ),
+            patient_id=user_cache_context.get("patient_id") or source_id,
+            cache_type="scored_paths",
+            query_family=user_cache_context.get("query_family"),
+            window_days=user_cache_context.get("window_days"),
+            config_hash=user_cache_context.get("config_hash"),
+            cached_base_date=user_cache_context.get("cached_base_date"),
+        )
+        file_stem = f"{_slug_part(pattern)}__{_slug_part(source_key)}"
+        return (
+            output_base / f"{file_stem}.detail.json",
+            output_base / f"{file_stem}.summary.json",
+        )
     bucket = source_id[:2] or "unknown"
     output_base = Path(output_dir) / scored_key / pattern / source_key / bucket
     return (
@@ -636,6 +681,130 @@ def _build_pattern_scored_result(
     pattern_result["cache_context"] = pattern_cache_context
     pattern_result["scores"] = scores
     return pattern_result
+
+
+def build_scored_direct_entity_user_cache_context(
+    result: dict[str, Any],
+    *,
+    config_path: str | Path = DEFAULT_CONFIG_PATH,
+) -> dict[str, Any]:
+    """Build source-centered cache metadata for one direct-entity scored result."""
+    settings = load_user_cache_settings(config_path)
+    if not settings.enabled:
+        return {"enabled": False, "cache_type": "scored_direct_entity_paths"}
+    cache_context = result.get("cache_context")
+    if not isinstance(cache_context, dict):
+        raise ValueError("cache_context must be present before user-cache registration.")
+    query_settings = load_query_settings(config_path)
+    source_id = _normalize_required_text(result.get("source_id"), "source_id")
+    source_key = _normalize_required_text(
+        result.get("direct_path_source_key"),
+        "direct_path_source_key",
+    )
+    scoring_input = result.get("scoring_input")
+    profile_signature = _direct_scoring_profile_signature(scoring_input)
+    scored_key = _normalize_required_text(cache_context.get("scored_key"), "scored_key")
+    pattern = _normalize_required_text(result.get("pattern"), "pattern")
+    return {
+        "enabled": True,
+        "cache_type": "scored_direct_entity_paths",
+        "sqlite_path": settings.sqlite_path,
+        "source_type": "direct_entity_profile",
+        "source_id": source_id,
+        "patient_id": source_id,
+        "query_family": "direct_entity",
+        "window_days": query_settings.direct_entity_path.window_days,
+        "config_hash": _short_hash(
+            {
+                "cache_type": "scored_direct_entity_paths",
+                "pattern": pattern,
+                "direct_path_source_key": source_key,
+                "score_top_k": cache_context.get("score_top_k"),
+                "profile_signature": profile_signature,
+            }
+        ),
+        "cached_base_date": _normalize_required_text(
+            result.get("base_date"),
+            "base_date",
+        ),
+        "valid_days": settings.direct_scored_paths_valid_days,
+        "scored_key": scored_key,
+        "direct_path_source_key": source_key,
+        "pattern": pattern,
+        "score_top_k": cache_context.get("score_top_k"),
+        "profile_signature": profile_signature,
+    }
+
+
+def _register_scored_direct_entity_user_cache(
+    result: dict[str, Any],
+    detail_path: Path,
+    summary_path: Path,
+    *,
+    config_path: str | Path,
+) -> None:
+    user_cache_context = build_scored_direct_entity_user_cache_context(
+        result,
+        config_path=config_path,
+    )
+    if not user_cache_context.get("enabled"):
+        return
+    store = UserCacheIndexStore(
+        _normalize_required_text(user_cache_context.get("sqlite_path"), "sqlite_path")
+    )
+    entry = UserCacheEntry(
+        cache_type="scored_direct_entity_paths",
+        patient_id=_normalize_required_text(
+            user_cache_context.get("patient_id"),
+            "patient_id",
+        ),
+        query_family=_normalize_required_text(
+            user_cache_context.get("query_family"),
+            "query_family",
+        ),
+        window_days=_normalize_positive_int(
+            user_cache_context.get("window_days"),
+            "window_days",
+        ),
+        config_hash=_normalize_required_text(
+            user_cache_context.get("config_hash"),
+            "config_hash",
+        ),
+        cached_base_date=_normalize_required_text(
+            user_cache_context.get("cached_base_date"),
+            "cached_base_date",
+        ),
+        valid_days=_normalize_non_negative_int(
+            user_cache_context.get("valid_days"),
+            "valid_days",
+        ),
+        data_path=str(detail_path),
+        payload={
+            "scored_key": user_cache_context.get("scored_key"),
+            "pattern": user_cache_context.get("pattern"),
+            "direct_path_source_key": user_cache_context.get("direct_path_source_key"),
+            "score_top_k": user_cache_context.get("score_top_k"),
+            "profile_signature": user_cache_context.get("profile_signature"),
+            "summary_path": str(summary_path),
+        },
+        source_type=_normalize_required_text(
+            user_cache_context.get("source_type"),
+            "source_type",
+        ),
+        source_id=_normalize_required_text(
+            user_cache_context.get("source_id"),
+            "source_id",
+        ),
+    )
+    store.upsert_entry(entry)
+    LOGGER.info(
+        "Registered scored direct entity paths in user cache: source_type=%s, source_id=%s, pattern=%s, cached_base_date=%s, data_path=%s",
+        entry.source_type,
+        entry.source_id,
+        result.get("pattern"),
+        entry.cached_base_date,
+        entry.data_path,
+    )
 
 
 def _build_direct_path_source_key(entries: list[dict[str, Any]]) -> str:
@@ -748,6 +917,33 @@ def _resolve_top_k(
     return top_k
 
 
+def _direct_scoring_profile_signature(scoring_input: object) -> str:
+    if isinstance(scoring_input, dict):
+        payload = {
+            "age": scoring_input.get("age"),
+            "education": scoring_input.get("education"),
+            "gender": scoring_input.get("gender"),
+            "disease_ids": scoring_input.get("disease_ids"),
+            "symptom_ids": scoring_input.get("symptom_ids"),
+            "unknown_ids": scoring_input.get("unknown_ids"),
+        }
+    else:
+        payload = {}
+    return _short_hash(payload)
+
+
+def _normalize_positive_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer.")
+    return value
+
+
+def _normalize_non_negative_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer.")
+    return value
+
+
 def _flatten_ids(values: list[list[str]]) -> list[str]:
     ids: list[str] = []
     for group in values:
@@ -834,6 +1030,7 @@ def main() -> int:
             output_paths = save_scored_direct_entity_result(
                 result,
                 output_dir=args.scored_paths_dir,
+                config_path=args.config,
             )
             result["output_paths"] = [
                 {

@@ -114,6 +114,7 @@ class TrainingTaskEvaluationSettings:
     """Configuration for evaluating predicted training tasks."""
 
     validation_mode: str = "set"
+    workers: int = 1
     score_validation_url: str = "http://172.21.133.142:5008/training_task_score"
     algorithm_request_results_csv: str = (
         "/home/temp/dataset/20260525_Algorithm_Request_Results/"
@@ -137,6 +138,30 @@ class DirectPathCacheSettings:
     sqlite_path: str = "data/direct_path_cache/direct_paths.sqlite"
     incremental_enabled: bool = True
     overlap_days: int = 1
+
+
+@dataclass(frozen=True)
+class UserCacheSettings:
+    """Configuration for source-centered pipeline cache indexing."""
+
+    enabled: bool = False
+    sqlite_path: str = "data/user_cache/cache_index.sqlite"
+    patient_raw_paths_valid_days: int = 30
+    direct_raw_paths_valid_days: int = 60
+    patient_scored_paths_valid_days: int = 14
+    direct_scored_paths_valid_days: int = 60
+    topk_candidates_valid_days: int = 7
+    refresh_candidate_base_date_on_hit: bool = True
+    raw_path_build_workers: int = 1
+    raw_path_build_max_retries: int = 2
+    raw_path_build_retry_sleep_seconds: float = 5.0
+    cleanup_max_age_days: int = 30
+    keep_latest_per_source: int = 2
+
+    @property
+    def keep_latest_per_user(self) -> int:
+        """Backward-compatible alias for source-centered cache retention."""
+        return self.keep_latest_per_source
 
 
 @dataclass(frozen=True)
@@ -443,6 +468,13 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_evaluation validation_mode must be one of: set, score."
         )
+    evaluation_workers = training_task_evaluation_data.get("workers", 1)
+    if (
+        not isinstance(evaluation_workers, int)
+        or isinstance(evaluation_workers, bool)
+        or evaluation_workers <= 0
+    ):
+        raise ValueError("training_task_evaluation workers must be a positive integer.")
     score_validation_url = training_task_evaluation_data.get(
         "score_validation_url",
         "http://172.21.133.142:5008/training_task_score",
@@ -549,6 +581,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         ),
         training_task_evaluation=TrainingTaskEvaluationSettings(
             validation_mode=validation_mode.strip(),
+            workers=evaluation_workers,
             score_validation_url=score_validation_url.strip(),
             algorithm_request_results_csv=algorithm_request_results_csv.strip(),
             score_validation_timeout=float(score_validation_timeout),
@@ -604,6 +637,165 @@ def load_direct_path_cache_settings(
         incremental_enabled=incremental_enabled,
         overlap_days=overlap_days,
     )
+
+
+def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
+    """Load patient-centered cache index settings from YAML."""
+    data = _extract_config_section(load_yaml_config(config_path), "user_cache")
+
+    enabled = data.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("user_cache enabled must be a boolean.")
+
+    sqlite_path = data.get("sqlite_path", "data/user_cache/cache_index.sqlite")
+    if not isinstance(sqlite_path, str) or not sqlite_path.strip():
+        raise ValueError("user_cache sqlite_path must be a non-empty string.")
+
+    patient_raw_paths_valid_days = _parse_user_cache_valid_days(
+        data,
+        "patient_raw_paths_valid_days",
+        default=30,
+        fallback_field_name="raw_paths_valid_days",
+    )
+    direct_raw_paths_valid_days = _parse_user_cache_valid_days(
+        data,
+        "direct_raw_paths_valid_days",
+        default=60,
+        fallback_field_name="raw_paths_valid_days",
+    )
+    patient_scored_paths_valid_days = _parse_user_cache_valid_days(
+        data,
+        "patient_scored_paths_valid_days",
+        default=14,
+        fallback_field_name="scored_paths_valid_days",
+    )
+    direct_scored_paths_valid_days = _parse_user_cache_valid_days(
+        data,
+        "direct_scored_paths_valid_days",
+        default=60,
+        fallback_field_name="scored_paths_valid_days",
+    )
+    topk_candidates_valid_days = _parse_user_cache_valid_days(
+        data,
+        "topk_candidates_valid_days",
+        default=7,
+    )
+    refresh_candidate_base_date_on_hit = data.get(
+        "refresh_candidate_base_date_on_hit",
+        True,
+    )
+    if not isinstance(refresh_candidate_base_date_on_hit, bool):
+        raise ValueError(
+            "user_cache refresh_candidate_base_date_on_hit must be a boolean."
+        )
+    raw_path_build_workers = _parse_user_cache_positive_int(
+        data,
+        "raw_path_build_workers",
+        default=1,
+    )
+    raw_path_build_max_retries = _parse_user_cache_non_negative_int(
+        data,
+        "raw_path_build_max_retries",
+        default=2,
+    )
+    raw_path_build_retry_sleep_seconds = _parse_user_cache_non_negative_number(
+        data,
+        "raw_path_build_retry_sleep_seconds",
+        default=5.0,
+    )
+
+    cleanup_max_age_days = data.get("cleanup_max_age_days", 30)
+    if (
+        not isinstance(cleanup_max_age_days, int)
+        or isinstance(cleanup_max_age_days, bool)
+        or cleanup_max_age_days < 0
+    ):
+        raise ValueError("user_cache cleanup_max_age_days must be a non-negative integer.")
+
+    keep_latest_per_source = data.get(
+        "keep_latest_per_source",
+        data.get("keep_latest_per_user", 2),
+    )
+    if (
+        not isinstance(keep_latest_per_source, int)
+        or isinstance(keep_latest_per_source, bool)
+        or keep_latest_per_source <= 0
+    ):
+        raise ValueError("user_cache keep_latest_per_source must be a positive integer.")
+
+    return UserCacheSettings(
+        enabled=enabled,
+        sqlite_path=sqlite_path.strip(),
+        patient_raw_paths_valid_days=patient_raw_paths_valid_days,
+        direct_raw_paths_valid_days=direct_raw_paths_valid_days,
+        patient_scored_paths_valid_days=patient_scored_paths_valid_days,
+        direct_scored_paths_valid_days=direct_scored_paths_valid_days,
+        topk_candidates_valid_days=topk_candidates_valid_days,
+        refresh_candidate_base_date_on_hit=refresh_candidate_base_date_on_hit,
+        raw_path_build_workers=raw_path_build_workers,
+        raw_path_build_max_retries=raw_path_build_max_retries,
+        raw_path_build_retry_sleep_seconds=raw_path_build_retry_sleep_seconds,
+        cleanup_max_age_days=cleanup_max_age_days,
+        keep_latest_per_source=keep_latest_per_source,
+    )
+
+
+def _parse_user_cache_valid_days(
+    data: dict[str, Any],
+    field_name: str,
+    *,
+    default: int,
+    fallback_field_name: str | None = None,
+) -> int:
+    value = data.get(
+        field_name,
+        data.get(fallback_field_name, default)
+        if fallback_field_name is not None
+        else default,
+    )
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"user_cache {field_name} must be a non-negative integer.")
+    return value
+
+
+def _parse_user_cache_positive_int(
+    data: dict[str, Any],
+    field_name: str,
+    *,
+    default: int,
+) -> int:
+    value = data.get(field_name, default)
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"user_cache {field_name} must be a positive integer.")
+    return value
+
+
+def _parse_user_cache_non_negative_int(
+    data: dict[str, Any],
+    field_name: str,
+    *,
+    default: int,
+) -> int:
+    value = data.get(field_name, default)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"user_cache {field_name} must be a non-negative integer.")
+    return value
+
+
+def _parse_user_cache_non_negative_number(
+    data: dict[str, Any],
+    field_name: str,
+    *,
+    default: float,
+) -> float:
+    value = data.get(field_name, default)
+    if (
+        not isinstance(value, int | float)
+        or isinstance(value, bool)
+        or value < 0
+    ):
+        raise ValueError(f"user_cache {field_name} must be a non-negative number.")
+    return float(value)
 
 
 def _parse_candidate_scoring_settings(value: object) -> CandidateScoringSettings:

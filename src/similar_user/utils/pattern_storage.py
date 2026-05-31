@@ -11,7 +11,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Iterator
 
-from config.settings import load_query_settings
+from config.settings import load_query_settings, load_user_cache_settings
+from ..data_access.user_cache_index import UserCacheEntry, UserCacheIndexStore
 from ..data_access.pattern_registry import get_path_pattern_spec, resolve_path_pattern
 from ..domain.graph_schema import PathPattern
 from ..domain.item import GameNode
@@ -25,6 +26,10 @@ from ..domain.path_models import (
     UnknownTasksetPatientPath,
 )
 from .logger import get_logger
+from .user_cache_paths import (
+    files_root_from_sqlite_path,
+    source_cache_leaf_dir,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -264,6 +269,48 @@ def get_pattern_result_output_path(
     """Return the bucketed JSON output path for one pattern source."""
     normalized_pattern = _normalize_required_string(pattern, "pattern")
     normalized_source_id = _normalize_required_string(source_id, "source_id")
+    resolved_pattern = resolve_path_pattern(normalized_pattern).value
+    settings = load_user_cache_settings(config_path)
+    if settings.enabled:
+        path_key_value = _normalize_required_string(path_key, "path_key")
+        source_parameter = get_path_pattern_spec(resolved_pattern).source_parameter
+        source_type = _source_type_from_parameter(source_parameter)
+        query_family, window_days, config_hash, base_date = _path_parts_from_key(
+            path_key_value,
+            default_query_family="direct_entity"
+            if source_type != "patient"
+            else "default",
+        )
+        output_base = source_cache_leaf_dir(
+            files_root_from_sqlite_path(settings.sqlite_path),
+            source_type=source_type,
+            source_id=normalized_source_id,
+            pattern=resolved_pattern,
+            cache_type="raw_paths",
+            query_family=query_family,
+            window_days=window_days,
+            config_hash=build_raw_path_user_cache_config_hash(path_key_value),
+            cached_base_date=base_date,
+        )
+        return output_base / f"{_slug_part(resolved_pattern)}.json"
+    return get_legacy_pattern_result_output_path(
+        config_path,
+        normalized_pattern,
+        normalized_source_id,
+        path_key=path_key,
+    )
+
+
+def get_legacy_pattern_result_output_path(
+    config_path: str | Path,
+    pattern: str,
+    source_id: str,
+    *,
+    path_key: str | None = None,
+) -> Path:
+    """Return the pre-user-cache bucketed output path for one pattern source."""
+    normalized_pattern = _normalize_required_string(pattern, "pattern")
+    normalized_source_id = _normalize_required_string(source_id, "source_id")
     bucket = normalized_source_id[:2] or "unknown"
     return (
         get_pattern_result_output_dir(
@@ -326,6 +373,12 @@ class PatternResultStore:
             len(result_payload.paths),
             output_path,
         )
+        _register_raw_path_user_cache(
+            self.config_path,
+            result_payload,
+            output_path,
+            path_context=path_context,
+        )
         return output_path
 
     def save_with_path_context(
@@ -373,6 +426,12 @@ class PatternResultStore:
             result_payload.pattern,
             len(result_payload.paths),
             output_path,
+        )
+        _register_raw_path_user_cache(
+            self.config_path,
+            result_payload,
+            output_path,
+            path_context=path_context,
         )
         return output_path
 
@@ -546,6 +605,64 @@ def build_path_cache_context(
     }
 
 
+def build_raw_path_user_cache_context(
+    config_path: str | Path,
+    *,
+    source_id: str,
+    source_parameter: str,
+    path_cache_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Build source-centered cache metadata for raw path results."""
+    settings = load_user_cache_settings(config_path)
+    if not settings.enabled:
+        return {"enabled": False, "cache_type": "raw_paths"}
+    path_key = _normalize_required_string(path_cache_context.get("path_key"), "path_key")
+    query_family = _normalize_required_string(
+        path_cache_context.get("query_family") or "direct_entity",
+        "query_family",
+    )
+    source_type = _source_type_from_parameter(source_parameter)
+    valid_days = (
+        settings.patient_raw_paths_valid_days
+        if source_type == "patient"
+        else settings.direct_raw_paths_valid_days
+    )
+    return {
+        "enabled": True,
+        "cache_type": "raw_paths",
+        "sqlite_path": settings.sqlite_path,
+        "patient_id": _normalize_required_string(source_id, "source_id"),
+        "source_type": source_type,
+        "source_id": _normalize_required_string(source_id, "source_id"),
+        "query_family": query_family,
+        "window_days": _normalize_positive_int(
+            path_cache_context.get("window_days"),
+            "window_days",
+        ),
+        "config_hash": build_raw_path_user_cache_config_hash(path_key),
+        "cached_base_date": _normalize_required_string(
+            path_cache_context.get("base_date"),
+            "base_date",
+        ),
+        "valid_days": valid_days,
+        "path_key": path_key,
+        "path_config_hash": path_cache_context.get("path_config_hash"),
+    }
+
+
+def build_raw_path_user_cache_config_hash(path_key: str) -> str:
+    """Build the base-date-independent user-cache hash for raw paths."""
+    normalized_path_key = _normalize_required_string(path_key, "path_key")
+    return _short_hash(
+        {
+            "cache_type": "raw_paths",
+            "cache_key_without_base_date": _strip_base_date_from_key(
+                normalized_path_key
+            ),
+        }
+    )
+
+
 def build_direct_path_cache_context(
     *,
     base_date: str,
@@ -617,6 +734,90 @@ def _with_path_cache_context(
     )
 
 
+def _register_raw_path_user_cache(
+    config_path: str | Path,
+    result: StoredPatternResult,
+    output_path: Path,
+    *,
+    path_context: dict[str, Any],
+) -> None:
+    user_cache_context = build_raw_path_user_cache_context(
+        config_path,
+        source_id=result.source_id,
+        source_parameter=result.source_parameter,
+        path_cache_context=path_context,
+    )
+    if not user_cache_context.get("enabled"):
+        return
+    store = UserCacheIndexStore(
+        _normalize_required_string(user_cache_context.get("sqlite_path"), "sqlite_path")
+    )
+    entry = UserCacheEntry(
+        cache_type="raw_paths",
+        patient_id=_normalize_required_string(
+            user_cache_context.get("patient_id"),
+            "patient_id",
+        ),
+        query_family=_normalize_required_string(
+            user_cache_context.get("query_family"),
+            "query_family",
+        ),
+        window_days=_normalize_positive_int(
+            user_cache_context.get("window_days"),
+            "window_days",
+        ),
+        config_hash=_normalize_required_string(
+            user_cache_context.get("config_hash"),
+            "config_hash",
+        ),
+        cached_base_date=_normalize_required_string(
+            user_cache_context.get("cached_base_date"),
+            "cached_base_date",
+        ),
+        valid_days=_normalize_non_negative_int(
+            user_cache_context.get("valid_days"),
+            "valid_days",
+        ),
+        data_path=str(output_path),
+        payload={
+            "path_key": _normalize_required_string(
+                user_cache_context.get("path_key"),
+                "path_key",
+            ),
+            "pattern": result.pattern,
+            "path_config_hash": user_cache_context.get("path_config_hash"),
+            "source_type": user_cache_context.get("source_type"),
+            "source_id": user_cache_context.get("source_id"),
+        },
+        source_type=_normalize_required_string(
+            user_cache_context.get("source_type"),
+            "source_type",
+        ),
+        source_id=_normalize_required_string(
+            user_cache_context.get("source_id"),
+            "source_id",
+        ),
+    )
+    store.upsert_entry(entry)
+    LOGGER.info(
+        "Registered raw paths in user cache: patient_id=%s, query_family=%s, cached_base_date=%s, path_key=%s, data_path=%s",
+        entry.patient_id,
+        entry.query_family,
+        entry.cached_base_date,
+        entry.payload["path_key"],
+        entry.data_path,
+    )
+
+
+def _source_type_from_parameter(source_parameter: str) -> str:
+    normalized = _normalize_required_string(source_parameter, "source_parameter")
+    if normalized == "patient_id":
+        return "patient"
+    if normalized.endswith("_id"):
+        return normalized[:-3]
+    return normalized
+
+
 def _graph_path_limit_config_payload(config_path: str | Path) -> dict[str, Any]:
     settings = load_query_settings(config_path).graph_path_limit
     return _to_plain_data(settings)
@@ -641,6 +842,66 @@ def _normalize_query_family_for_key(query_family: str | None) -> str:
     if query_family is None or not str(query_family).strip():
         return "default"
     return _slug_part(str(query_family).strip())
+
+
+def _strip_base_date_from_key(value: str) -> str:
+    parts = value.split("_", 2)
+    if len(parts) == 3 and parts[0] == "base":
+        return parts[2]
+    return value
+
+
+def _path_parts_from_key(
+    path_key: str,
+    *,
+    default_query_family: str,
+) -> tuple[str, int, str, str]:
+    normalized_path_key = _normalize_required_string(path_key, "path_key")
+    parts = normalized_path_key.split("_")
+    base_date = _extract_key_value(parts, "base")
+    window_days = _parse_positive_int(_extract_key_value(parts, "window"), "window")
+    query_family = (
+        _extract_key_slice(parts, "qf", ("pathcfg", "directcfg"))
+        or default_query_family
+    )
+    config_hash = (
+        _extract_key_value(parts, "pathcfg")
+        or _extract_key_value(parts, "directcfg")
+        or build_raw_path_user_cache_config_hash(normalized_path_key)
+    )
+    return query_family, window_days, config_hash, base_date
+
+
+def _extract_key_value(parts: list[str], marker: str) -> str:
+    for index, part in enumerate(parts[:-1]):
+        if part == marker:
+            return parts[index + 1]
+    return ""
+
+
+def _extract_key_slice(
+    parts: list[str],
+    start_marker: str,
+    end_markers: tuple[str, ...],
+) -> str:
+    try:
+        start_index = parts.index(start_marker) + 1
+    except ValueError:
+        return ""
+    end_index = len(parts)
+    for marker in end_markers:
+        if marker in parts[start_index:]:
+            marker_index = parts.index(marker, start_index)
+            end_index = min(end_index, marker_index)
+    return "_".join(parts[start_index:end_index]).strip("_")
+
+
+def _parse_positive_int(value: str, field_name: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a positive integer.") from exc
+    return _normalize_positive_int(parsed, field_name)
 
 
 def _slug_part(value: object) -> str:
@@ -671,6 +932,18 @@ def _resolve_patient_path_window_days(
     config_path: str | Path,
 ) -> int:
     return load_query_settings(config_path).patient_path.window_days
+
+
+def _normalize_positive_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer.")
+    return value
+
+
+def _normalize_non_negative_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer.")
+    return value
 
 
 def _parse_iso_date(value: object) -> date | None:

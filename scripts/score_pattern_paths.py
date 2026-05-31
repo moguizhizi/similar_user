@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -43,7 +44,11 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
-from config.settings import load_query_settings
+from config.settings import load_query_settings, load_user_cache_settings
+from similar_user.data_access.user_cache_index import (
+    UserCacheEntry,
+    UserCacheIndexStore,
+)
 from similar_user.data_access.pattern_registry import (
     available_path_pattern_aliases,
     get_path_pattern_spec,
@@ -53,6 +58,14 @@ from similar_user.domain.graph_schema import PathPattern
 from similar_user.services.path_scoring import PathScoringRules, get_path_scorer
 from similar_user.utils.logger import get_logger
 from similar_user.utils.pattern_storage import PatternResultStore
+from similar_user.utils.pattern_storage import (
+    build_path_key,
+    build_raw_path_user_cache_config_hash,
+)
+from similar_user.utils.user_cache_paths import (
+    files_root_from_sqlite_path,
+    patient_cache_leaf_dir,
+)
 
 
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
@@ -179,9 +192,10 @@ def score_pattern_paths(
         top_k,
         config_path,
     )
-    stored_result = PatternResultStore(config_path).load(
-        pattern,
-        source_id,
+    stored_result = load_pattern_result_with_user_cache(
+        config_path,
+        pattern=pattern,
+        source_id=source_id,
         base_date=base_date,
         query_family=query_family,
     )
@@ -249,6 +263,13 @@ def score_pattern_paths(
         config_path,
         retrieval_context=stored_result.retrieval_context,
         top_k=top_k,
+    )
+    result["user_cache_context"] = build_scored_path_user_cache_context(
+        config_path,
+        source_id=stored_result.source_id,
+        base_date=base_date,
+        query_family=query_family,
+        scored_cache_context=result["cache_context"],
     )
     LOGGER.debug(
         "Scored pattern result: source_id=%s, source_parameter=%s, path_count=%s, scored_path_count=%s",
@@ -346,6 +367,7 @@ def save_scored_pattern_result(
     detail_path, summary_path = get_scored_pattern_output_paths(result, output_dir)
     _write_json_atomic(detail_path, result)
     _write_json_atomic(summary_path, build_scored_pattern_summary(result))
+    _register_scored_path_user_cache(result, detail_path, summary_path)
     LOGGER.info(
         "Saved scored pattern result: source_id=%s, pattern=%s, detail_path=%s, summary_path=%s",
         result.get("source_id"),
@@ -376,6 +398,26 @@ def get_scored_pattern_output_paths(
     source_id = _normalize_result_string(result.get("source_id"), "source_id")
     pattern = _normalize_result_string(result.get("pattern"), "pattern")
     scored_key = _extract_scored_key(result.get("cache_context"))
+    user_cache_context = result.get("user_cache_context")
+    if isinstance(user_cache_context, dict) and user_cache_context.get("enabled"):
+        output_base = patient_cache_leaf_dir(
+            files_root_from_sqlite_path(
+                _normalize_result_string(
+                    user_cache_context.get("sqlite_path"),
+                    "sqlite_path",
+                )
+            ),
+            patient_id=user_cache_context.get("patient_id") or source_id,
+            cache_type="scored_paths",
+            query_family=user_cache_context.get("query_family"),
+            window_days=user_cache_context.get("window_days"),
+            config_hash=user_cache_context.get("config_hash"),
+            cached_base_date=user_cache_context.get("cached_base_date"),
+        )
+        return (
+            output_base / f"{_slug_part(pattern)}.detail.json",
+            output_base / f"{_slug_part(pattern)}.summary.json",
+        )
     bucket = source_id[:2] or "unknown"
     output_base = Path(output_dir) / scored_key / pattern / bucket
     return (
@@ -415,6 +457,7 @@ def build_scored_pattern_summary(result: dict[str, object]) -> dict[str, object]
         "scored_path_count": result.get("scored_path_count"),
         "retrieval_context": result.get("retrieval_context"),
         "cache_context": result.get("cache_context"),
+        "user_cache_context": result.get("user_cache_context"),
         "scores": summary_scores,
     }
 
@@ -451,6 +494,137 @@ def build_scored_cache_context(
     }
 
 
+def build_scored_path_user_cache_context(
+    config_path: str | Path,
+    *,
+    source_id: str,
+    base_date: str | None,
+    query_family: str | None,
+    scored_cache_context: dict[str, object],
+) -> dict[str, object]:
+    """Build source-centered cache metadata for patient scored path results."""
+    settings = load_user_cache_settings(config_path)
+    if not settings.enabled:
+        return {"enabled": False, "cache_type": "scored_paths"}
+    query_settings = load_query_settings(config_path)
+    scored_key = _normalize_result_string(
+        scored_cache_context.get("scored_key"),
+        "scored_key",
+    )
+    return {
+        "enabled": True,
+        "cache_type": "scored_paths",
+        "sqlite_path": settings.sqlite_path,
+        "patient_id": _normalize_result_string(source_id, "source_id"),
+        "source_type": "patient",
+        "source_id": _normalize_result_string(source_id, "source_id"),
+        "query_family": _normalize_user_cache_query_family(query_family),
+        "window_days": query_settings.patient_path.window_days,
+        "config_hash": _short_hash(
+            {
+                "cache_type": "scored_paths",
+                "cache_key_without_base_date": _strip_base_date_from_key(scored_key),
+            }
+        ),
+        "cached_base_date": _normalize_result_string(base_date, "base_date"),
+        "valid_days": settings.patient_scored_paths_valid_days,
+        "scored_key": scored_key,
+        "score_top_k": scored_cache_context.get("score_top_k"),
+    }
+
+
+def load_pattern_result_with_user_cache(
+    config_path: str | Path,
+    *,
+    pattern: str,
+    source_id: str,
+    base_date: str | None,
+    query_family: str | None,
+) -> object:
+    """Load raw paths, falling back to a recent valid user-cache entry."""
+    store = PatternResultStore(config_path)
+    try:
+        return store.load(
+            pattern,
+            source_id,
+            base_date=base_date,
+            query_family=query_family,
+        )
+    except FileNotFoundError as exact_error:
+        cached = resolve_raw_path_cache_args_from_user_cache(
+            config_path,
+            patient_id=source_id,
+            base_date=base_date,
+            query_family=query_family,
+        )
+        if cached is None:
+            raise exact_error
+        return store.load(
+            pattern,
+            source_id,
+            base_date=cached["base_date"],
+            query_family=cached["query_family"],
+        )
+
+
+def resolve_raw_path_cache_args_from_user_cache(
+    config_path: str | Path,
+    *,
+    patient_id: str,
+    base_date: str | None,
+    query_family: str | None,
+) -> dict[str, str | None] | None:
+    """Return load arguments for a recent valid raw path cache entry."""
+    settings = load_user_cache_settings(config_path)
+    if not settings.enabled:
+        return None
+    normalized_base_date = _normalize_result_string(base_date, "base_date")
+    query_settings = load_query_settings(config_path)
+    expected_path_key = build_path_key(
+        config_path,
+        base_date=normalized_base_date,
+        query_family=query_family,
+    )
+    store = UserCacheIndexStore(settings.sqlite_path)
+    entry = store.find_latest_valid_source_entry(
+        cache_type="raw_paths",
+        source_type="patient",
+        source_id=_normalize_result_string(patient_id, "patient_id"),
+        query_family=_normalize_user_cache_query_family(query_family),
+        window_days=query_settings.patient_path.window_days,
+        config_hash=build_raw_path_user_cache_config_hash(expected_path_key),
+        request_base_date=normalized_base_date,
+    )
+    if entry is None:
+        return None
+    data_path = Path(entry.data_path)
+    if not data_path.exists():
+        store.delete_entry(entry)
+        LOGGER.warning(
+            "Deleted stale raw-path user-cache index entry because raw file is missing: patient_id=%s, data_path=%s",
+            entry.patient_id,
+            data_path,
+        )
+        return None
+    cached_path_key = entry.payload.get("path_key")
+    if not isinstance(cached_path_key, str) or not cached_path_key.strip():
+        return None
+    cached_query_family = entry.query_family
+    query_family_for_load = None if cached_query_family == "default" else cached_query_family
+    LOGGER.info(
+        "Using raw paths from user cache: patient_id=%s, expected_path_key=%s, cached_path_key=%s, cached_base_date=%s, data_path=%s",
+        patient_id,
+        expected_path_key,
+        cached_path_key,
+        entry.cached_base_date,
+        data_path,
+    )
+    return {
+        "base_date": entry.cached_base_date,
+        "query_family": query_family_for_load,
+    }
+
+
 def validate_scored_cache_context(
     scored_result: dict[str, object],
     *,
@@ -478,6 +652,65 @@ def _extract_scored_key(cache_context: object) -> str:
     if not isinstance(scored_key, str) or not scored_key.strip():
         raise ValueError("scored result cache_context.scored_key must be non-empty.")
     return scored_key.strip()
+
+
+def _register_scored_path_user_cache(
+    result: dict[str, object],
+    detail_path: Path,
+    summary_path: Path,
+) -> None:
+    user_cache_context = result.get("user_cache_context")
+    if not isinstance(user_cache_context, dict) or not user_cache_context.get("enabled"):
+        return
+    store = UserCacheIndexStore(
+        _normalize_result_string(user_cache_context.get("sqlite_path"), "sqlite_path")
+    )
+    entry = UserCacheEntry(
+        cache_type="scored_paths",
+        patient_id=_normalize_result_string(
+            user_cache_context.get("patient_id"),
+            "patient_id",
+        ),
+        query_family=_normalize_result_string(
+            user_cache_context.get("query_family"),
+            "query_family",
+        ),
+        window_days=_normalize_positive_int(
+            user_cache_context.get("window_days"),
+            "window_days",
+        ),
+        config_hash=_normalize_result_string(
+            user_cache_context.get("config_hash"),
+            "config_hash",
+        ),
+        cached_base_date=_normalize_result_string(
+            user_cache_context.get("cached_base_date"),
+            "cached_base_date",
+        ),
+        valid_days=_normalize_non_negative_int(
+            user_cache_context.get("valid_days"),
+            "valid_days",
+        ),
+        data_path=str(detail_path),
+        payload={
+            "scored_key": _normalize_result_string(
+                user_cache_context.get("scored_key"),
+                "scored_key",
+            ),
+            "pattern": result.get("pattern"),
+            "score_top_k": user_cache_context.get("score_top_k"),
+            "summary_path": str(summary_path),
+        },
+        source_type=_normalize_result_string(
+            user_cache_context.get("source_type"),
+            "source_type",
+        ),
+        source_id=_normalize_result_string(
+            user_cache_context.get("source_id"),
+            "source_id",
+        ),
+    )
+    store.upsert_entry(entry)
 
 
 def _extract_score_end_date(
@@ -538,6 +771,49 @@ def _normalize_result_string(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string.")
     return value.strip()
+
+
+def _normalize_positive_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer.")
+    return value
+
+
+def _normalize_non_negative_int(value: object, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer.")
+    return value
+
+
+def _normalize_user_cache_query_family(query_family: str | None) -> str:
+    if query_family is None or not str(query_family).strip():
+        return "default"
+    return _slug_part(str(query_family).strip())
+
+
+def _strip_base_date_from_key(value: str) -> str:
+    parts = value.split("_", 2)
+    if len(parts) == 3 and parts[0] == "base":
+        return parts[2]
+    return value
+
+
+def _short_hash(payload: dict[str, object]) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:8]
+
+
+def _slug_part(value: object) -> str:
+    text = str(value).strip().lower()
+    slug = []
+    for char in text:
+        if char.isalnum():
+            slug.append(char)
+        elif char in ("-", "_"):
+            slug.append(char)
+        else:
+            slug.append("-")
+    return "".join(slug).strip("-") or "none"
 
 
 def _extract_int(value: object) -> int:

@@ -2499,6 +2499,7 @@ class KgRepositoryTest(unittest.TestCase):
                         "    - per_g: 5",
                         "training_task_evaluation:",
                         "  validation_mode: score",
+                        "  workers: 4",
                         "  score_validation_url: http://score.test/training_task_score",
                         "  algorithm_request_results_csv: /tmp/request_results.csv",
                         "  score_validation_timeout: 3.5",
@@ -2510,6 +2511,7 @@ class KgRepositoryTest(unittest.TestCase):
             settings = load_query_settings(config_path)
 
         self.assertEqual(settings.training_task_evaluation.validation_mode, "score")
+        self.assertEqual(settings.training_task_evaluation.workers, 4)
         self.assertEqual(
             settings.training_task_evaluation.score_validation_url,
             "http://score.test/training_task_score",
@@ -2539,6 +2541,30 @@ class KgRepositoryTest(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(ValueError, "validation_mode"):
+                load_query_settings(config_path)
+
+    def test_load_query_settings_rejects_invalid_training_task_evaluation_workers(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 5",
+                        "training_task_evaluation:",
+                        "  workers: 0",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "training_task_evaluation workers must be a positive integer.",
+            ):
                 load_query_settings(config_path)
 
     def test_load_query_settings_rejects_invalid_direct_entity_path_scoring_flag(

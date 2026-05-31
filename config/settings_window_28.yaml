@@ -25,7 +25,7 @@ query:
   pattern_path_storage:
     output_dir: "data/pattern_paths"
   patient_path:
-    window_days: 14
+    window_days: 28
   score_pattern_paths:
     top_k: 150
   candidate_ranking:
@@ -54,7 +54,6 @@ query:
     similar_user_game_counts_weighted_sort_enabled: false
   training_task_evaluation:
     validation_mode: "score"
-    workers: 1
     score_validation_url: "http://172.21.133.142:5008/training_task_score"
     algorithm_request_results_csv: "/home/temp/dataset/20260525_Algorithm_Request_Results/20260525_Algorithm_Request_Results.csv"
     score_validation_timeout: 10
@@ -79,18 +78,3 @@ direct_path_cache:
   sqlite_path: "data/direct_path_cache/direct_paths.sqlite"
   incremental_enabled: true
   overlap_days: 1
-
-user_cache:
-  enabled: false
-  sqlite_path: "data/user_cache/cache_index.sqlite"
-  patient_raw_paths_valid_days: 30
-  direct_raw_paths_valid_days: 60
-  patient_scored_paths_valid_days: 14
-  direct_scored_paths_valid_days: 60
-  topk_candidates_valid_days: 7
-  refresh_candidate_base_date_on_hit: true
-  raw_path_build_workers: 1
-  raw_path_build_max_retries: 2
-  raw_path_build_retry_sleep_seconds: 5
-  cleanup_max_age_days: 30
-  keep_latest_per_source: 2

@@ -8,11 +8,13 @@ import unittest
 from pathlib import Path
 
 from scripts.score_direct_entity_paths import (
+    build_scored_direct_entity_user_cache_context,
     build_scored_direct_entity_summary,
     get_scored_direct_entity_output_paths,
     save_scored_direct_entity_result,
     score_direct_entity_paths,
 )
+from src.similar_user.data_access.user_cache_index import UserCacheIndexStore
 
 
 class ScoreDirectEntityPathsTest(unittest.TestCase):
@@ -211,6 +213,103 @@ class ScoreDirectEntityPathsTest(unittest.TestCase):
             / "20"
             / "20123188.detail.json",
         )
+
+    def test_save_scored_direct_entity_result_registers_source_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "score_pattern_paths:",
+                        "  top_k: 150",
+                        "direct_entity_path:",
+                        "  window_days: 180",
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                        "  direct_scored_paths_valid_days: 60",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = {
+                "source_id": "manual_abc",
+                "source_parameter": "manual_profile",
+                "pattern": "DIRECT_ENTITY_PATHS",
+                "should_score": True,
+                "reason": "manual_profile",
+                "base_date": "2026-05-26",
+                "scoring_input": {
+                    "age": 66,
+                    "education": "本科",
+                    "gender": "男",
+                    "disease_ids": ["D1"],
+                    "symptom_ids": [],
+                    "unknown_ids": [],
+                },
+                "top_k": 150,
+                "cache_context": {
+                    "scored_key": "base_2026-05-26_qf_direct_entity_scoretopk_150",
+                    "score_top_k": 150,
+                    "source_entries": [
+                        {
+                            "pattern": "DISEASE_TASKSET_PATIENT",
+                            "source_id": "D1",
+                            "base_date": "2026-05-25",
+                            "window_days": 180,
+                            "path_key": "base_2026-05-25_window_180_directcfg_abcdef12",
+                        }
+                    ],
+                },
+                "scores": [
+                    {
+                        "pattern": "DISEASE_TASKSET_PATIENT",
+                        "source_id": "D1",
+                        "path_index": 0,
+                        "patient_id": "P1",
+                        "score": {"total_score": 95.0},
+                        "path": {"row": {"p": {"id": "P1"}}},
+                    }
+                ],
+            }
+
+            output_paths = save_scored_direct_entity_result(
+                result,
+                root / "scored_pattern_paths",
+                config_path=config_path,
+            )
+            detail = json.loads(output_paths[0]["detail"].read_text(encoding="utf-8"))
+            user_cache_context = build_scored_direct_entity_user_cache_context(
+                detail,
+                config_path=config_path,
+            )
+            found = UserCacheIndexStore(
+                root / "user_cache" / "cache_index.sqlite"
+            ).find_latest_valid_source_entry(
+                cache_type="scored_direct_entity_paths",
+                source_type="direct_entity_profile",
+                source_id="manual_abc",
+                query_family="direct_entity",
+                window_days=180,
+                config_hash=str(user_cache_context["config_hash"]),
+                request_base_date="2026-05-29",
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.data_path, str(output_paths[0]["detail"]))
+        self.assertEqual(found.source_type, "direct_entity_profile")
+        self.assertEqual(found.valid_days, 60)
+        self.assertEqual(found.payload["pattern"], "DISEASE_TASKSET_PATIENT")
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "ma" / "manual_abc"),
+            str(output_paths[0]["detail"]),
+        )
+        self.assertIn("scored_paths/direct_entity/window_180", str(output_paths[0]["detail"]))
 
     def test_get_scored_direct_entity_output_paths_requires_cache_context(self) -> None:
         with self.assertRaisesRegex(ValueError, "cache_context"):

@@ -222,8 +222,6 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "--limit",
                 "10",
                 "--dry-run",
-                "--skip-path-build",
-                "--skip-path-scoring",
                 "--prompt-output-dir",
                 "data/evaluation_grid/runs/exp_001/prompts",
             ],
@@ -243,6 +241,40 @@ class RunEvaluationGridTest(unittest.TestCase):
         self.assertEqual(
             command[command.index("--prompt-output-dir") + 1],
             "data/custom-prompts",
+        )
+
+    def test_build_evaluation_command_can_use_direct_entity_profiles(self) -> None:
+        command = run_evaluation_grid.build_evaluation_command(
+            base_options={
+                "evaluation_script": "direct_entity_profiles",
+                "profiles": "data/direct_entity_inputs/profiles.jsonl",
+                "task_top_k": 7,
+                "use_llm": False,
+                "limit": 10,
+                "workers": 2,
+            },
+            config_path="data/evaluation_grid/generated_configs/exp_001.yaml",
+            output_dir="data/evaluation_grid/runs/exp_001",
+        )
+
+        self.assertEqual(
+            command[1:],
+            [
+                "scripts/evaluate_direct_entity_profiles.py",
+                "--profiles",
+                "data/direct_entity_inputs/profiles.jsonl",
+                "--config",
+                "data/evaluation_grid/generated_configs/exp_001.yaml",
+                "--task-top-k",
+                "7",
+                "--output-dir",
+                "data/evaluation_grid/runs/exp_001",
+                "--limit",
+                "10",
+                "--workers",
+                "2",
+                "--dry-run",
+            ],
         )
 
     def test_run_evaluation_grid_skips_existing_summary(self) -> None:
@@ -402,6 +434,8 @@ class RunEvaluationGridTest(unittest.TestCase):
                         "micro_f1": 0.2,
                         "task_hit_rate": 0.5,
                         "micro_precision": 0.1,
+                        "batch_elapsed_seconds": 123.4,
+                        "workers": 4,
                         "avg_elapsed_seconds": 10,
                         "summary_path": "summary.json",
                         "overrides": {"query.score_pattern_paths.top_k": 50},
@@ -415,6 +449,8 @@ class RunEvaluationGridTest(unittest.TestCase):
 
         self.assertIn('"name": "exp_001"', json_text)
         self.assertIn("rank,name,rank_metric", csv_text)
+        self.assertIn("batch_elapsed_seconds,workers", csv_text)
+        self.assertIn("123.4,4", csv_text)
         self.assertIn("exp_001", csv_text)
 
     def test_build_promoted_baseline_payload_uses_best_experiment_metrics(self) -> None:

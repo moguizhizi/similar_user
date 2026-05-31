@@ -15,23 +15,31 @@ from config.settings import (
 )
 from scripts.build_similar_user_candidates import (
     build_candidate_cache_context,
+    build_direct_entity_candidate_cache_context,
     build_direct_entity_scored_key,
+    build_direct_entity_topk_candidate_user_cache_context,
+    build_topk_candidate_user_cache_context,
     build_similar_user_candidate_summary,
     build_similar_user_candidates as _build_similar_user_candidates,
+    load_cached_topk_candidate_result,
     load_saved_scored_pattern_result,
     main,
     save_similar_user_candidates_result,
 )
 from scripts.score_pattern_paths import (
+    build_scored_path_user_cache_context,
     build_scored_key,
     save_scored_pattern_result as _save_scored_pattern_result,
 )
 from scripts.run_similar_user_pipeline import (
     EmptyPathResultsError,
+    _build_patient_candidates_with_auto_refresh,
+    _build_patient_raw_paths_with_limit,
     main as pipeline_main,
     run_similar_user_pipeline,
     summarize_pipeline_result,
 )
+from similar_user.data_access.user_cache_index import UserCacheIndexStore
 from similar_user.services.similarity import SimilarUserCandidateService
 from similar_user.utils.pattern_storage import build_path_key, save_pattern_result
 
@@ -1810,6 +1818,453 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         )
         self.assertIn(f"{scored_key}_candcfg_", cache_context["candidate_key"])
 
+    def test_topk_user_cache_context_is_disabled_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            context = build_topk_candidate_user_cache_context(
+                config_path,
+                patient_id="30010096",
+                base_date=None,
+                query_family=None,
+                scored_key="base_2024-01-31_window_14_qf_default_pathcfg_abc_scoretopk_150",
+                candidate_cache_context={
+                    "candidate_key": "base_2024-01-31_window_14_qf_default_pathcfg_abc_scoretopk_150_candcfg_def",
+                    "candidate_config_hash": "def",
+                },
+            )
+
+        self.assertEqual(context, {"enabled": False, "cache_type": "topk_candidates"})
+
+    def test_save_similar_user_candidates_result_registers_topk_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(
+                root,
+                refresh_candidate_base_date_on_hit=False,
+            )
+            output_dir = root / "similar_user_candidates"
+            scored_key = build_scored_key(
+                build_path_key(
+                    config_path,
+                    base_date="2024-01-31",
+                    query_family="training_order_source_window",
+                ),
+                150,
+            )
+            cache_context = build_candidate_cache_context(
+                config_path,
+                scored_key=scored_key,
+                disease_course_window_days=14,
+            )
+            user_cache_context = build_topk_candidate_user_cache_context(
+                config_path,
+                patient_id="30010096",
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+                scored_key=scored_key,
+                candidate_cache_context=cache_context,
+            )
+
+            output_paths = save_similar_user_candidates_result(
+                _candidate_result(
+                    cache_context=cache_context,
+                    user_cache_context=user_cache_context,
+                ),
+                output_dir,
+            )
+            found = UserCacheIndexStore(
+                root / "user_cache" / "cache_index.sqlite"
+            ).find_latest_valid_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30010096",
+                query_family="training_order_source_window",
+                window_days=14,
+                config_hash=str(user_cache_context["config_hash"]),
+                request_base_date="2024-02-03",
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.cached_base_date, "2024-01-31")
+        self.assertEqual(found.data_path, str(output_paths["detail"]))
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "30" / "30010096"),
+            str(output_paths["detail"]),
+        )
+        self.assertIn(
+            "topk_candidates/training_order_source_window/window_14",
+            str(output_paths["detail"]),
+        )
+
+    def test_save_direct_entity_candidates_registers_source_topk_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(
+                root,
+                refresh_candidate_base_date_on_hit=False,
+            )
+            output_dir = root / "similar_user_candidates"
+            scored_result = {
+                "source_id": "201231885555",
+                "source_parameter": "manual_profile",
+                "base_date": "2024-01-31",
+                "scoring_input": {
+                    "age": 66,
+                    "education": "本科",
+                    "gender": "男",
+                    "disease_ids": ["D1"],
+                    "symptom_ids": [],
+                    "unknown_ids": [],
+                },
+                "path_count": 1,
+                "scored_path_count": 1,
+                "cache_context": {
+                    "scored_key": "base_2024-01-31_qf_direct_entity_scoretopk_150",
+                    "score_top_k": 150,
+                    "pattern_source_keys": {
+                        "DISEASE_TASKSET_PATIENT": (
+                            "entitybase_2024-01-30_entitywindow_180_pathcfg_abcdef12"
+                        )
+                    },
+                    "source_entries": [
+                        {
+                            "pattern": "DISEASE_TASKSET_PATIENT",
+                            "source_id": "D1",
+                            "base_date": "2024-01-30",
+                            "window_days": 180,
+                            "path_key": "base_2024-01-30_window_180_directcfg_abcdef12",
+                        }
+                    ],
+                },
+            }
+            cache_context = build_direct_entity_candidate_cache_context(
+                config_path,
+                scored_result=scored_result,
+                disease_course_window_days=14,
+            )
+            user_cache_context = build_direct_entity_topk_candidate_user_cache_context(
+                config_path,
+                source_id="201231885555",
+                base_date="2024-01-31",
+                candidate_cache_context=cache_context,
+            )
+            candidate_result = {
+                "source_id": "201231885555",
+                "source_parameter": "manual_profile",
+                "candidate_top_k": 10,
+                "path_count": 1,
+                "scored_path_count": 1,
+                "candidate_count": 1,
+                "pre_score_candidate_count": 1,
+                "ranking": "direct_entity_best_score_avg_score_match_count",
+                "cache_context": cache_context,
+                "user_cache_context": user_cache_context,
+                "user_cache_hit": False,
+                "candidates": [
+                    {
+                        "patient_id": "P1",
+                        "candidate_score": 95.0,
+                        "match_count": 1,
+                        "best_score": 95.0,
+                        "avg_score": 95.0,
+                    }
+                ],
+            }
+
+            output_paths = save_similar_user_candidates_result(
+                candidate_result,
+                output_dir,
+            )
+            cached = load_cached_topk_candidate_result(
+                user_cache_context,
+                candidates_dir=output_dir,
+                request_base_date="2024-02-03",
+            )
+            found = UserCacheIndexStore(
+                root / "user_cache" / "cache_index.sqlite"
+            ).find_latest_valid_source_entry(
+                cache_type="topk_candidates",
+                source_type="direct_entity_profile",
+                source_id="201231885555",
+                query_family="direct_entity",
+                window_days=14,
+                config_hash=str(user_cache_context["config_hash"]),
+                request_base_date="2024-02-03",
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.data_path, str(output_paths["detail"]))
+        self.assertEqual(found.source_type, "direct_entity_profile")
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "20" / "201231885555"),
+            str(output_paths["detail"]),
+        )
+        self.assertIn("topk_candidates/direct_entity/window_14", str(output_paths["detail"]))
+        self.assertIsNotNone(cached)
+        assert cached is not None
+        self.assertTrue(cached["user_cache_hit"])
+        self.assertEqual(cached["source_id"], "201231885555")
+        self.assertEqual(cached["candidate_count"], 1)
+
+    def test_build_similar_user_candidates_uses_valid_topk_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(
+                root,
+                refresh_candidate_base_date_on_hit=False,
+            )
+            output_dir = root / "similar_user_candidates"
+            scored_key = build_scored_key(
+                build_path_key(
+                    config_path,
+                    base_date="2024-01-31",
+                    query_family="training_order_source_window",
+                ),
+                150,
+            )
+            cache_context = build_candidate_cache_context(
+                config_path,
+                scored_key=scored_key,
+                disease_course_window_days=14,
+            )
+            user_cache_context = build_topk_candidate_user_cache_context(
+                config_path,
+                patient_id="30010096",
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+                scored_key=scored_key,
+                candidate_cache_context=cache_context,
+            )
+            save_similar_user_candidates_result(
+                _candidate_result(
+                    cache_context=cache_context,
+                    user_cache_context=user_cache_context,
+                ),
+                output_dir,
+            )
+
+            with patch(
+                "scripts.build_similar_user_candidates.Neo4jClient.from_config",
+            ) as mock_from_config:
+                result = build_similar_user_candidates(
+                    "30010096",
+                    config_path=config_path,
+                    candidates_dir=output_dir,
+                    base_date="2024-02-03",
+                    query_family="training_order_source_window",
+                )
+
+        mock_from_config.assert_not_called()
+        self.assertTrue(result["user_cache_hit"])
+        self.assertEqual(result["candidate_count"], 1)
+        self.assertEqual(result["candidates"][0]["patient_id"], "20113562")
+
+    def test_topk_user_cache_hit_refreshes_candidate_base_date(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(root)
+            output_dir = root / "similar_user_candidates"
+            scored_key = build_scored_key(
+                build_path_key(
+                    config_path,
+                    base_date="2024-01-31",
+                    query_family="training_order_source_window",
+                ),
+                150,
+            )
+            cache_context = build_candidate_cache_context(
+                config_path,
+                scored_key=scored_key,
+                disease_course_window_days=14,
+            )
+            user_cache_context = build_topk_candidate_user_cache_context(
+                config_path,
+                patient_id="30010096",
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+                scored_key=scored_key,
+                candidate_cache_context=cache_context,
+            )
+            save_similar_user_candidates_result(
+                _candidate_result(
+                    cache_context=cache_context,
+                    user_cache_context=user_cache_context,
+                ),
+                output_dir,
+            )
+
+            with patch(
+                "scripts.build_similar_user_candidates.Neo4jClient.from_config",
+            ) as mock_from_config, patch(
+                "scripts.build_similar_user_candidates.UserService",
+            ) as mock_user_service_cls:
+                mock_client_context = Mock()
+                mock_client_context.__enter__ = Mock(return_value=Mock())
+                mock_client_context.__exit__ = Mock(return_value=None)
+                mock_from_config.return_value = mock_client_context
+                mock_user_service = Mock()
+                mock_user_service.find_patient_total_score_timepoint_matches.return_value = [
+                    {
+                        "matched": {
+                            "patient_id": "20113562",
+                            "recommended_date": "2024-02-01",
+                        }
+                    }
+                ]
+                mock_user_service_cls.return_value = mock_user_service
+                result = build_similar_user_candidates(
+                    "30010096",
+                    config_path=config_path,
+                    candidates_dir=output_dir,
+                    base_date="2024-02-03",
+                    query_family="training_order_source_window",
+                )
+
+        self.assertTrue(result["user_cache_hit"])
+        disease_course = result["candidates"][0]["score_details"][
+            "disease_course_secondary_ability"
+        ]
+        self.assertEqual(disease_course["candidate_base_date"], "2024-02-01")
+        self.assertEqual(
+            result["candidate_base_date_refresh"]["request_base_date"],
+            "2024-02-03",
+        )
+        self.assertEqual(result["candidate_base_date_refresh"]["refreshed_count"], 1)
+        mock_user_service.find_patient_total_score_timepoint_matches.assert_called_once_with(
+            source_patient_id="30010096",
+            source_training_date="2024-02-03",
+            comparison_patient_ids=["20113562"],
+        )
+
+    def test_build_similar_user_candidates_uses_valid_scored_path_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(root)
+            scored_paths_dir = root / "scored_pattern_paths"
+            old_path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+            )
+            old_scored_key = build_scored_key(old_path_key, 150)
+            scored_cache_context = {
+                "cache_type": "scored_pattern_paths",
+                "path_key": old_path_key,
+                "scored_key": old_scored_key,
+                "score_top_k": 150,
+            }
+            scored_output_paths = save_scored_pattern_result(
+                {
+                    "source_id": "30010096",
+                    "source_parameter": "patient_id",
+                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                    "path_count": 1,
+                    "scored_path_count": 1,
+                    "retrieval_context": {
+                        "base_date": "2024-01-31",
+                        "path_window": {
+                            "start_date": "2024-01-17",
+                            "end_date": "2024-01-31",
+                        },
+                        "score_end_date": "2024-01-31",
+                    },
+                    "scores": [
+                        {
+                            "path_index": 0,
+                            "score": {"total_score": 95.0},
+                            "path": {
+                                "row": {
+                                    "p": {"id": "30010096"},
+                                    "s1": {
+                                        "id": "30010096_20240131",
+                                        "执行年龄": "66",
+                                        "执行学历": "本科",
+                                    },
+                                    "i1": {
+                                        "id": "30010096_20240131_348",
+                                        "任务类型": "专属",
+                                        "结果": "完成",
+                                    },
+                                    "g": {"id": "348", "name": "真假句辨别"},
+                                    "i2": {
+                                        "id": "20113562_20240130_348",
+                                        "任务类型": "专属",
+                                        "结果": "完成",
+                                        "活跃": "是",
+                                    },
+                                    "s2": {
+                                        "id": "20113562_20240130",
+                                        "执行年龄": "65",
+                                        "执行学历": "本科",
+                                    },
+                                    "p2": {"id": "20113562"},
+                                }
+                            },
+                        }
+                    ],
+                    "cache_context": scored_cache_context,
+                    "user_cache_context": build_scored_path_user_cache_context(
+                        config_path,
+                        source_id="30010096",
+                        base_date="2024-01-31",
+                        query_family="training_order_source_window",
+                        scored_cache_context=scored_cache_context,
+                    ),
+                },
+                scored_paths_dir,
+            )
+
+            with patch(
+                "scripts.build_similar_user_candidates.Neo4jClient.from_config",
+            ) as mock_from_config, patch(
+                "scripts.build_similar_user_candidates.UserService",
+            ) as mock_user_service_cls:
+                mock_client_context = Mock()
+                mock_client_context.__enter__ = Mock(return_value=Mock())
+                mock_client_context.__exit__ = Mock(return_value=None)
+                mock_from_config.return_value = mock_client_context
+                mock_user_service = Mock()
+                mock_user_service.get_patient_game_norm_score_series_comparison_by_end_date.return_value = []
+                mock_user_service.get_patient_distinct_games_by_end_date.return_value = []
+                mock_user_service.get_patient_disease_names_by_end_date.return_value = []
+                mock_user_service.get_patient_symptom_names_by_end_date.return_value = []
+                mock_user_service.get_patient_unknown_names_by_end_date.return_value = []
+                mock_user_service_cls.return_value = mock_user_service
+                result = build_similar_user_candidates(
+                    "30010096",
+                    config_path=config_path,
+                    scored_paths_dir=scored_paths_dir,
+                    base_date="2024-02-03",
+                    query_family="training_order_source_window",
+                )
+
+        self.assertFalse(result["user_cache_hit"])
+        self.assertEqual(result["candidate_count"], 1)
+        self.assertEqual(result["candidates"][0]["patient_id"], "20113562")
+        self.assertEqual(result["cache_context"]["scored_key"], old_scored_key)
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "30" / "30010096"),
+            str(scored_output_paths["detail"]),
+        )
+        self.assertIn(
+            "scored_paths/training_order_source_window/window_14",
+            str(scored_output_paths["detail"]),
+        )
+
     @patch("scripts.build_similar_user_candidates.LOGGER")
     @patch("scripts.build_similar_user_candidates.parse_args")
     @patch("scripts.build_similar_user_candidates.save_similar_user_candidates_result")
@@ -1853,6 +2308,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "30010096",
             config_path="config/settings.yaml",
             scored_paths_dir="data/scored_pattern_paths",
+            candidates_dir="data/similar_user_candidates",
         )
         mock_save_candidates.assert_called_once_with(
             expected,
@@ -1917,23 +2373,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             query_family="date_window",
         )
 
-        self.assertEqual(
-            result["path_generation"],
-            [
-                {
-                    "patient_id": "30010096",
-                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                    "path_window": {
-                        "base_date": "2022-01-17",
-                        "start_date": "2022-01-03",
-                        "end_date": "2022-01-17",
-                        "window_days": 14,
-                        "range_semantics": "[start_date, end_date)",
-                    },
-                    "path_count": 1,
-                },
-            ],
-        )
+        self.assertIsNone(result["path_generation"])
         self.assertEqual(result["candidate_result"], candidate_result)
         self.assertEqual(
             result["candidate_output_paths"],
@@ -1945,24 +2385,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertFalse(result["skip_path_build"])
         self.assertFalse(result["skip_path_scoring"])
         self.assertEqual(result["elapsed_seconds"], 2.345)
-        mock_run_path_flows.assert_called_once_with(
-            "30010096",
-            config_path="config/settings.yaml",
-            base_date="2022-01-17",
-            query_family="date_window",
-        )
+        mock_run_path_flows.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
             base_date="2022-01-17",
             query_family="date_window",
         )
-        mock_score_and_save.assert_called_once_with(
-            "30010096",
-            config_path="config/settings.yaml",
-            base_date="2022-01-17",
-            query_family="date_window",
-        )
+        mock_score_and_save.assert_not_called()
         mock_save_candidates.assert_called_once_with(candidate_result)
 
     @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
@@ -1992,6 +2422,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 },
             },
         ]
+        mock_build_candidates.side_effect = FileNotFoundError("missing scored paths")
+        mock_score_and_save.side_effect = FileNotFoundError("missing raw paths")
 
         with self.assertRaisesRegex(
             EmptyPathResultsError,
@@ -2003,8 +2435,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 config_path="config/settings.yaml",
             )
 
-        mock_build_candidates.assert_not_called()
-        mock_score_and_save.assert_not_called()
+        mock_build_candidates.assert_called_once()
+        mock_score_and_save.assert_called_once()
         mock_save_candidates.assert_not_called()
 
     @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
@@ -2054,12 +2486,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertTrue(result["skip_path_build"])
         self.assertFalse(result["skip_path_scoring"])
         mock_run_path_flows.assert_not_called()
-        mock_score_and_save.assert_called_once_with(
-            "30010096",
-            config_path="config/settings.yaml",
-            base_date="2022-01-17",
-            query_family="training_order_source_window",
-        )
+        mock_score_and_save.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
@@ -2105,6 +2532,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         self.assertTrue(result["skip_path_scoring"])
         mock_score_and_save.assert_not_called()
+        mock_run_path_flows.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
@@ -2112,6 +2540,81 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             query_family="training_order_source_window",
         )
         mock_save_candidates.assert_called_once_with(candidate_result)
+
+    @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
+    @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
+    def test_patient_candidate_auto_refreshes_missing_scored_paths(
+        self,
+        mock_build_candidates: Mock,
+        mock_score_and_save: Mock,
+    ) -> None:
+        refreshed_result = {
+            "patient_id": "30010096",
+            "candidate_count": 1,
+            "candidates": [{"patient_id": "20113562"}],
+        }
+        mock_build_candidates.side_effect = [
+            FileNotFoundError("missing scored paths"),
+            refreshed_result,
+        ]
+
+        result = _build_patient_candidates_with_auto_refresh(
+            "30010096",
+            config_path="config/settings.yaml",
+            base_date="2022-01-17",
+            query_family="training_order_source_window",
+        )
+
+        self.assertEqual(result, (refreshed_result, None))
+        mock_score_and_save.assert_called_once_with(
+            "30010096",
+            config_path="config/settings.yaml",
+            base_date="2022-01-17",
+            query_family="training_order_source_window",
+        )
+        self.assertEqual(mock_build_candidates.call_count, 2)
+
+    @patch("scripts.run_similar_user_pipeline.time.sleep")
+    @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
+    def test_raw_path_build_limiter_retries_transient_failures(
+        self,
+        mock_run_path_flows: Mock,
+        mock_sleep: Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "user_cache:",
+                        "  raw_path_build_workers: 1",
+                        "  raw_path_build_max_retries: 1",
+                        "  raw_path_build_retry_sleep_seconds: 0",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            mock_run_path_flows.side_effect = [
+                RuntimeError("neo4j busy"),
+                [
+                    {
+                        "patient_id": "30010096",
+                        "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                        "retrieval_context": {"paths": [{"row": {}}]},
+                    }
+                ],
+            ]
+
+            result = _build_patient_raw_paths_with_limit(
+                "30010096",
+                config_path=config_path,
+                base_date="2022-01-17",
+                query_family="training_order_source_window",
+            )
+
+        self.assertEqual(result[0]["path_count"], 1)
+        self.assertEqual(mock_run_path_flows.call_count, 2)
+        mock_sleep.assert_called_once_with(0.0)
 
     @patch("scripts.run_similar_user_pipeline.LOGGER")
     @patch("scripts.run_similar_user_pipeline.parse_args")
@@ -2377,6 +2880,85 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             ],
         )
         self.assertNotIn("candidate_ids", summary["candidate_summary"])
+
+
+def _write_user_cache_config(
+    root: Path,
+    *,
+    refresh_candidate_base_date_on_hit: bool = True,
+) -> Path:
+    config_path = root / "settings.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "graph_path_limit:",
+                "  bands:",
+                "    - per_g: 1",
+                "patient_path:",
+                "  window_days: 14",
+                "score_pattern_paths:",
+                "  top_k: 150",
+                "candidate_ranking:",
+                "  patterns:",
+                "    - patient_game_patient",
+                "  candidate_top_k: 10",
+                "  total_score_match_top_k: 3",
+                "  disease_course_window_days: 14",
+                "  scoring:",
+                "    common_game_score_similarity: false",
+                "    game_similarity_with_diversity_score: false",
+                "    disease_course_secondary_ability: true",
+                "    set_same:",
+                "      disease: false",
+                "      symptom: false",
+                "      unknown: false",
+                "user_cache:",
+                "  enabled: true",
+                f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                "  topk_candidates_valid_days: 7",
+                "  refresh_candidate_base_date_on_hit: "
+                f"{str(refresh_candidate_base_date_on_hit).lower()}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return config_path
+
+
+def _candidate_result(
+    *,
+    cache_context: dict[str, object],
+    user_cache_context: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "source_id": "30010096",
+        "source_parameter": "patient_id",
+        "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+        "patterns": ["PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"],
+        "candidate_top_k": 10,
+        "path_count": 3,
+        "scored_path_count": 3,
+        "retrieval_context": {"score_end_date": "2024-01-31"},
+        "cache_context": cache_context,
+        "user_cache_context": user_cache_context,
+        "user_cache_hit": False,
+        "candidate_count": 1,
+        "pre_score_candidate_count": 1,
+        "disease_course_available_count": 1,
+        "disease_course_missing_count": 0,
+        "candidates": [
+            {
+                "patient_id": "20113562",
+                "candidate_score": 2.5,
+                "score_details": {
+                    "disease_course_secondary_ability": {
+                        "score": 2.5,
+                        "candidate_base_date": "2024-01-30",
+                    }
+                },
+            }
+        ],
+    }
 
 
 if __name__ == "__main__":

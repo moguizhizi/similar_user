@@ -6,13 +6,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from src.similar_user.data_access.user_cache_index import UserCacheIndexStore
 from src.similar_user.utils.pattern_storage import (
     PatternResultStore,
     StoredPatternResult,
+    build_direct_path_cache_context,
     build_path_key,
+    build_raw_path_user_cache_config_hash,
     get_pattern_result_output_dir,
     get_pattern_result_output_path,
     save_pattern_result,
+    save_direct_pattern_result,
 )
 
 
@@ -133,6 +137,50 @@ class PatternStorageTest(unittest.TestCase):
             / "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"
             / "30"
             / "30010096.json",
+        )
+
+    def test_get_pattern_result_output_path_resolves_alias_in_user_cache_layout(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+            )
+
+            alias_path = get_pattern_result_output_path(
+                config_path,
+                "patient_game_patient",
+                "30010096",
+                path_key=path_key,
+            )
+            resolved_path = get_pattern_result_output_path(
+                config_path,
+                "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "30010096",
+                path_key=path_key,
+            )
+
+        self.assertEqual(alias_path, resolved_path)
+        self.assertEqual(
+            alias_path.name,
+            "patient_taskset_task_game_task_taskset_patient.json",
         )
 
     def test_get_pattern_result_output_path_requires_path_key(self) -> None:
@@ -430,6 +478,137 @@ class PatternStorageTest(unittest.TestCase):
             loaded_result.retrieval_context["cache_context"]["path_key"],
             path_key,
         )
+
+    def test_save_pattern_result_registers_raw_path_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "settings.yaml"
+            output_dir = root / "pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "patient_path:",
+                        "  window_days: 14",
+                        "pattern_path_storage:",
+                        f'  output_dir: "{output_dir}"',
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                        "  patient_raw_paths_valid_days: 30",
+                        "  direct_raw_paths_valid_days: 60",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = {
+                "patient_id": "30010096",
+                "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                "retrieval_context": _retrieval_context(),
+            }
+
+            output_path = save_pattern_result(result, config_path)
+            path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+            )
+            found = UserCacheIndexStore(
+                root / "user_cache" / "cache_index.sqlite"
+            ).find_latest_valid_source_entry(
+                cache_type="raw_paths",
+                source_type="patient",
+                source_id="30010096",
+                query_family="training_order_source_window",
+                window_days=14,
+                config_hash=build_raw_path_user_cache_config_hash(path_key),
+                request_base_date="2024-02-03",
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.cached_base_date, "2024-01-31")
+        self.assertEqual(found.valid_days, 30)
+        self.assertEqual(found.data_path, str(output_path))
+        self.assertEqual(found.payload["path_key"], path_key)
+        self.assertIn(
+            str(root / "user_cache" / "files" / "patient" / "30" / "30010096"),
+            str(output_path),
+        )
+        self.assertIn("raw_paths/training_order_source_window/window_14", str(output_path))
+
+    def test_save_direct_pattern_result_registers_source_raw_path_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "settings.yaml"
+            output_dir = root / "pattern_paths"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "pattern_path_storage:",
+                        f'  output_dir: "{output_dir}"',
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                        "  patient_raw_paths_valid_days: 30",
+                        "  direct_raw_paths_valid_days: 60",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            path_context = build_direct_path_cache_context(
+                base_date="2024-01-31",
+                window_days=90,
+                direct_path_limit=50,
+            )
+            result = {
+                "source_id": "AU_DIS_0029",
+                "source_parameter": "disease_id",
+                "disease_id": "AU_DIS_0029",
+                "pattern": "DISEASE_TASKSET_PATIENT",
+                "retrieval_context": _retrieval_context(),
+            }
+
+            output_path = save_direct_pattern_result(
+                result,
+                config_path,
+                path_context=path_context,
+            )
+            found = UserCacheIndexStore(
+                root / "user_cache" / "cache_index.sqlite"
+            ).find_latest_valid_source_entry(
+                cache_type="raw_paths",
+                source_type="disease",
+                source_id="AU_DIS_0029",
+                query_family="direct_entity",
+                window_days=90,
+                config_hash=build_raw_path_user_cache_config_hash(
+                    str(path_context["path_key"])
+                ),
+                request_base_date="2024-02-03",
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.valid_days, 60)
+        self.assertEqual(found.data_path, str(output_path))
+        self.assertEqual(found.payload["path_key"], path_context["path_key"])
+        self.assertIn(
+            str(
+                root
+                / "user_cache"
+                / "files"
+                / "direct_entity_profile"
+                / "disease_taskset_patient__au_dis_0029"
+            ),
+            str(output_path),
+        )
+        self.assertIn("raw_paths/direct_entity/window_90", str(output_path))
 
 
 if __name__ == "__main__":

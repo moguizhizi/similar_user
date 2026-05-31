@@ -68,6 +68,18 @@ from scripts.score_direct_entity_paths import (  # noqa: E402
     save_scored_direct_entity_result,
     score_direct_entity_paths,
 )
+from scripts.build_similar_user_candidates import (  # noqa: E402
+    DEFAULT_CANDIDATES_DIR,
+    build_direct_entity_candidate_cache_context,
+    build_direct_entity_topk_candidate_user_cache_context,
+    load_cached_topk_candidate_result,
+    save_similar_user_candidates_result,
+)
+from scripts.build_direct_entity_paths import build_direct_entity_paths  # noqa: E402
+from similar_user.data_access.algorithm_request_results import (  # noqa: E402
+    normalize_algorithm_request_education,
+    normalize_algorithm_request_gender,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -125,6 +137,11 @@ def parse_args() -> argparse.Namespace:
         help="Directory used to store scored direct entity path files.",
     )
     parser.add_argument(
+        "--candidates-dir",
+        default=str(DEFAULT_CANDIDATES_DIR),
+        help="Directory used to store direct entity similar-user candidate files.",
+    )
+    parser.add_argument(
         "--output",
         help="Optional JSON output path.",
     )
@@ -138,6 +155,11 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Skip the LLM call and return deterministic candidate-task predictions.",
+    )
+    parser.add_argument(
+        "--task-top-k",
+        type=int,
+        help="Override query.training_task_prediction.task_top_k.",
     )
     parser.add_argument(
         "--include-prompt",
@@ -160,11 +182,15 @@ def predict_training_tasks_from_direct_entity(
     unknown_ids: list[str] | None = None,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    candidates_dir: str | Path = DEFAULT_CANDIDATES_DIR,
     use_llm: bool = True,
     include_prompt: bool = False,
+    task_top_k: int | None = None,
 ) -> dict[str, Any]:
     """Run the direct-entity-only task prediction flow."""
     normalized_patient_id = _normalize_required_text(patient_id, "patient_id")
+    normalized_gender = normalize_direct_entity_gender(gender)
+    normalized_education = normalize_direct_entity_education(education)
     resolved_config_path = Path(config_path)
     query_settings = load_query_settings(resolved_config_path)
     resolved_disease_ids = _dedupe_texts(disease_ids or [])
@@ -194,7 +220,7 @@ def predict_training_tasks_from_direct_entity(
         resolved_unknown_ids = _dedupe_texts(
             resolved_unknown_ids + _ids_by_type(entity_name_resolution, "unknown")
         )
-    task_top_k = query_settings.training_task_prediction.task_top_k
+    resolved_task_top_k = task_top_k or query_settings.training_task_prediction.task_top_k
     candidate_top_k = query_settings.candidate_ranking.candidate_top_k
     candidate_window_days = query_settings.candidate_ranking.disease_course_window_days
     if candidate_window_days is None:
@@ -210,7 +236,7 @@ def predict_training_tasks_from_direct_entity(
         len(resolved_unknown_ids),
         query_settings.score_pattern_paths.top_k,
         candidate_top_k,
-        task_top_k,
+        resolved_task_top_k,
     )
 
     has_direct_entities = bool(
@@ -241,18 +267,17 @@ def predict_training_tasks_from_direct_entity(
     }
 
     if has_direct_entities:
-        direct_score_result = score_direct_entity_paths(
+        direct_score_result = _score_direct_entity_paths_with_auto_refresh(
             config_path=resolved_config_path,
             patient_id=normalized_patient_id,
             base_date=base_date,
             age=age,
-            education=education,
-            gender=gender,
+            education=normalized_education,
+            gender=normalized_gender,
             disease_ids=resolved_disease_ids,
             symptom_ids=resolved_symptom_ids,
             unknown_ids=resolved_unknown_ids,
             top_k=query_settings.score_pattern_paths.top_k,
-            force_manual_input=True,
         )
         LOGGER.info(
             "Scored direct entity paths: patient_id=%s, source_count=%s, path_count=%s, scored_path_count=%s, missing_source_count=%s",
@@ -272,20 +297,53 @@ def predict_training_tasks_from_direct_entity(
         direct_score_output_paths = save_scored_direct_entity_result(
             direct_score_result,
             scored_paths_dir,
+            config_path=resolved_config_path,
         )
-        candidate_result = (
-            SimilarUserCandidateService()
-            .aggregate_candidates_from_direct_entity_scored_result(
-                direct_score_result,
-                candidate_top_k=candidate_top_k,
+        candidate_cache_context = build_direct_entity_candidate_cache_context(
+            resolved_config_path,
+            scored_result=direct_score_result,
+            disease_course_window_days=candidate_window_days,
+        )
+        candidate_user_cache_context = build_direct_entity_topk_candidate_user_cache_context(
+            resolved_config_path,
+            source_id=str(direct_score_result.get("source_id") or normalized_patient_id),
+            base_date=base_date,
+            candidate_cache_context=candidate_cache_context,
+        )
+        cached_candidate_result = load_cached_topk_candidate_result(
+            candidate_user_cache_context,
+            candidates_dir=candidates_dir,
+            request_base_date=base_date,
+        )
+        if cached_candidate_result is not None:
+            candidate_result = cached_candidate_result
+            LOGGER.info(
+                "Direct entity topK candidates cache hit: patient_id=%s, candidate_count=%s, data_path=%s",
+                normalized_patient_id,
+                candidate_result.get("candidate_count"),
+                candidate_result.get("user_cache_data_path"),
             )
-        )
-        LOGGER.info(
-            "Aggregated direct entity candidates: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s",
-            normalized_patient_id,
-            candidate_result.get("pre_score_candidate_count"),
-            candidate_result.get("candidate_count"),
-        )
+        else:
+            candidate_result = (
+                SimilarUserCandidateService()
+                .aggregate_candidates_from_direct_entity_scored_result(
+                    direct_score_result,
+                    candidate_top_k=candidate_top_k,
+                )
+            )
+            candidate_result["cache_context"] = candidate_cache_context
+            candidate_result["user_cache_context"] = candidate_user_cache_context
+            candidate_result["user_cache_hit"] = False
+            save_similar_user_candidates_result(
+                candidate_result,
+                output_dir=candidates_dir,
+            )
+            LOGGER.info(
+                "Aggregated direct entity candidates: patient_id=%s, pre_score_candidate_count=%s, candidate_count=%s",
+                normalized_patient_id,
+                candidate_result.get("pre_score_candidate_count"),
+                candidate_result.get("candidate_count"),
+            )
     else:
         LOGGER.info(
             "Skipping direct entity path scoring because no disease/symptom/unknown IDs were supplied: patient_id=%s",
@@ -311,9 +369,9 @@ def predict_training_tasks_from_direct_entity(
                 patient_id=normalized_patient_id,
                 base_date=base_date,
                 age=age,
-                education=education,
-                gender=gender,
-                task_top_k=task_top_k,
+                education=normalized_education,
+                gender=normalized_gender,
+                task_top_k=resolved_task_top_k,
                 reason=fallback_reason,
             )
             LOGGER.info(
@@ -367,8 +425,8 @@ def predict_training_tasks_from_direct_entity(
             window_days=candidate_window_days,
             target_profile={
                 "age": age,
-                "education": education,
-                "gender": gender,
+                "education": normalized_education,
+                "gender": normalized_gender,
             },
             target_entities={
                 "disease_ids": resolved_disease_ids,
@@ -377,7 +435,7 @@ def predict_training_tasks_from_direct_entity(
                 "disease_names": resolved_disease_names,
                 "entity_name_resolution": entity_name_resolution,
             },
-            task_top_k=task_top_k,
+            task_top_k=resolved_task_top_k,
             use_llm=use_llm,
             include_prompt=include_prompt,
         )
@@ -438,6 +496,123 @@ def summarize_prediction_result(
             "predicted_training_tasks": tasks,
         }
     return result
+
+
+def normalize_direct_entity_gender(value: object) -> str:
+    """Normalize direct-entity CLI gender input into KG-facing text."""
+    return normalize_algorithm_request_gender(value)
+
+
+def normalize_direct_entity_education(value: object) -> str:
+    """Normalize direct-entity CLI education input into KG-facing text."""
+    return normalize_algorithm_request_education(value)
+
+
+def _score_direct_entity_paths_with_auto_refresh(
+    *,
+    config_path: str | Path,
+    patient_id: str,
+    base_date: str,
+    age: int | str,
+    education: str,
+    gender: str,
+    disease_ids: list[str],
+    symptom_ids: list[str],
+    unknown_ids: list[str],
+    top_k: int | None,
+) -> dict[str, Any]:
+    try:
+        result = score_direct_entity_paths(
+            config_path=config_path,
+            patient_id=patient_id,
+            base_date=base_date,
+            age=age,
+            education=education,
+            gender=gender,
+            disease_ids=disease_ids,
+            symptom_ids=symptom_ids,
+            unknown_ids=unknown_ids,
+            top_k=top_k,
+            force_manual_input=True,
+        )
+    except FileNotFoundError:
+        LOGGER.info(
+            "Direct raw path index missing; rebuilding direct entity paths before scoring: patient_id=%s, base_date=%s",
+            patient_id,
+            base_date,
+        )
+        build_direct_entity_paths(
+            config_path=config_path,
+            disease_ids=disease_ids,
+            symptom_ids=symptom_ids,
+            unknown_ids=unknown_ids,
+        )
+        return score_direct_entity_paths(
+            config_path=config_path,
+            patient_id=patient_id,
+            base_date=base_date,
+            age=age,
+            education=education,
+            gender=gender,
+            disease_ids=disease_ids,
+            symptom_ids=symptom_ids,
+            unknown_ids=unknown_ids,
+            top_k=top_k,
+            force_manual_input=True,
+        )
+
+    missing_sources = result.get("missing_sources")
+    if isinstance(missing_sources, list) and missing_sources:
+        refresh_ids = _direct_refresh_ids_from_missing_sources(missing_sources)
+        LOGGER.info(
+            "Direct raw paths missing or expired; rebuilding before scoring: patient_id=%s, missing_sources=%s",
+            patient_id,
+            missing_sources,
+        )
+        build_direct_entity_paths(
+            config_path=config_path,
+            disease_ids=refresh_ids["disease_ids"],
+            symptom_ids=refresh_ids["symptom_ids"],
+            unknown_ids=refresh_ids["unknown_ids"],
+        )
+        result = score_direct_entity_paths(
+            config_path=config_path,
+            patient_id=patient_id,
+            base_date=base_date,
+            age=age,
+            education=education,
+            gender=gender,
+            disease_ids=disease_ids,
+            symptom_ids=symptom_ids,
+            unknown_ids=unknown_ids,
+            top_k=top_k,
+            force_manual_input=True,
+        )
+    return result
+
+
+def _direct_refresh_ids_from_missing_sources(
+    missing_sources: list[object],
+) -> dict[str, list[str]]:
+    refresh_ids = {
+        "disease_ids": [],
+        "symptom_ids": [],
+        "unknown_ids": [],
+    }
+    for item in missing_sources:
+        if not isinstance(item, dict):
+            continue
+        source_id = item.get("source_id")
+        pattern = item.get("pattern")
+        if not isinstance(source_id, str) or not source_id.strip():
+            continue
+        if pattern == "DISEASE_TASKSET_PATIENT":
+            refresh_ids["disease_ids"].append(source_id.strip())
+        elif pattern == "SYMPTOM_TASKSET_PATIENT":
+            refresh_ids["symptom_ids"].append(source_id.strip())
+        elif pattern == "UNKNOWN_TASKSET_PATIENT":
+            refresh_ids["unknown_ids"].append(source_id.strip())
+    return {key: _dedupe_texts(value) for key, value in refresh_ids.items()}
 
 
 def resolve_direct_entity_names(
@@ -532,8 +707,10 @@ def main() -> int:
             unknown_ids=_flatten(args.unknown_id),
             config_path=args.config,
             scored_paths_dir=args.scored_paths_dir,
+            candidates_dir=args.candidates_dir,
             use_llm=not args.dry_run,
             include_prompt=args.include_prompt,
+            task_top_k=args.task_top_k,
         )
         output = summarize_prediction_result(result, output_level=args.output_level)
         if args.output:
