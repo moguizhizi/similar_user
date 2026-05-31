@@ -37,6 +37,7 @@ DEFAULT_OUTPUT_ROOT = Path("data/evaluation_grid")
 DEFAULT_GENERATED_CONFIG_DIR = DEFAULT_OUTPUT_ROOT / "generated_configs"
 DEFAULT_TASK_TOP_K = 7
 DEFAULT_RANK_BY = "micro_recall"
+DEFAULT_EVALUATION_SCRIPT = "predict_training_tasks"
 LEADERBOARD_FIELDS = (
     "rank",
     "name",
@@ -61,6 +62,8 @@ LEADERBOARD_FIELDS = (
     "similar_user_candidate_task_coverage",
     "candidate_task_supported_rate",
     "avg_similar_user_candidate_task_intersection_count",
+    "batch_elapsed_seconds",
+    "workers",
     "avg_elapsed_seconds",
     "summary_path",
     "overrides",
@@ -319,6 +322,34 @@ def build_evaluation_command(
     config_path: str | Path,
     output_dir: str | Path,
 ) -> list[str]:
+    """Build the evaluation command for one run."""
+    evaluation_script = str(
+        base_options.get("evaluation_script") or DEFAULT_EVALUATION_SCRIPT
+    ).strip()
+    if evaluation_script == "direct_entity_profiles":
+        return build_direct_entity_profiles_evaluation_command(
+            base_options=base_options,
+            config_path=config_path,
+            output_dir=output_dir,
+        )
+    if evaluation_script not in {
+        DEFAULT_EVALUATION_SCRIPT,
+        "evaluate_predict_training_tasks",
+    }:
+        raise ValueError(f"Unsupported evaluation_script: {evaluation_script}")
+    return build_patient_evaluation_command(
+        base_options=base_options,
+        config_path=config_path,
+        output_dir=output_dir,
+    )
+
+
+def build_patient_evaluation_command(
+    *,
+    base_options: dict[str, Any],
+    config_path: str | Path,
+    output_dir: str | Path,
+) -> list[str]:
     """Build the evaluate_predict_training_tasks.py command for one run."""
     base_date = base_options.get("base_date")
     if not isinstance(base_date, str) or not base_date.strip():
@@ -353,14 +384,59 @@ def build_evaluation_command(
 
     if not use_llm:
         command.append("--dry-run")
-    if bool(base_options.get("skip_path_build", False)):
-        command.append("--skip-path-build")
-    if bool(base_options.get("skip_path_scoring", False)):
-        command.append("--skip-path-scoring")
     if bool(base_options.get("no_save_prompt", False)):
         command.append("--no-save-prompt")
     elif base_options.get("prompt_output_dir") is None:
         command.extend(["--prompt-output-dir", str(Path(output_dir) / "prompts")])
+    return command
+
+
+def build_direct_entity_profiles_evaluation_command(
+    *,
+    base_options: dict[str, Any],
+    config_path: str | Path,
+    output_dir: str | Path,
+) -> list[str]:
+    """Build the evaluate_direct_entity_profiles.py command for one run."""
+    profiles = base_options.get("profiles")
+    if not isinstance(profiles, str) or not profiles.strip():
+        raise ValueError(
+            "base.profiles must be a non-empty string when "
+            "evaluation_script is direct_entity_profiles."
+        )
+    task_top_k = base_options.get("task_top_k", DEFAULT_TASK_TOP_K)
+    use_llm = bool(base_options.get("use_llm", True))
+    command = [
+        sys.executable,
+        "scripts/evaluate_direct_entity_profiles.py",
+        "--profiles",
+        profiles,
+        "--config",
+        str(config_path),
+        "--task-top-k",
+        str(task_top_k),
+        "--output-dir",
+        str(output_dir),
+    ]
+
+    optional_args = {
+        "scored_paths_dir": "--scored-paths-dir",
+        "limit": "--limit",
+        "patient_id": "--patient-id",
+        "workers": "--workers",
+    }
+    for option_name, cli_flag in optional_args.items():
+        option_value = base_options.get(option_name)
+        if option_value is None:
+            continue
+        if option_name == "patient_id" and isinstance(option_value, list):
+            for patient_id in option_value:
+                command.extend([cli_flag, str(patient_id)])
+            continue
+        command.extend([cli_flag, str(option_value)])
+
+    if not use_llm:
+        command.append("--dry-run")
     return command
 
 

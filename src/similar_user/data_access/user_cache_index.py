@@ -213,6 +213,7 @@ class UserCacheIndexStore:
         """Return the newest unexpired entry matching source and config."""
         if not self.exists:
             return None
+        self.initialize()
         normalized_cache_type = _normalize_cache_type(cache_type)
         normalized_source_type = _normalize_required_text(source_type, "source_type")
         normalized_source_id = _normalize_required_text(source_id, "source_id")

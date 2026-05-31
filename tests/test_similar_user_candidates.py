@@ -34,6 +34,7 @@ from scripts.score_pattern_paths import (
 from scripts.run_similar_user_pipeline import (
     EmptyPathResultsError,
     _build_patient_candidates_with_auto_refresh,
+    _build_patient_raw_paths_with_limit,
     main as pipeline_main,
     run_similar_user_pipeline,
     summarize_pipeline_result,
@@ -2372,23 +2373,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             query_family="date_window",
         )
 
-        self.assertEqual(
-            result["path_generation"],
-            [
-                {
-                    "patient_id": "30010096",
-                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
-                    "path_window": {
-                        "base_date": "2022-01-17",
-                        "start_date": "2022-01-03",
-                        "end_date": "2022-01-17",
-                        "window_days": 14,
-                        "range_semantics": "[start_date, end_date)",
-                    },
-                    "path_count": 1,
-                },
-            ],
-        )
+        self.assertIsNone(result["path_generation"])
         self.assertEqual(result["candidate_result"], candidate_result)
         self.assertEqual(
             result["candidate_output_paths"],
@@ -2400,24 +2385,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertFalse(result["skip_path_build"])
         self.assertFalse(result["skip_path_scoring"])
         self.assertEqual(result["elapsed_seconds"], 2.345)
-        mock_run_path_flows.assert_called_once_with(
-            "30010096",
-            config_path="config/settings.yaml",
-            base_date="2022-01-17",
-            query_family="date_window",
-        )
+        mock_run_path_flows.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
             base_date="2022-01-17",
             query_family="date_window",
         )
-        mock_score_and_save.assert_called_once_with(
-            "30010096",
-            config_path="config/settings.yaml",
-            base_date="2022-01-17",
-            query_family="date_window",
-        )
+        mock_score_and_save.assert_not_called()
         mock_save_candidates.assert_called_once_with(candidate_result)
 
     @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
@@ -2447,6 +2422,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 },
             },
         ]
+        mock_build_candidates.side_effect = FileNotFoundError("missing scored paths")
+        mock_score_and_save.side_effect = FileNotFoundError("missing raw paths")
 
         with self.assertRaisesRegex(
             EmptyPathResultsError,
@@ -2458,8 +2435,8 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 config_path="config/settings.yaml",
             )
 
-        mock_build_candidates.assert_not_called()
-        mock_score_and_save.assert_not_called()
+        mock_build_candidates.assert_called_once()
+        mock_score_and_save.assert_called_once()
         mock_save_candidates.assert_not_called()
 
     @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
@@ -2509,12 +2486,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertTrue(result["skip_path_build"])
         self.assertFalse(result["skip_path_scoring"])
         mock_run_path_flows.assert_not_called()
-        mock_score_and_save.assert_called_once_with(
-            "30010096",
-            config_path="config/settings.yaml",
-            base_date="2022-01-17",
-            query_family="training_order_source_window",
-        )
+        mock_score_and_save.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
@@ -2560,6 +2532,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
 
         self.assertTrue(result["skip_path_scoring"])
         mock_score_and_save.assert_not_called()
+        mock_run_path_flows.assert_not_called()
         mock_build_candidates.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
@@ -2590,11 +2563,9 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             config_path="config/settings.yaml",
             base_date="2022-01-17",
             query_family="training_order_source_window",
-            skip_path_build=False,
-            skip_path_scoring=True,
         )
 
-        self.assertEqual(result, refreshed_result)
+        self.assertEqual(result, (refreshed_result, None))
         mock_score_and_save.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
@@ -2602,6 +2573,48 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             query_family="training_order_source_window",
         )
         self.assertEqual(mock_build_candidates.call_count, 2)
+
+    @patch("scripts.run_similar_user_pipeline.time.sleep")
+    @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
+    def test_raw_path_build_limiter_retries_transient_failures(
+        self,
+        mock_run_path_flows: Mock,
+        mock_sleep: Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "user_cache:",
+                        "  raw_path_build_workers: 1",
+                        "  raw_path_build_max_retries: 1",
+                        "  raw_path_build_retry_sleep_seconds: 0",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            mock_run_path_flows.side_effect = [
+                RuntimeError("neo4j busy"),
+                [
+                    {
+                        "patient_id": "30010096",
+                        "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                        "retrieval_context": {"paths": [{"row": {}}]},
+                    }
+                ],
+            ]
+
+            result = _build_patient_raw_paths_with_limit(
+                "30010096",
+                config_path=config_path,
+                base_date="2022-01-17",
+                query_family="training_order_source_window",
+            )
+
+        self.assertEqual(result[0]["path_count"], 1)
+        self.assertEqual(mock_run_path_flows.call_count, 2)
+        mock_sleep.assert_called_once_with(0.0)
 
     @patch("scripts.run_similar_user_pipeline.LOGGER")
     @patch("scripts.run_similar_user_pipeline.parse_args")

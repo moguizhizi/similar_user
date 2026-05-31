@@ -1,15 +1,11 @@
-"""Run the full similar-user pipeline from path building to candidate ranking.
+"""Run the full similar-user pipeline from cache lookup to candidate ranking.
 
 这个脚本把相似用户候选生成流程串成一个入口：
 
-1. 默认先调用 `scripts/build_pattern_paths.py`，按配置中的多个模式构建并保存 paths。
-2. 调用 path 评分逻辑，读取已保存 paths 并保存多个模式的 scored paths。
-   如果配置开启 direct entity path scoring，也会给离线 direct path 打分。
-3. 再调用候选构建逻辑，读取已保存 scored paths 并聚合候选相似用户。
+1. 优先读取 topK candidates 用户缓存。
+2. topK candidates 缺失或过期时，读取 scored paths；scored paths 缺失时自动重新评分。
+3. raw paths 缺失时自动重新查询 Neo4j 构建并保存。
 4. 最后按 `--output-level` 输出候选 ID、候选分数或完整结果。
-
-如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过第一步，直接基于已有结果打分并构建候选用户。
-如果已经有可用的 scored paths，可以使用 `--skip-path-scoring` 复用已有评分结果并直接构建候选用户。
 
 常用执行方式：
 
@@ -19,8 +15,11 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import fcntl
 import json
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -36,7 +35,7 @@ from similar_user.domain.graph_schema import (
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
 )
 from similar_user.utils.logger import get_logger
-from config.settings import load_query_settings
+from config.settings import load_query_settings, load_user_cache_settings
 
 from scripts.build_similar_user_candidates import (
     build_similar_user_candidates,
@@ -54,6 +53,8 @@ from scripts.score_direct_entity_paths import (
 
 
 LOGGER = get_logger(__name__)
+_RAW_PATH_BUILD_SEMAPHORES: dict[tuple[str, int], threading.BoundedSemaphore] = {}
+_RAW_PATH_BUILD_SEMAPHORES_LOCK = threading.Lock()
 
 
 class EmptyPathResultsError(RuntimeError):
@@ -82,12 +83,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-path-build",
         action="store_true",
-        help="Use existing saved paths and only run scoring plus candidate ranking.",
+        help="Deprecated compatibility flag; cache lookup now decides whether paths are rebuilt.",
     )
     parser.add_argument(
         "--skip-path-scoring",
         action="store_true",
-        help="Use existing saved scored paths and only run candidate ranking.",
+        help="Deprecated compatibility flag; cache lookup now decides whether paths are rescored.",
     )
     parser.add_argument(
         "--query-family",
@@ -143,54 +144,21 @@ def run_similar_user_pipeline(
     resolved_window_days = _resolve_patient_path_window_days(resolved_config_path)
     started_at = time.perf_counter()
     LOGGER.info(
-        "Starting similar-user pipeline: patient_id=%s, pattern=%s, skip_path_build=%s, skip_path_scoring=%s, base_date=%s, window_days=%s, config_path=%s",
+        "Starting similar-user pipeline: patient_id=%s, pattern=%s, base_date=%s, window_days=%s, config_path=%s",
         patient_id,
         pattern,
-        skip_path_build,
-        skip_path_scoring,
         base_date,
         resolved_window_days,
         resolved_config_path,
     )
+    effective_query_family = query_family or "training_order_source_window"
     path_generation = None
-    if not skip_path_build:
-        path_results = run_configured_pattern_path_flows(
-            patient_id,
-            config_path=resolved_config_path,
-            base_date=base_date,
-            query_family=query_family or "training_order_source_window",
-        )
-        path_generation = [_summarize_path_result(item) for item in path_results]
-        _raise_if_path_results_empty(
-            path_generation,
-            patient_id=patient_id,
-            base_date=base_date,
-            window_days=resolved_window_days,
-        )
-
-    if not skip_path_scoring:
-        _score_patient_paths_with_auto_refresh(
-            patient_id,
-            config_path=resolved_config_path,
-            base_date=base_date,
-            query_family=query_family or "training_order_source_window",
-            allow_path_build=skip_path_build,
-        )
-        direct_entity_scoring = _score_direct_entity_paths_if_enabled(
-            patient_id,
-            config_path=resolved_config_path,
-            base_date=base_date,
-        )
-    else:
-        direct_entity_scoring = None
-
-    candidate_result = _build_patient_candidates_with_auto_refresh(
+    direct_entity_scoring = None
+    candidate_result, direct_entity_scoring = _build_patient_candidates_with_auto_refresh(
         patient_id,
         config_path=resolved_config_path,
         base_date=base_date,
-        query_family=query_family or "training_order_source_window",
-        skip_path_build=skip_path_build,
-        skip_path_scoring=skip_path_scoring,
+        query_family=effective_query_family,
     )
     candidate_output_paths = save_similar_user_candidates_result(candidate_result)
     LOGGER.info(
@@ -277,7 +245,6 @@ def _score_patient_paths_with_auto_refresh(
     config_path: str | Path,
     base_date: str,
     query_family: str,
-    allow_path_build: bool,
 ) -> None:
     try:
         score_and_save_configured_pattern_paths(
@@ -287,19 +254,23 @@ def _score_patient_paths_with_auto_refresh(
             query_family=query_family,
         )
     except FileNotFoundError:
-        if not allow_path_build:
-            raise
         LOGGER.info(
             "Patient raw paths missing or expired; rebuilding before scoring: patient_id=%s, base_date=%s, query_family=%s",
             patient_id,
             base_date,
             query_family,
         )
-        run_configured_pattern_path_flows(
+        path_generation = _build_patient_raw_paths_with_limit(
             patient_id,
             config_path=config_path,
             base_date=base_date,
             query_family=query_family,
+        )
+        _raise_if_path_results_empty(
+            path_generation,
+            patient_id=patient_id,
+            base_date=base_date,
+            window_days=_resolve_patient_path_window_days(config_path),
         )
         score_and_save_configured_pattern_paths(
             patient_id,
@@ -309,25 +280,135 @@ def _score_patient_paths_with_auto_refresh(
         )
 
 
+def _build_patient_raw_paths_with_limit(
+    patient_id: str,
+    *,
+    config_path: str | Path,
+    base_date: str,
+    query_family: str,
+) -> list[dict[str, object]]:
+    settings = load_user_cache_settings(config_path)
+    max_attempts = settings.raw_path_build_max_retries + 1
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with _raw_path_build_limiter(config_path):
+                LOGGER.info(
+                    "Building raw paths with limiter: patient_id=%s, base_date=%s, query_family=%s, attempt=%s/%s, raw_path_build_workers=%s",
+                    patient_id,
+                    base_date,
+                    query_family,
+                    attempt,
+                    max_attempts,
+                    settings.raw_path_build_workers,
+                )
+                return [
+                    _summarize_path_result(item)
+                    for item in run_configured_pattern_path_flows(
+                        patient_id,
+                        config_path=config_path,
+                        base_date=base_date,
+                        query_family=query_family,
+                    )
+                ]
+        except Exception as exc:
+            last_error = exc
+            if attempt >= max_attempts:
+                break
+            LOGGER.warning(
+                "Raw path build failed; retrying: patient_id=%s, base_date=%s, query_family=%s, attempt=%s/%s, error_type=%s, error=%s",
+                patient_id,
+                base_date,
+                query_family,
+                attempt,
+                max_attempts,
+                type(exc).__name__,
+                exc,
+            )
+            time.sleep(settings.raw_path_build_retry_sleep_seconds)
+    assert last_error is not None
+    raise last_error
+
+
+@contextmanager
+def _raw_path_build_limiter(config_path: str | Path):
+    settings = load_user_cache_settings(config_path)
+    semaphore = _get_raw_path_build_semaphore(
+        settings.sqlite_path,
+        settings.raw_path_build_workers,
+    )
+    with semaphore:
+        with _cross_process_raw_path_build_lock(
+            settings.sqlite_path,
+            workers=settings.raw_path_build_workers,
+        ):
+            yield
+
+
+def _get_raw_path_build_semaphore(
+    sqlite_path: str,
+    workers: int,
+) -> threading.BoundedSemaphore:
+    key = (str(Path(sqlite_path)), workers)
+    with _RAW_PATH_BUILD_SEMAPHORES_LOCK:
+        semaphore = _RAW_PATH_BUILD_SEMAPHORES.get(key)
+        if semaphore is None:
+            semaphore = threading.BoundedSemaphore(workers)
+            _RAW_PATH_BUILD_SEMAPHORES[key] = semaphore
+        return semaphore
+
+
+@contextmanager
+def _cross_process_raw_path_build_lock(sqlite_path: str, *, workers: int):
+    if workers != 1:
+        yield
+        return
+    lock_file = None
+    lock_path = Path(sqlite_path).with_suffix(".raw_path_build.lock")
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = lock_path.open("a", encoding="utf-8")
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        if lock_file is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+
+
 def _build_patient_candidates_with_auto_refresh(
     patient_id: str,
     *,
     config_path: str | Path,
     base_date: str,
     query_family: str,
-    skip_path_build: bool,
-    skip_path_scoring: bool,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     try:
-        return build_similar_user_candidates(
+        result = build_similar_user_candidates(
             patient_id,
             config_path=config_path,
             base_date=base_date,
             query_family=query_family,
         )
+        if result.get("user_cache_hit"):
+            return result, None
+        direct_entity_scoring = _score_direct_entity_paths_if_enabled(
+            patient_id,
+            config_path=config_path,
+            base_date=base_date,
+        )
+        if direct_entity_scoring is None:
+            return result, None
+        return (
+            build_similar_user_candidates(
+                patient_id,
+                config_path=config_path,
+                base_date=base_date,
+                query_family=query_family,
+            ),
+            direct_entity_scoring,
+        )
     except FileNotFoundError:
-        if not skip_path_scoring:
-            raise
         LOGGER.info(
             "Patient scored paths missing or expired; rescoring before candidate build: patient_id=%s, base_date=%s, query_family=%s",
             patient_id,
@@ -339,13 +420,20 @@ def _build_patient_candidates_with_auto_refresh(
             config_path=config_path,
             base_date=base_date,
             query_family=query_family,
-            allow_path_build=skip_path_build,
         )
-        return build_similar_user_candidates(
+        direct_entity_scoring = _score_direct_entity_paths_if_enabled(
             patient_id,
             config_path=config_path,
             base_date=base_date,
-            query_family=query_family,
+        )
+        return (
+            build_similar_user_candidates(
+                patient_id,
+                config_path=config_path,
+                base_date=base_date,
+                query_family=query_family,
+            ),
+            direct_entity_scoring,
         )
 
 

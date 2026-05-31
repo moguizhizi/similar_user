@@ -30,6 +30,9 @@ class UserCacheSettingsTest(unittest.TestCase):
                         "  direct_scored_paths_valid_days: 60",
                         "  topk_candidates_valid_days: 5",
                         "  refresh_candidate_base_date_on_hit: false",
+                        "  raw_path_build_workers: 2",
+                        "  raw_path_build_max_retries: 4",
+                        "  raw_path_build_retry_sleep_seconds: 1.5",
                         "  cleanup_max_age_days: 21",
                         "  keep_latest_per_source: 3",
                     ]
@@ -47,6 +50,9 @@ class UserCacheSettingsTest(unittest.TestCase):
             self.assertEqual(settings.direct_scored_paths_valid_days, 60)
             self.assertEqual(settings.topk_candidates_valid_days, 5)
             self.assertFalse(settings.refresh_candidate_base_date_on_hit)
+            self.assertEqual(settings.raw_path_build_workers, 2)
+            self.assertEqual(settings.raw_path_build_max_retries, 4)
+            self.assertEqual(settings.raw_path_build_retry_sleep_seconds, 1.5)
             self.assertEqual(settings.cleanup_max_age_days, 21)
             self.assertEqual(settings.keep_latest_per_source, 3)
             self.assertEqual(settings.keep_latest_per_user, 3)
@@ -69,6 +75,84 @@ class UserCacheSettingsTest(unittest.TestCase):
 
 
 class UserCacheIndexStoreTest(unittest.TestCase):
+    def test_find_latest_valid_source_entry_migrates_legacy_index_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sqlite_path = Path(temp_dir) / "cache.sqlite"
+            store = UserCacheIndexStore(sqlite_path)
+            with store._connect() as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE user_cache_entries (
+                        cache_type TEXT NOT NULL,
+                        patient_id TEXT NOT NULL,
+                        query_family TEXT NOT NULL,
+                        window_days INTEGER NOT NULL,
+                        config_hash TEXT NOT NULL,
+                        cached_base_date TEXT NOT NULL,
+                        valid_days INTEGER NOT NULL,
+                        data_path TEXT NOT NULL,
+                        payload_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY (
+                            cache_type,
+                            patient_id,
+                            query_family,
+                            window_days,
+                            config_hash,
+                            cached_base_date,
+                            data_path
+                        )
+                    )
+                    """.strip()
+                )
+                connection.execute(
+                    """
+                    INSERT INTO user_cache_entries (
+                        cache_type,
+                        patient_id,
+                        query_family,
+                        window_days,
+                        config_hash,
+                        cached_base_date,
+                        valid_days,
+                        data_path,
+                        payload_json,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """.strip(),
+                    (
+                        "topk_candidates",
+                        "30010096",
+                        "training_order_dual_window",
+                        14,
+                        "cfg",
+                        "2026-05-25",
+                        7,
+                        "detail.json",
+                        "{}",
+                        "2026-05-25T00:00:00+00:00",
+                        "2026-05-25T00:00:00+00:00",
+                    ),
+                )
+
+            entry = store.find_latest_valid_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30010096",
+                query_family="training_order_dual_window",
+                window_days=14,
+                config_hash="cfg",
+                request_base_date="2026-05-26",
+            )
+
+        self.assertIsNotNone(entry)
+        assert entry is not None
+        self.assertEqual(entry.source_type, "patient")
+        self.assertEqual(entry.source_id, "30010096")
+
     def test_find_latest_valid_source_entry_returns_newest_unexpired_match(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")

@@ -152,6 +152,9 @@ class UserCacheSettings:
     direct_scored_paths_valid_days: int = 60
     topk_candidates_valid_days: int = 7
     refresh_candidate_base_date_on_hit: bool = True
+    raw_path_build_workers: int = 1
+    raw_path_build_max_retries: int = 2
+    raw_path_build_retry_sleep_seconds: float = 5.0
     cleanup_max_age_days: int = 30
     keep_latest_per_source: int = 2
 
@@ -685,6 +688,21 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         raise ValueError(
             "user_cache refresh_candidate_base_date_on_hit must be a boolean."
         )
+    raw_path_build_workers = _parse_user_cache_positive_int(
+        data,
+        "raw_path_build_workers",
+        default=1,
+    )
+    raw_path_build_max_retries = _parse_user_cache_non_negative_int(
+        data,
+        "raw_path_build_max_retries",
+        default=2,
+    )
+    raw_path_build_retry_sleep_seconds = _parse_user_cache_non_negative_number(
+        data,
+        "raw_path_build_retry_sleep_seconds",
+        default=5.0,
+    )
 
     cleanup_max_age_days = data.get("cleanup_max_age_days", 30)
     if (
@@ -714,6 +732,9 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         direct_scored_paths_valid_days=direct_scored_paths_valid_days,
         topk_candidates_valid_days=topk_candidates_valid_days,
         refresh_candidate_base_date_on_hit=refresh_candidate_base_date_on_hit,
+        raw_path_build_workers=raw_path_build_workers,
+        raw_path_build_max_retries=raw_path_build_max_retries,
+        raw_path_build_retry_sleep_seconds=raw_path_build_retry_sleep_seconds,
         cleanup_max_age_days=cleanup_max_age_days,
         keep_latest_per_source=keep_latest_per_source,
     )
@@ -735,6 +756,46 @@ def _parse_user_cache_valid_days(
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ValueError(f"user_cache {field_name} must be a non-negative integer.")
     return value
+
+
+def _parse_user_cache_positive_int(
+    data: dict[str, Any],
+    field_name: str,
+    *,
+    default: int,
+) -> int:
+    value = data.get(field_name, default)
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"user_cache {field_name} must be a positive integer.")
+    return value
+
+
+def _parse_user_cache_non_negative_int(
+    data: dict[str, Any],
+    field_name: str,
+    *,
+    default: int,
+) -> int:
+    value = data.get(field_name, default)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"user_cache {field_name} must be a non-negative integer.")
+    return value
+
+
+def _parse_user_cache_non_negative_number(
+    data: dict[str, Any],
+    field_name: str,
+    *,
+    default: float,
+) -> float:
+    value = data.get(field_name, default)
+    if (
+        not isinstance(value, int | float)
+        or isinstance(value, bool)
+        or value < 0
+    ):
+        raise ValueError(f"user_cache {field_name} must be a non-negative number.")
+    return float(value)
 
 
 def _parse_candidate_scoring_settings(value: object) -> CandidateScoringSettings:

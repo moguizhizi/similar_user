@@ -1,0 +1,31 @@
+stage: "cache-validation-10-users"
+
+base:
+  base_date: "2026-05-25"
+  window_days: 14
+  task_top_k: 7
+  use_llm: true
+  limit: 10
+  query_family: "training_order_dual_window"
+
+baseline_overrides:
+  user_cache.enabled: true
+  user_cache.sqlite_path: "data/user_cache/cache_index.sqlite"
+  user_cache.raw_path_build_workers: 1
+  user_cache.raw_path_build_max_retries: 2
+  user_cache.raw_path_build_retry_sleep_seconds: 5
+  query.training_task_evaluation.workers: 1
+  query.score_pattern_paths.top_k: 150
+  query.candidate_ranking.disease_course_window_days: 14
+  query.candidate_ranking.total_score_match_top_k: 1
+
+experiments:
+  - name: cache_warmup
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+
+  - name: cache_hit
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
