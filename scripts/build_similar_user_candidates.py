@@ -61,7 +61,11 @@ from scripts.score_pattern_paths import (
     build_scored_key,
     validate_scored_cache_context,
 )
-from similar_user.utils.pattern_storage import build_path_key
+from similar_user.utils.pattern_storage import (
+    build_path_key,
+    build_raw_path_user_cache_config_hash,
+    get_pattern_result_output_path,
+)
 from similar_user.utils.user_cache_paths import (
     files_root_from_sqlite_path,
     patient_cache_leaf_dir,
@@ -282,20 +286,44 @@ def build_similar_user_candidates(
             loaded_patterns,
             skipped_patterns,
         )
-        if not scored_results:
-            raise FileNotFoundError(
-                f"No saved scored detail found for source_id {patient_id}: "
-                f"patterns={selected_patterns}, scored_paths_dir={scored_paths_dir}"
+        if skipped_patterns:
+            empty_raw_patterns, refresh_patterns = classify_skipped_scored_patterns(
+                resolved_config_path,
+                patient_id=patient_id,
+                patterns=tuple(skipped_patterns),
+                scored_key=scored_key,
+                request_base_date=base_date,
             )
-        result = candidate_service.aggregate_candidates_from_multiple_scored_results(
-            scored_results,
-            candidate_top_k=ranking_settings.candidate_top_k,
-            scoring_settings=ranking_settings.scoring,
-            disease_course_window_days=resolved_disease_course_window_days,
-            include_direct_entity_paths=(
-                query_settings.direct_entity_path_scoring.use_when_patient_exists
-            ),
-        )
+            if empty_raw_patterns:
+                LOGGER.info(
+                    "Skipped scored patterns with known empty raw paths: patient_id=%s, patterns=%s",
+                    patient_id,
+                    empty_raw_patterns,
+                )
+            if refresh_patterns:
+                raise FileNotFoundError(
+                    "Saved scored detail missing for patterns that may need refresh: "
+                    f"source_id={patient_id}, patterns={refresh_patterns}, "
+                    f"scored_paths_dir={scored_paths_dir}"
+                )
+        if not scored_results:
+            result = build_empty_candidate_result(
+                patient_id=patient_id,
+                selected_patterns=selected_patterns,
+                candidate_top_k=ranking_settings.candidate_top_k,
+                base_date=base_date,
+                disease_course_window_days=resolved_disease_course_window_days,
+            )
+        else:
+            result = candidate_service.aggregate_candidates_from_multiple_scored_results(
+                scored_results,
+                candidate_top_k=ranking_settings.candidate_top_k,
+                scoring_settings=ranking_settings.scoring,
+                disease_course_window_days=resolved_disease_course_window_days,
+                include_direct_entity_paths=(
+                    query_settings.direct_entity_path_scoring.use_when_patient_exists
+                ),
+            )
         result.setdefault("retrieval_context", {})[
             "disease_course_window_days"
         ] = resolved_disease_course_window_days
@@ -429,6 +457,145 @@ def _has_any_saved_scored_pattern_result(
         if detail_path.exists():
             return True
     return False
+
+
+def classify_skipped_scored_patterns(
+    config_path: str | Path,
+    *,
+    patient_id: str,
+    patterns: tuple[str, ...],
+    scored_key: str,
+    request_base_date: str,
+) -> tuple[list[str], list[str]]:
+    """Split skipped scored patterns into known-empty raw paths and refresh-needed paths."""
+    empty_raw_patterns: list[str] = []
+    refresh_patterns: list[str] = []
+    for pattern in patterns:
+        normalized_pattern = resolve_path_pattern(pattern).value
+        raw_path_count = resolve_raw_path_count_for_pattern(
+            config_path,
+            patient_id=patient_id,
+            pattern=normalized_pattern,
+            scored_key=scored_key,
+            request_base_date=request_base_date,
+        )
+        if raw_path_count == 0:
+            empty_raw_patterns.append(normalized_pattern)
+        else:
+            refresh_patterns.append(normalized_pattern)
+    return empty_raw_patterns, refresh_patterns
+
+
+def resolve_raw_path_count_for_pattern(
+    config_path: str | Path,
+    *,
+    patient_id: str,
+    pattern: str,
+    scored_key: str,
+    request_base_date: str,
+) -> int | None:
+    """Return raw path count for a pattern, or None when the raw status is unknown."""
+    path_key = _strip_score_suffix(_normalize_required_string(scored_key, "scored_key"))
+    raw_path = get_pattern_result_output_path(
+        config_path,
+        pattern,
+        patient_id,
+        path_key=path_key,
+    )
+    exact_count = _read_raw_path_count(raw_path)
+    if exact_count is not None:
+        return exact_count
+
+    settings = load_user_cache_settings(config_path)
+    if not settings.enabled:
+        return None
+    query_settings = load_query_settings(config_path)
+    store = UserCacheIndexStore(settings.sqlite_path)
+    raw_config_hash = build_raw_path_user_cache_config_hash(path_key)
+    query_family = _extract_key_slice(
+        path_key.split("_"),
+        "qf",
+        ("pathcfg", "directcfg"),
+    ) or "default"
+    entries = [
+        entry
+        for entry in store.list_entries()
+        if entry.cache_type == "raw_paths"
+        and entry.source_type == "patient"
+        and entry.source_id == patient_id
+        and entry.query_family == query_family
+        and entry.window_days == query_settings.patient_path.window_days
+        and entry.config_hash == raw_config_hash
+        and entry.payload.get("pattern") == pattern
+        and entry.is_valid_for(request_base_date)
+    ]
+    entries.sort(
+        key=lambda entry: (
+            entry.cached_base_date,
+            entry.updated_at or "",
+        ),
+        reverse=True,
+    )
+    for entry in entries:
+        payload_count = entry.payload.get("path_count")
+        if isinstance(payload_count, int) and not isinstance(payload_count, bool):
+            return payload_count
+        data_count = _read_raw_path_count(Path(entry.data_path))
+        if data_count is not None:
+            return data_count
+    return None
+
+
+def _read_raw_path_count(path: Path) -> int | None:
+    if not path.exists():
+        return None
+    with path.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+    if not isinstance(data, dict):
+        return None
+    retrieval_context = data.get("retrieval_context")
+    if not isinstance(retrieval_context, dict):
+        return None
+    paths = retrieval_context.get("paths")
+    if not isinstance(paths, list):
+        return None
+    return len(paths)
+
+
+def build_empty_candidate_result(
+    *,
+    patient_id: str,
+    selected_patterns: tuple[str, ...],
+    candidate_top_k: int,
+    base_date: str,
+    disease_course_window_days: int | None,
+) -> dict[str, Any]:
+    """Build an empty candidate result when all configured raw patterns are known empty."""
+    return {
+        "source_id": patient_id,
+        "source_parameter": "patient_id",
+        "pattern": selected_patterns[0] if len(selected_patterns) == 1 else None,
+        "patterns": list(selected_patterns),
+        "candidate_top_k": candidate_top_k,
+        "path_count": 0,
+        "scored_path_count": 0,
+        "retrieval_context": {
+            "base_date": base_date,
+            "path_window": None,
+            "score_end_date": base_date,
+            "candidate_scope": {
+                "path_window": None,
+                "score_end_date": base_date,
+                "candidate_top_k": candidate_top_k,
+            },
+            "disease_course_window_days": disease_course_window_days,
+        },
+        "candidate_count": 0,
+        "pre_score_candidate_count": 0,
+        "disease_course_available_count": 0,
+        "disease_course_missing_count": 0,
+        "candidates": [],
+    }
 
 
 def load_saved_direct_entity_scored_results(
