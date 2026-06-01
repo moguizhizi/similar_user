@@ -143,7 +143,16 @@ def build_similar_user_candidates(
     base_date: str | None = None,
     query_family: str | None = None,
 ) -> dict[str, Any]:
-    """Aggregate ranked candidate users from top-k scored paths."""
+    """从 scored paths 聚合并返回 topK 候选用户。
+
+    流程：
+    1. 根据当前配置生成 topK candidates 的缓存上下文。
+    2. 先尝试读取 user_cache 中仍有效的 topK candidates。
+    3. 如果 topK 未命中，则读取当前或最近有效的 scored paths。
+    4. 对缺失的 scored pattern，结合 raw path 状态判断是合理空结果还是需要补算。
+    5. 使用可用 scored paths 聚合候选用户、计算 candidate_score，并把缓存上下文放入结果，
+       供后续保存 detail/summary 文件和注册 SQLite index 使用。
+    """
     started_at = time.perf_counter()
     resolved_config_path = DEFAULT_CONFIG_PATH if config_path is None else config_path
     query_settings = load_query_settings(resolved_config_path)
@@ -198,14 +207,9 @@ def build_similar_user_candidates(
         return cached_result
 
     scored_key = expected_scored_key
-    if not _has_any_saved_scored_pattern_result(
-        patient_id,
-        patterns=selected_patterns,
-        scored_paths_dir=scored_paths_dir,
-        scored_key=expected_scored_key,
-        config_path=resolved_config_path,
-    ):
-        scored_key = resolve_scored_key_from_user_cache(
+    user_cache_settings = load_user_cache_settings(resolved_config_path)
+    if user_cache_settings.enabled:
+        resolved_scored_key = resolve_scored_key_from_user_cache(
             resolved_config_path,
             patient_id=patient_id,
             base_date=base_date,
@@ -213,6 +217,21 @@ def build_similar_user_candidates(
             expected_scored_key=expected_scored_key,
             scored_paths_dir=scored_paths_dir,
         )
+        if resolved_scored_key is None:
+            raise FileNotFoundError(
+                "Patient scored paths missing or expired: "
+                f"patient_id={patient_id}, base_date={base_date}, "
+                f"query_family={query_family}, expected_scored_key={expected_scored_key}"
+            )
+        scored_key = resolved_scored_key
+    elif not _has_any_saved_scored_pattern_result(
+        patient_id,
+        patterns=selected_patterns,
+        scored_paths_dir=scored_paths_dir,
+        scored_key=expected_scored_key,
+        config_path=resolved_config_path,
+    ):
+        scored_key = expected_scored_key
     if scored_key != expected_scored_key:
         candidate_cache_context = build_candidate_cache_context(
             resolved_config_path,
@@ -741,7 +760,7 @@ def resolve_scored_key_from_user_cache(
     query_family: str | None,
     expected_scored_key: str,
     scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
-) -> str:
+) -> str | None:
     """Return a recent valid scored_key when exact scored paths are not available."""
     settings = load_user_cache_settings(config_path)
     if not settings.enabled:
@@ -759,7 +778,7 @@ def resolve_scored_key_from_user_cache(
         request_base_date=normalized_base_date,
     )
     if entry is None:
-        return expected_scored_key
+        return None
     detail_path = Path(entry.data_path)
     if not detail_path.exists():
         store.delete_entry(entry)
@@ -768,10 +787,10 @@ def resolve_scored_key_from_user_cache(
             entry.patient_id,
             detail_path,
         )
-        return expected_scored_key
+        return None
     scored_key = entry.payload.get("scored_key")
     if not isinstance(scored_key, str) or not scored_key.strip():
-        return expected_scored_key
+        return None
     resolved_scored_key = scored_key.strip()
     LOGGER.info(
         "Using scored paths from user cache: patient_id=%s, expected_scored_key=%s, cached_scored_key=%s, cached_base_date=%s, data_path=%s, scored_paths_dir=%s",
