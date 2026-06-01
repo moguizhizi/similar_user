@@ -50,9 +50,10 @@ class ExportInactivePatientProfilesTest(unittest.TestCase):
     def test_normalizers_handle_algorithm_values(self) -> None:
         self.assertEqual(normalize_gender(1), "男")
         self.assertEqual(normalize_gender(2), "女")
-        self.assertEqual(normalize_education(15), "大专")
+        self.assertEqual(normalize_education(15), "高中")
         self.assertEqual(normalize_education(17), "本科")
-        self.assertEqual(normalize_education_from_sources("未上过学", 12), "高中")
+        self.assertEqual(normalize_education(22), "大专")
+        self.assertEqual(normalize_education_from_sources("未上过学", 12), "未上过学")
         self.assertEqual(
             normalize_disease_names("轻度认知障碍（MCI），失眠"),
             ["轻度认知障碍（MCI）", "失眠"],

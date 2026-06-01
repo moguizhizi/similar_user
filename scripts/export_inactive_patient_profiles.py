@@ -24,6 +24,8 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
 from similar_user.data_access.algorithm_request_results import (  # noqa: E402
     DEFAULT_ALGORITHM_REQUEST_RESULTS_PATH,
     load_algorithm_request_results,
+    normalize_algorithm_request_education,
+    normalize_algorithm_request_gender,
 )
 from similar_user.utils.logger import get_logger  # noqa: E402
 
@@ -194,35 +196,12 @@ def build_output_path(base_date: str) -> Path:
 
 def normalize_gender(value: object) -> str:
     """Normalize CSV gender values into KG-facing text."""
-    text = _normalize_optional_text(value)
-    if text is None:
-        raise ValueError("gender is required.")
-    if text in {"1", "1.0", "男", "男性"}:
-        return "男"
-    if text in {"2", "2.0", "女", "女性"}:
-        return "女"
-    raise ValueError(f"unsupported gender value: {value}")
+    return normalize_algorithm_request_gender(value)
 
 
 def normalize_education(value: object) -> str:
-    """Normalize education years or labels into KG-facing text."""
-    text = _normalize_optional_text(value)
-    if text is None:
-        raise ValueError("education is required.")
-    if text in {"小学", "初中", "高中", "中专", "大专", "专科", "本科", "研究生", "硕士", "博士"}:
-        return "大专" if text == "专科" else text
-    years = _parse_required_int(text, "education")
-    if years <= 6:
-        return "小学"
-    if years <= 9:
-        return "初中"
-    if years <= 12:
-        return "高中"
-    if years <= 15:
-        return "大专"
-    if years <= 18:
-        return "本科"
-    return "研究生"
+    """Normalize algorithm request education code or label into KG-facing text."""
+    return normalize_algorithm_request_education(value)
 
 
 def normalize_education_from_sources(*values: object) -> str:
