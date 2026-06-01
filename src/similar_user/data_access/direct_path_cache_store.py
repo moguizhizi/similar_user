@@ -23,6 +23,8 @@ DIRECT_PATH_SOURCE_FIELDS: dict[PathPattern, tuple[str, str]] = {
     PathPattern.SYMPTOM_TASKSET_PATIENT: ("symptom", "sym"),
     PathPattern.UNKNOWN_TASKSET_PATIENT: ("unknown", "un"),
 }
+SQLITE_BUSY_TIMEOUT_SECONDS = 30.0
+SQLITE_BUSY_TIMEOUT_MILLISECONDS = int(SQLITE_BUSY_TIMEOUT_SECONDS * 1000)
 
 
 @dataclass(frozen=True)
@@ -388,7 +390,11 @@ class DirectPathCacheStore:
         return str(value) if value is not None else None
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.sqlite_path)
+        connection = sqlite3.connect(
+            self.sqlite_path,
+            timeout=SQLITE_BUSY_TIMEOUT_SECONDS,
+        )
+        connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MILLISECONDS}")
         connection.row_factory = sqlite3.Row
         return connection
 
