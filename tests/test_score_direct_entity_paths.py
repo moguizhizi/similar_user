@@ -15,6 +15,10 @@ from scripts.score_direct_entity_paths import (
     score_direct_entity_paths,
 )
 from src.similar_user.data_access.user_cache_index import UserCacheIndexStore
+from src.similar_user.utils.pattern_storage import (
+    build_direct_path_cache_context,
+    save_direct_pattern_result,
+)
 
 
 class ScoreDirectEntityPathsTest(unittest.TestCase):
@@ -22,8 +26,6 @@ class ScoreDirectEntityPathsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             output_dir = root / "pattern_paths"
-            path_file = output_dir / "D1.json"
-            index_path = output_dir / "direct_entity_path_index.json"
             config_path = root / "settings.yaml"
             config_path.write_text(
                 "\n".join(
@@ -36,66 +38,55 @@ class ScoreDirectEntityPathsTest(unittest.TestCase):
                         "score_pattern_paths:",
                         "  top_k: 1",
                         "direct_entity_path:",
-                        f'  index_path: "{index_path}"',
+                        "  window_days: 180",
+                        "  direct_path_limit: 50",
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                        "  direct_raw_paths_valid_days: 60",
                     ]
                 ),
                 encoding="utf-8",
             )
-            path_file.parent.mkdir(parents=True, exist_ok=True)
-            path_file.write_text(
-                json.dumps(
-                    {
-                        "source_id": "D1",
-                        "source_parameter": "disease_id",
-                        "disease_id": "D1",
-                        "pattern": "DISEASE_TASKSET_PATIENT",
-                        "retrieval_context": {
-                            "base_date": "2026-05-26",
-                            "path_window": {
-                                "start_date": "2025-11-27",
-                                "end_date": "2026-05-27",
-                            },
-                            "paths": [
-                                _disease_path(
-                                    "D1",
-                                    "S1",
-                                    "P1",
-                                    age="66",
-                                    education="本科",
-                                    gender="男",
-                                ),
-                                _disease_path(
-                                    "D1",
-                                    "S2",
-                                    "P2",
-                                    age="80",
-                                    education="小学",
-                                    gender="女",
-                                ),
-                            ],
-                        },
-                    },
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
+            path_context = build_direct_path_cache_context(
+                base_date="2026-05-25",
+                window_days=180,
+                direct_path_limit=50,
             )
-            index_path.write_text(
-                json.dumps(
-                    {
-                        "entries": [
-                            {
-                                "pattern": "DISEASE_TASKSET_PATIENT",
-                                "source_id": "D1",
-                                "base_date": "2026-05-25",
-                                "window_days": 180,
-                                "path_key": "base_2026-05-25_window_180_directcfg_abcdef12",
-                                "output_path": str(path_file),
-                            }
-                        ]
+            save_direct_pattern_result(
+                {
+                    "source_id": "D1",
+                    "source_parameter": "disease_id",
+                    "disease_id": "D1",
+                    "pattern": "DISEASE_TASKSET_PATIENT",
+                    "retrieval_context": {
+                        "base_date": "2026-05-25",
+                        "path_window": {
+                            "start_date": "2025-11-27",
+                            "end_date": "2026-05-27",
+                        },
+                        "paths": [
+                            _disease_path(
+                                "D1",
+                                "S1",
+                                "P1",
+                                age="66",
+                                education="本科",
+                                gender="男",
+                            ),
+                            _disease_path(
+                                "D1",
+                                "S2",
+                                "P2",
+                                age="80",
+                                education="小学",
+                                gender="女",
+                            ),
+                        ],
                     },
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
+                },
+                config_path,
+                path_context=path_context,
             )
 
             result = score_direct_entity_paths(
@@ -120,15 +111,14 @@ class ScoreDirectEntityPathsTest(unittest.TestCase):
             result["cache_context"]["pattern_source_keys"],
             {
                 "DISEASE_TASKSET_PATIENT": (
-                    "entitybase_2026-05-25_entitywindow_180_pathcfg_abcdef12"
+                    "entitybase_2026-05-25_entitywindow_180_pathcfg_b33c2948"
                 )
             },
         )
 
-    def test_score_direct_entity_paths_reports_missing_index_entry(self) -> None:
+    def test_score_direct_entity_paths_reports_missing_raw_path_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            index_path = root / "direct_entity_path_index.json"
             config_path = root / "settings.yaml"
             config_path.write_text(
                 "\n".join(
@@ -136,13 +126,13 @@ class ScoreDirectEntityPathsTest(unittest.TestCase):
                         "graph_path_limit:",
                         "  bands:",
                         "    - per_g: 1",
-                        "direct_entity_path:",
-                        f'  index_path: "{index_path}"',
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
                     ]
                 ),
                 encoding="utf-8",
             )
-            index_path.write_text('{"entries": []}', encoding="utf-8")
 
             result = score_direct_entity_paths(
                 config_path=config_path,
@@ -156,6 +146,83 @@ class ScoreDirectEntityPathsTest(unittest.TestCase):
         self.assertEqual(
             result["missing_sources"],
             [{"pattern": "DISEASE_TASKSET_PATIENT", "source_id": "D1"}],
+        )
+
+    def test_score_direct_entity_paths_prefers_raw_paths_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "score_pattern_paths:",
+                        "  top_k: 1",
+                        "direct_entity_path:",
+                        "  window_days: 90",
+                        "  direct_path_limit: 50",
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                        "  direct_raw_paths_valid_days: 60",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            path_context = build_direct_path_cache_context(
+                base_date="2026-05-25",
+                window_days=90,
+                direct_path_limit=50,
+            )
+            save_direct_pattern_result(
+                {
+                    "source_id": "D1",
+                    "source_parameter": "disease_id",
+                    "disease_id": "D1",
+                    "pattern": "DISEASE_TASKSET_PATIENT",
+                    "retrieval_context": {
+                        "base_date": "2026-05-25",
+                        "path_window": {
+                            "start_date": "2026-02-24",
+                            "end_date": "2026-05-26",
+                        },
+                        "paths": [
+                            _disease_path(
+                                "D1",
+                                "S1",
+                                "P1",
+                                age="66",
+                                education="本科",
+                                gender="男",
+                            )
+                        ],
+                    },
+                },
+                config_path,
+                path_context=path_context,
+            )
+
+            result = score_direct_entity_paths(
+                config_path=config_path,
+                base_date="2026-05-26",
+                age=66,
+                education="本科",
+                gender="男",
+                disease_ids=["D1"],
+            )
+
+        self.assertEqual(result["path_count"], 1)
+        self.assertEqual(result["scores"][0]["patient_id"], "P1")
+        self.assertEqual(result["missing_sources"], [])
+        self.assertEqual(
+            result["cache_context"]["pattern_source_keys"],
+            {
+                "DISEASE_TASKSET_PATIENT": (
+                    "entitybase_2026-05-25_entitywindow_90_pathcfg_b33c2948"
+                )
+            },
         )
 
     def test_save_scored_direct_entity_result_writes_detail_and_summary(self) -> None:
@@ -195,7 +262,24 @@ class ScoreDirectEntityPathsTest(unittest.TestCase):
             ],
         }
         with tempfile.TemporaryDirectory() as temp_dir:
-            output_paths = save_scored_direct_entity_result(result, temp_dir)
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "user_cache:",
+                        "  enabled: false",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            output_paths = save_scored_direct_entity_result(
+                result,
+                temp_dir,
+                config_path=config_path,
+            )
 
             detail = json.loads(output_paths[0]["detail"].read_text(encoding="utf-8"))
             summary = json.loads(output_paths[0]["summary"].read_text(encoding="utf-8"))

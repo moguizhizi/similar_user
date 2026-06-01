@@ -1,9 +1,9 @@
 """Score saved direct entity-start paths.
 
 This script reads Disease/Symptom/Unknown -> TaskInstanceSet -> Patient path
-files from the direct entity path index and scores them against a normalized
-profile input. It is intentionally separate from the patient-start
-score_pattern_paths.py flow.
+files from user_cache raw paths, then scores them against a normalized profile
+input. It is intentionally separate from the patient-start score_pattern_paths.py
+flow.
 
 Examples:
     python scripts/score_direct_entity_paths.py --patient-id 20123188
@@ -48,7 +48,11 @@ from similar_user.services.direct_entity_scoring_input import (  # noqa: E402
 )
 from similar_user.services.path_scoring import PathScoringRules  # noqa: E402
 from similar_user.utils.logger import get_logger  # noqa: E402
-from similar_user.utils.pattern_storage import StoredPatternResult  # noqa: E402
+from similar_user.utils.pattern_storage import (  # noqa: E402
+    StoredPatternResult,
+    build_direct_path_key,
+    build_raw_path_user_cache_config_hash,
+)
 from similar_user.utils.user_cache_paths import (  # noqa: E402
     files_root_from_sqlite_path,
     patient_cache_leaf_dir,
@@ -61,7 +65,7 @@ DEFAULT_SCORED_OUTPUT_DIR = Path("data/scored_pattern_paths")
 
 @dataclass(frozen=True)
 class DirectSourceRef:
-    """One direct entity source to read from the index."""
+    """One direct entity source to read from user_cache raw paths."""
 
     pattern: PathPattern
     source_id: str
@@ -216,10 +220,18 @@ def score_direct_entity_paths(
     if resolution.scoring_input is None:
         raise ValueError("scoring_input is required when should_score is true.")
 
-    index_path = Path(query_settings.direct_entity_path.index_path)
-    loaded_paths = _load_direct_paths_from_index(
+    loaded_paths = load_direct_paths_for_scoring(
         resolution.scoring_input,
-        index_path=index_path,
+        config_path=resolved_config_path,
+        request_base_date=resolved_base_date,
+    )
+    LOGGER.info(
+        "Loaded direct entity raw paths: source_id=%s, source=%s, source_count=%s, missing_source_count=%s, path_count=%s",
+        _scored_source_id(resolution.scoring_input),
+        loaded_paths["source"],
+        loaded_paths["source_count"],
+        len(loaded_paths["missing_sources"]),
+        loaded_paths["path_count"],
     )
     scores = _score_loaded_paths(resolution.scoring_input, loaded_paths["paths"])
     scores = _limit_scores_by_pattern(scores, resolved_top_k)
@@ -228,7 +240,6 @@ def score_direct_entity_paths(
         "should_score": True,
         "reason": resolution.reason,
         "base_date": resolved_base_date,
-        "index_path": str(index_path),
         "scoring_input": resolution.scoring_input.to_dict(),
         "source_count": loaded_paths["source_count"],
         "missing_sources": loaded_paths["missing_sources"],
@@ -253,63 +264,183 @@ def score_direct_entity_paths(
     return result
 
 
-def _load_direct_paths_from_index(
+def load_direct_paths_for_scoring(
     scoring_input: DirectEntityScoringInput,
     *,
-    index_path: Path,
+    config_path: str | Path,
+    request_base_date: str,
 ) -> dict[str, Any]:
-    index_payload = _read_index(index_path)
-    entries = {
-        (str(entry.get("pattern")), str(entry.get("source_id"))): entry
-        for entry in index_payload.get("entries", [])
+    """Load direct raw paths from user_cache."""
+    source_refs = _source_refs_from_input(scoring_input)
+    user_cache_result = _load_direct_paths_from_user_cache(
+        scoring_input,
+        config_path=config_path,
+        request_base_date=request_base_date,
+    )
+    loaded_keys = {
+        (str(entry.get("pattern")), str(entry.get("source_id")))
+        for entry in user_cache_result["source_entries"]
         if isinstance(entry, dict)
     }
-    paths: list[dict[str, Any]] = []
-    missing_sources: list[dict[str, str]] = []
-    source_entries: list[dict[str, Any]] = []
-
-    for source_ref in _source_refs_from_input(scoring_input):
-        entry = entries.get((source_ref.pattern.value, source_ref.source_id))
-        if entry is None:
-            missing_sources.append(
-                {"pattern": source_ref.pattern.value, "source_id": source_ref.source_id}
-            )
-            continue
-        output_path = Path(str(entry.get("output_path") or ""))
-        if not output_path.exists():
-            missing_sources.append(
-                {"pattern": source_ref.pattern.value, "source_id": source_ref.source_id}
-            )
-            continue
-        source_entries.append(
-            {
-                "pattern": source_ref.pattern.value,
-                "source_id": source_ref.source_id,
-                "base_date": entry.get("base_date"),
-                "window_days": entry.get("window_days"),
-                "path_key": entry.get("path_key"),
-                "direct_path_limit": entry.get("direct_path_limit"),
-            }
-        )
-        stored_result = _load_stored_result(output_path)
-        for path_index, path in enumerate(stored_result.paths):
-            paths.append(
-                {
-                    "pattern": stored_result.pattern,
-                    "source_id": stored_result.source_id,
-                    "source_parameter": stored_result.source_parameter,
-                    "path_index": path_index,
-                    "path": path,
-                }
-            )
-
+    missing_refs = [
+        ref for ref in source_refs if (ref.pattern.value, ref.source_id) not in loaded_keys
+    ]
+    missing_sources = _missing_sources_from_refs(missing_refs)
+    source = user_cache_result["source"]
+    if not user_cache_result["paths"]:
+        source = "none"
     return {
-        "source_count": len(_source_refs_from_input(scoring_input)),
+        "source": source,
+        "source_count": len(source_refs),
         "missing_sources": missing_sources,
-        "source_entries": source_entries,
-        "path_count": len(paths),
-        "paths": paths,
+        "source_entries": user_cache_result["source_entries"],
+        "path_count": len(user_cache_result["paths"]),
+        "paths": user_cache_result["paths"],
     }
+
+
+def load_direct_path_source_entries_for_cache(
+    scoring_input: DirectEntityScoringInput,
+    *,
+    config_path: str | Path,
+    request_base_date: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]], str]:
+    """Load direct raw path metadata without loading path rows."""
+    source_refs = _source_refs_from_input(scoring_input)
+    user_cache_result = _load_direct_paths_from_user_cache(
+        scoring_input,
+        config_path=config_path,
+        request_base_date=request_base_date,
+        include_paths=False,
+    )
+    loaded_keys = {
+        (str(entry.get("pattern")), str(entry.get("source_id")))
+        for entry in user_cache_result["source_entries"]
+        if isinstance(entry, dict)
+    }
+    missing_refs = [
+        ref for ref in source_refs if (ref.pattern.value, ref.source_id) not in loaded_keys
+    ]
+    source = user_cache_result["source"]
+    if not user_cache_result["source_entries"]:
+        source = "none"
+    return (
+        user_cache_result["source_entries"],
+        _missing_sources_from_refs(missing_refs),
+        source,
+    )
+
+
+def _load_direct_paths_from_user_cache(
+    scoring_input: DirectEntityScoringInput,
+    *,
+    config_path: str | Path,
+    request_base_date: str,
+    include_paths: bool = True,
+) -> dict[str, Any]:
+    settings = load_user_cache_settings(config_path)
+    source_refs = _source_refs_from_input(scoring_input)
+    result = _empty_direct_path_load_result(source_count=len(source_refs))
+    result["source"] = "user_cache"
+    if not settings.enabled:
+        return result
+    query_settings = load_query_settings(config_path)
+    path_key = build_direct_path_key(
+        base_date=request_base_date,
+        window_days=query_settings.direct_entity_path.window_days,
+        direct_path_limit=query_settings.direct_entity_path.direct_path_limit,
+    )
+    config_hash = build_raw_path_user_cache_config_hash(path_key)
+    store = UserCacheIndexStore(settings.sqlite_path)
+    for source_ref in source_refs:
+        entry = store.find_latest_valid_source_entry(
+            cache_type="raw_paths",
+            source_type=_source_type_from_pattern(source_ref.pattern),
+            source_id=source_ref.source_id,
+            query_family="direct_entity",
+            window_days=query_settings.direct_entity_path.window_days,
+            config_hash=config_hash,
+            request_base_date=request_base_date,
+        )
+        if entry is None:
+            continue
+        data_path = Path(entry.data_path)
+        if not data_path.exists():
+            store.delete_entry(entry)
+            LOGGER.warning(
+                "Deleted stale direct raw-path user-cache index entry because detail file is missing: source_type=%s, source_id=%s, data_path=%s",
+                entry.source_type,
+                entry.source_id,
+                data_path,
+            )
+            continue
+        source_entry = _source_entry_from_user_cache_entry(
+            entry,
+            source_ref=source_ref,
+            direct_path_limit=query_settings.direct_entity_path.direct_path_limit,
+        )
+        result["source_entries"].append(source_entry)
+        if include_paths:
+            stored_result = _load_stored_result(data_path)
+            for path_index, path in enumerate(stored_result.paths):
+                result["paths"].append(
+                    {
+                        "pattern": stored_result.pattern,
+                        "source_id": stored_result.source_id,
+                        "source_parameter": stored_result.source_parameter,
+                        "path_index": path_index,
+                        "path": path,
+                    }
+                )
+    result["path_count"] = len(result["paths"])
+    return result
+
+
+def _empty_direct_path_load_result(*, source_count: int) -> dict[str, Any]:
+    return {
+        "source": "none",
+        "source_count": source_count,
+        "missing_sources": [],
+        "source_entries": [],
+        "path_count": 0,
+        "paths": [],
+    }
+
+
+def _missing_sources_from_refs(
+    source_refs: list[DirectSourceRef],
+) -> list[dict[str, str]]:
+    return [
+        {"pattern": source_ref.pattern.value, "source_id": source_ref.source_id}
+        for source_ref in source_refs
+    ]
+
+
+def _source_entry_from_user_cache_entry(
+    entry: UserCacheEntry,
+    *,
+    source_ref: DirectSourceRef,
+    direct_path_limit: int,
+) -> dict[str, Any]:
+    payload = entry.payload if isinstance(entry.payload, dict) else {}
+    return {
+        "pattern": payload.get("pattern") or source_ref.pattern.value,
+        "source_id": payload.get("source_id") or source_ref.source_id,
+        "base_date": entry.cached_base_date,
+        "window_days": entry.window_days,
+        "path_key": payload.get("path_key"),
+        "direct_path_limit": direct_path_limit,
+    }
+
+
+def _source_type_from_pattern(pattern: PathPattern) -> str:
+    if pattern == PathPattern.DISEASE_TASKSET_PATIENT:
+        return "disease"
+    if pattern == PathPattern.SYMPTOM_TASKSET_PATIENT:
+        return "symptom"
+    if pattern == PathPattern.UNKNOWN_TASKSET_PATIENT:
+        return "unknown"
+    raise ValueError(f"Unsupported direct entity pattern: {pattern}")
 
 
 def _score_loaded_paths(
@@ -495,16 +626,6 @@ def _source_refs_from_input(
         for source_id in scoring_input.unknown_ids
     )
     return refs
-
-
-def _read_index(index_path: Path) -> dict[str, Any]:
-    if not index_path.exists():
-        raise FileNotFoundError(f"direct entity path index does not exist: {index_path}")
-    with index_path.open("r", encoding="utf-8") as file:
-        data = json.load(file)
-    if not isinstance(data, dict):
-        raise ValueError(f"direct entity path index must be a mapping: {index_path}")
-    return data
 
 
 def save_scored_direct_entity_result(

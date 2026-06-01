@@ -9,6 +9,7 @@ from scripts.predict_training_tasks_from_direct_entity import (
     _score_direct_entity_paths_with_auto_refresh,
     normalize_direct_entity_education,
     normalize_direct_entity_gender,
+    predict_training_tasks_from_direct_entity,
     resolve_direct_entity_names,
 )
 from src.similar_user.services.similarity import SimilarUserCandidateService
@@ -122,6 +123,74 @@ class PredictTrainingTasksFromDirectEntityTest(unittest.TestCase):
         resolver.resolve_names.assert_called_once_with(
             [" 注意缺陷多动障碍 ", "未知疾病", "注意缺陷多动障碍"]
         )
+
+    @patch("scripts.predict_training_tasks_from_direct_entity.TrainingTaskPredictionService")
+    @patch("scripts.predict_training_tasks_from_direct_entity.UserService")
+    @patch("scripts.predict_training_tasks_from_direct_entity.KgRepository")
+    @patch("scripts.predict_training_tasks_from_direct_entity.Neo4jClient")
+    @patch("scripts.predict_training_tasks_from_direct_entity._score_direct_entity_paths_with_auto_refresh")
+    @patch("scripts.predict_training_tasks_from_direct_entity.load_cached_topk_candidate_result")
+    @patch("scripts.predict_training_tasks_from_direct_entity.load_direct_path_source_entries_for_cache")
+    def test_predict_uses_topk_cache_before_loading_raw_paths(
+        self,
+        mock_source_entries: Mock,
+        mock_load_topk: Mock,
+        mock_score_paths: Mock,
+        mock_neo4j_client: Mock,
+        mock_repository: Mock,
+        mock_user_service: Mock,
+        mock_prediction_service_class: Mock,
+    ) -> None:
+        mock_source_entries.return_value = (
+            [
+                {
+                    "pattern": "DISEASE_TASKSET_PATIENT",
+                    "source_id": "D1",
+                    "base_date": "2026-05-25",
+                    "window_days": 180,
+                    "path_key": "base_2026-05-25_window_180_directcfg_abcdef12",
+                    "direct_path_limit": 1000,
+                }
+            ],
+            [],
+            "user_cache",
+        )
+        mock_load_topk.return_value = {
+            "source_id": "non_patient_1",
+            "source_parameter": "manual_profile",
+            "candidate_count": 1,
+            "candidates": [{"patient_id": "P1"}],
+            "user_cache_hit": True,
+            "user_cache_data_path": "cached.detail.json",
+        }
+        mock_client_context = Mock()
+        mock_client_context.__enter__ = Mock(return_value=Mock())
+        mock_client_context.__exit__ = Mock(return_value=False)
+        mock_neo4j_client.from_config.return_value = mock_client_context
+        mock_prediction_service = Mock()
+        mock_prediction_service.predict_from_direct_entity_candidates.return_value = {
+            "predicted_training_tasks": [{"game_id": "433"}],
+            "candidate_training_tasks": [{"game_id": "433"}],
+        }
+        mock_prediction_service_class.return_value = mock_prediction_service
+
+        result = predict_training_tasks_from_direct_entity(
+            patient_id="non_patient_1",
+            base_date="2026-05-25",
+            age=66,
+            education="本科",
+            gender="男",
+            disease_ids=["D1"],
+            config_path="config/settings.yaml",
+            use_llm=False,
+        )
+
+        self.assertEqual(result["direct_entity_candidate_result"]["user_cache_hit"], True)
+        mock_load_topk.assert_called_once()
+        mock_score_paths.assert_not_called()
+        mock_repository.assert_called_once()
+        mock_user_service.assert_called_once()
+        mock_prediction_service.predict_from_direct_entity_candidates.assert_called_once()
 
     @patch("scripts.predict_training_tasks_from_direct_entity.build_direct_entity_paths")
     @patch("scripts.predict_training_tasks_from_direct_entity.score_direct_entity_paths")

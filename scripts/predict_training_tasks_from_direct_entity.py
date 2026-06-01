@@ -65,14 +65,18 @@ from similar_user.utils.logger import get_logger  # noqa: E402
 from scripts.score_pattern_paths import DEFAULT_CONFIG_PATH  # noqa: E402
 from scripts.score_direct_entity_paths import (  # noqa: E402
     DEFAULT_SCORED_OUTPUT_DIR,
+    build_direct_entity_scored_cache_context,
+    load_direct_path_source_entries_for_cache,
     save_scored_direct_entity_result,
     score_direct_entity_paths,
 )
 from scripts.build_similar_user_candidates import (  # noqa: E402
     DEFAULT_CANDIDATES_DIR,
+    build_direct_entity_scored_key,
     build_direct_entity_candidate_cache_context,
     build_direct_entity_topk_candidate_user_cache_context,
     load_cached_topk_candidate_result,
+    load_saved_direct_entity_scored_results,
     save_similar_user_candidates_result,
 )
 from scripts.build_direct_entity_paths import build_direct_entity_paths  # noqa: E402
@@ -80,6 +84,7 @@ from similar_user.data_access.algorithm_request_results import (  # noqa: E402
     normalize_algorithm_request_education,
     normalize_algorithm_request_gender,
 )
+from similar_user.services.direct_entity_scoring_input import resolve_scoring_input  # noqa: E402
 
 
 LOGGER = get_logger(__name__)
@@ -267,7 +272,7 @@ def predict_training_tasks_from_direct_entity(
     }
 
     if has_direct_entities:
-        direct_score_result = _score_direct_entity_paths_with_auto_refresh(
+        direct_cache_probe_result = _build_direct_entity_cache_probe_result(
             config_path=resolved_config_path,
             patient_id=normalized_patient_id,
             base_date=base_date,
@@ -279,34 +284,17 @@ def predict_training_tasks_from_direct_entity(
             unknown_ids=resolved_unknown_ids,
             top_k=query_settings.score_pattern_paths.top_k,
         )
-        LOGGER.info(
-            "Scored direct entity paths: patient_id=%s, source_count=%s, path_count=%s, scored_path_count=%s, missing_source_count=%s",
-            normalized_patient_id,
-            direct_score_result.get("source_count"),
-            direct_score_result.get("path_count"),
-            direct_score_result.get("scored_path_count"),
-            len(direct_score_result.get("missing_sources") or []),
-        )
-        missing_sources = direct_score_result.get("missing_sources")
-        if isinstance(missing_sources, list) and missing_sources:
-            LOGGER.warning(
-                "Some direct entity sources were not found in local path cache: patient_id=%s, missing_sources=%s",
-                normalized_patient_id,
-                missing_sources,
-            )
-        direct_score_output_paths = save_scored_direct_entity_result(
-            direct_score_result,
-            scored_paths_dir,
-            config_path=resolved_config_path,
-        )
+        direct_score_result = direct_cache_probe_result
         candidate_cache_context = build_direct_entity_candidate_cache_context(
             resolved_config_path,
-            scored_result=direct_score_result,
+            scored_result=direct_cache_probe_result,
             disease_course_window_days=candidate_window_days,
         )
         candidate_user_cache_context = build_direct_entity_topk_candidate_user_cache_context(
             resolved_config_path,
-            source_id=str(direct_score_result.get("source_id") or normalized_patient_id),
+            source_id=str(
+                direct_cache_probe_result.get("source_id") or normalized_patient_id
+            ),
             base_date=base_date,
             candidate_cache_context=candidate_cache_context,
         )
@@ -324,6 +312,80 @@ def predict_training_tasks_from_direct_entity(
                 candidate_result.get("user_cache_data_path"),
             )
         else:
+            LOGGER.info(
+                "Direct entity topK candidates cache miss: patient_id=%s, source_id=%s, query_family=%s, cached_base_date=%s, config_hash=%s",
+                normalized_patient_id,
+                candidate_user_cache_context.get("source_id"),
+                candidate_user_cache_context.get("query_family"),
+                candidate_user_cache_context.get("cached_base_date"),
+                candidate_user_cache_context.get("config_hash"),
+            )
+            direct_score_result = _load_cached_direct_entity_scored_result(
+                config_path=resolved_config_path,
+                patient_id=normalized_patient_id,
+                base_date=base_date,
+                scored_paths_dir=scored_paths_dir,
+                expected_probe_result=direct_cache_probe_result,
+            )
+            if direct_score_result is None:
+                LOGGER.info(
+                    "Direct entity scored paths cache miss; loading raw paths before scoring: patient_id=%s, base_date=%s",
+                    normalized_patient_id,
+                    base_date,
+                )
+                direct_score_result = _score_direct_entity_paths_with_auto_refresh(
+                    config_path=resolved_config_path,
+                    patient_id=normalized_patient_id,
+                    base_date=base_date,
+                    age=age,
+                    education=normalized_education,
+                    gender=normalized_gender,
+                    disease_ids=resolved_disease_ids,
+                    symptom_ids=resolved_symptom_ids,
+                    unknown_ids=resolved_unknown_ids,
+                    top_k=query_settings.score_pattern_paths.top_k,
+                )
+                LOGGER.info(
+                    "Scored direct entity paths: patient_id=%s, source_count=%s, path_count=%s, scored_path_count=%s, missing_source_count=%s",
+                    normalized_patient_id,
+                    direct_score_result.get("source_count"),
+                    direct_score_result.get("path_count"),
+                    direct_score_result.get("scored_path_count"),
+                    len(direct_score_result.get("missing_sources") or []),
+                )
+                missing_sources = direct_score_result.get("missing_sources")
+                if isinstance(missing_sources, list) and missing_sources:
+                    LOGGER.warning(
+                        "Some direct entity sources were not found in local path cache: patient_id=%s, missing_sources=%s",
+                        normalized_patient_id,
+                        missing_sources,
+                    )
+                direct_score_output_paths = save_scored_direct_entity_result(
+                    direct_score_result,
+                    scored_paths_dir,
+                    config_path=resolved_config_path,
+                )
+                candidate_cache_context = build_direct_entity_candidate_cache_context(
+                    resolved_config_path,
+                    scored_result=direct_score_result,
+                    disease_course_window_days=candidate_window_days,
+                )
+                candidate_user_cache_context = build_direct_entity_topk_candidate_user_cache_context(
+                    resolved_config_path,
+                    source_id=str(
+                        direct_score_result.get("source_id") or normalized_patient_id
+                    ),
+                    base_date=base_date,
+                    candidate_cache_context=candidate_cache_context,
+                )
+            else:
+                LOGGER.info(
+                    "Loaded direct entity scored paths from user cache: patient_id=%s, source_count=%s, path_count=%s, scored_path_count=%s",
+                    normalized_patient_id,
+                    direct_score_result.get("source_count"),
+                    direct_score_result.get("path_count"),
+                    direct_score_result.get("scored_path_count"),
+                )
             candidate_result = (
                 SimilarUserCandidateService()
                 .aggregate_candidates_from_direct_entity_scored_result(
@@ -521,45 +583,19 @@ def _score_direct_entity_paths_with_auto_refresh(
     unknown_ids: list[str],
     top_k: int | None,
 ) -> dict[str, Any]:
-    try:
-        result = score_direct_entity_paths(
-            config_path=config_path,
-            patient_id=patient_id,
-            base_date=base_date,
-            age=age,
-            education=education,
-            gender=gender,
-            disease_ids=disease_ids,
-            symptom_ids=symptom_ids,
-            unknown_ids=unknown_ids,
-            top_k=top_k,
-            force_manual_input=True,
-        )
-    except FileNotFoundError:
-        LOGGER.info(
-            "Direct raw path index missing; rebuilding direct entity paths before scoring: patient_id=%s, base_date=%s",
-            patient_id,
-            base_date,
-        )
-        build_direct_entity_paths(
-            config_path=config_path,
-            disease_ids=disease_ids,
-            symptom_ids=symptom_ids,
-            unknown_ids=unknown_ids,
-        )
-        return score_direct_entity_paths(
-            config_path=config_path,
-            patient_id=patient_id,
-            base_date=base_date,
-            age=age,
-            education=education,
-            gender=gender,
-            disease_ids=disease_ids,
-            symptom_ids=symptom_ids,
-            unknown_ids=unknown_ids,
-            top_k=top_k,
-            force_manual_input=True,
-        )
+    result = score_direct_entity_paths(
+        config_path=config_path,
+        patient_id=patient_id,
+        base_date=base_date,
+        age=age,
+        education=education,
+        gender=gender,
+        disease_ids=disease_ids,
+        symptom_ids=symptom_ids,
+        unknown_ids=unknown_ids,
+        top_k=top_k,
+        force_manual_input=True,
+    )
 
     missing_sources = result.get("missing_sources")
     if isinstance(missing_sources, list) and missing_sources:
@@ -589,6 +625,150 @@ def _score_direct_entity_paths_with_auto_refresh(
             force_manual_input=True,
         )
     return result
+
+
+def _build_direct_entity_cache_probe_result(
+    *,
+    config_path: str | Path,
+    patient_id: str,
+    base_date: str,
+    age: int | str,
+    education: str,
+    gender: str,
+    disease_ids: list[str],
+    symptom_ids: list[str],
+    unknown_ids: list[str],
+    top_k: int | None,
+) -> dict[str, Any]:
+    """Build direct-entity cache metadata without reading raw path files."""
+    resolution = resolve_scoring_input(
+        kg_repository=None,
+        patient_id=patient_id,
+        base_date=base_date,
+        age=age,
+        education=education,
+        gender=gender,
+        disease_ids=disease_ids,
+        symptom_ids=symptom_ids,
+        unknown_ids=unknown_ids,
+        force_manual_input=True,
+    )
+    if not resolution.should_score or resolution.scoring_input is None:
+        return {
+            "should_score": False,
+            "reason": resolution.reason,
+            "scoring_input": None,
+            "source_id": patient_id,
+            "source_parameter": "manual_profile",
+            "source_count": 0,
+            "missing_sources": [],
+            "path_count": 0,
+            "scored_path_count": 0,
+            "top_k": top_k,
+            "scores": [],
+            "cache_context": build_direct_entity_scored_cache_context(
+                base_date=base_date,
+                source_entries=[],
+                top_k=top_k,
+            ),
+        }
+    scoring_input_payload = resolution.scoring_input.to_dict()
+    source_entries, missing_sources, raw_path_source = load_direct_path_source_entries_for_cache(
+        resolution.scoring_input,
+        config_path=config_path,
+        request_base_date=base_date,
+    )
+    LOGGER.info(
+        "Resolved direct entity raw path metadata for cache lookup: patient_id=%s, source=%s, source_count=%s, missing_source_count=%s",
+        patient_id,
+        raw_path_source,
+        len(_direct_entity_source_refs(scoring_input_payload)),
+        len(missing_sources),
+    )
+    return {
+        "should_score": True,
+        "reason": resolution.reason,
+        "base_date": base_date,
+        "scoring_input": scoring_input_payload,
+        "source_count": len(_direct_entity_source_refs(scoring_input_payload)),
+        "missing_sources": missing_sources,
+        "path_count": 0,
+        "scored_path_count": 0,
+        "top_k": top_k,
+        "scores": [],
+        "cache_context": build_direct_entity_scored_cache_context(
+            base_date=base_date,
+            source_entries=source_entries,
+            top_k=top_k,
+        ),
+        "source_id": patient_id,
+        "source_parameter": "manual_profile",
+        "pattern": "DIRECT_ENTITY_PATHS",
+    }
+
+
+def _load_cached_direct_entity_scored_result(
+    *,
+    config_path: str | Path,
+    patient_id: str,
+    base_date: str,
+    scored_paths_dir: str | Path,
+    expected_probe_result: dict[str, Any],
+) -> dict[str, Any] | None:
+    scored_results = load_saved_direct_entity_scored_results(
+        patient_id,
+        scored_paths_dir=scored_paths_dir,
+        direct_scored_key=build_direct_entity_scored_key(
+            base_date=base_date,
+            score_top_k=expected_probe_result.get("top_k"),
+        ),
+        config_path=config_path,
+    )
+    expected_scoring_input = expected_probe_result.get("scoring_input")
+    expected_context = expected_probe_result.get("cache_context")
+    if not isinstance(expected_context, dict):
+        return None
+    expected_pattern_keys = expected_context.get("pattern_source_keys")
+    if not isinstance(expected_pattern_keys, dict):
+        expected_pattern_keys = {}
+
+    matched_results: list[dict[str, Any]] = []
+    for result in scored_results:
+        if result.get("scoring_input") != expected_scoring_input:
+            continue
+        pattern = result.get("pattern")
+        source_key = result.get("direct_path_source_key")
+        if isinstance(pattern, str) and expected_pattern_keys.get(pattern) != source_key:
+            continue
+        matched_results.append(result)
+    if not matched_results:
+        return None
+
+    scores: list[dict[str, Any]] = []
+    path_count = 0
+    for result in matched_results:
+        raw_scores = result.get("scores")
+        if isinstance(raw_scores, list):
+            scores.extend(item for item in raw_scores if isinstance(item, dict))
+        path_count += int(result.get("path_count") or 0)
+
+    merged = dict(expected_probe_result)
+    merged["path_count"] = path_count
+    merged["scored_path_count"] = len(scores)
+    merged["scores"] = scores
+    merged["user_cache_hit"] = True
+    return merged
+
+
+def _direct_entity_source_refs(scoring_input: dict[str, Any]) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    for source_id in _dedupe_texts(scoring_input.get("disease_ids") or []):
+        refs.append({"pattern": "DISEASE_TASKSET_PATIENT", "source_id": source_id})
+    for source_id in _dedupe_texts(scoring_input.get("symptom_ids") or []):
+        refs.append({"pattern": "SYMPTOM_TASKSET_PATIENT", "source_id": source_id})
+    for source_id in _dedupe_texts(scoring_input.get("unknown_ids") or []):
+        refs.append({"pattern": "UNKNOWN_TASKSET_PATIENT", "source_id": source_id})
+    return refs
 
 
 def _direct_refresh_ids_from_missing_sources(
