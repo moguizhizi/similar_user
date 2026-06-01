@@ -752,6 +752,8 @@ def _register_raw_path_user_cache(
     store = UserCacheIndexStore(
         _normalize_required_string(user_cache_context.get("sqlite_path"), "sqlite_path")
     )
+    raw_paths = result.retrieval_context.get("paths", [])
+    path_count = len(raw_paths) if isinstance(raw_paths, list) else None
     entry = UserCacheEntry(
         cache_type="raw_paths",
         patient_id=_normalize_required_string(
@@ -788,6 +790,7 @@ def _register_raw_path_user_cache(
             "path_config_hash": user_cache_context.get("path_config_hash"),
             "source_type": user_cache_context.get("source_type"),
             "source_id": user_cache_context.get("source_id"),
+            "path_count": path_count,
         },
         source_type=_normalize_required_string(
             user_cache_context.get("source_type"),

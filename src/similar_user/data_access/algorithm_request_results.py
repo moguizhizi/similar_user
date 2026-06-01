@@ -14,6 +14,54 @@ DEFAULT_ALGORITHM_REQUEST_RESULTS_PATH = Path(
     "20260525_Algorithm_Request_Results.csv"
 )
 
+ALGORITHM_REQUEST_GENDER_LABELS = {
+    "1": "男",
+    "1.0": "男",
+    "男": "男",
+    "男性": "男",
+    "2": "女",
+    "2.0": "女",
+    "女": "女",
+    "女性": "女",
+}
+
+ALGORITHM_REQUEST_EDUCATION_LABELS = {
+    "12": "未上过学",
+    "12.0": "未上过学",
+    "13": "小学",
+    "13.0": "小学",
+    "14": "初中",
+    "14.0": "初中",
+    "15": "高中",
+    "15.0": "高中",
+    "16": "大专",
+    "16.0": "大专",
+    "17": "本科",
+    "17.0": "本科",
+    "18": "研究生",
+    "18.0": "研究生",
+    "19": "博士",
+    "19.0": "博士",
+    "20": "保密",
+    "20.0": "保密",
+    "21": "中专",
+    "21.0": "中专",
+    "22": "大专",
+    "22.0": "大专",
+    "小学": "小学",
+    "初中": "初中",
+    "高中": "高中",
+    "中专": "中专",
+    "大专": "大专",
+    "专科": "大专",
+    "本科": "本科",
+    "研究生": "研究生",
+    "硕士": "研究生",
+    "博士": "博士",
+    "未上过学": "未上过学",
+    "保密": "保密",
+}
+
 
 @dataclass(frozen=True)
 class AlgorithmRequestResultRecord:
@@ -60,6 +108,28 @@ def normalize_patient_id(patient_id: str | int) -> str:
     if normalized.endswith("_old"):
         normalized = normalized[: -len("_old")]
     return normalized
+
+
+def normalize_algorithm_request_gender(value: object) -> str:
+    """Normalize algorithm request gender code or label into KG-facing text."""
+    text = _normalize_optional_text(value)
+    if text is None:
+        raise ValueError("gender is required.")
+    try:
+        return ALGORITHM_REQUEST_GENDER_LABELS[text]
+    except KeyError as exc:
+        raise ValueError(f"unsupported gender value: {value}") from exc
+
+
+def normalize_algorithm_request_education(value: object) -> str:
+    """Normalize algorithm request education code or label into KG-facing text."""
+    text = _normalize_optional_text(value)
+    if text is None:
+        raise ValueError("education is required.")
+    try:
+        return ALGORITHM_REQUEST_EDUCATION_LABELS[text]
+    except KeyError as exc:
+        raise ValueError(f"unsupported education value: {value}") from exc
 
 
 def load_algorithm_request_results(
@@ -127,3 +197,10 @@ def _literal_eval_cell(value: str, row_number: int, column_name: str) -> Any:
         raise ValueError(
             f"Failed to parse {column_name} at row {row_number}: {exc}"
         ) from exc
+
+
+def _normalize_optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None

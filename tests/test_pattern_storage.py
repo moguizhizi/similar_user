@@ -533,6 +533,7 @@ class PatternStorageTest(unittest.TestCase):
         self.assertEqual(found.valid_days, 30)
         self.assertEqual(found.data_path, str(output_path))
         self.assertEqual(found.payload["path_key"], path_key)
+        self.assertEqual(found.payload["path_count"], 0)
         self.assertIn(
             str(root / "user_cache" / "files" / "patient" / "30" / "30010096"),
             str(output_path),

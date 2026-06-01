@@ -249,6 +249,99 @@ topK candidates 主要由以下因素决定：
 
 一句话规则：改了 path 层参数就要有新的 path；改了 scoring 层参数就要有新的 scored path；只改候选或 prompt 参数时，通常可以复用前两层缓存。
 
+### 用户缓存 SQLite 索引表
+
+开启 `user_cache.enabled` 后，raw paths、scored paths 和 topK candidates 的文件会保存到 `user_cache.sqlite_path` 同级目录下的 `files/` 中；SQLite 只负责保存索引。比如：
+
+```yaml
+user_cache:
+  enabled: true
+  sqlite_path: "data/user_cache/cache_index.sqlite"
+```
+
+对应文件根目录是：
+
+```text
+data/user_cache/files/...
+```
+
+如果实验配置把 `sqlite_path` 改成：
+
+```yaml
+user_cache.sqlite_path: "data/user_cache/cache_missing_scenarios_10/cache_index.sqlite"
+```
+
+对应文件根目录就是：
+
+```text
+data/user_cache/cache_missing_scenarios_10/files/...
+```
+
+用户中心缓存索引表只有一张核心表：`user_cache_entries`，定义在 `src/similar_user/data_access/user_cache_index.py`。它记录每个缓存文件属于哪个 source、哪一层缓存、哪组配置和哪个 base date。
+
+主要字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `cache_type` | 缓存层级，支持 `raw_paths`、`scored_paths`、`scored_direct_entity_paths`、`topk_candidates` |
+| `patient_id` | 消费该缓存的患者 ID；direct entity 场景也会填一个稳定 source ID |
+| `source_type` | source 类型，例如 `patient` 或 `direct_entity_profile` |
+| `source_id` | source 唯一 ID；患者场景通常等于 `patient_id` |
+| `query_family` | 查询族，例如 `training_order_dual_window` |
+| `window_days` | path 或候选窗口天数 |
+| `config_hash` | 当前缓存层配置 hash；raw/scored/topK 各自独立 |
+| `cached_base_date` | 这条缓存生成时使用的 base date |
+| `valid_days` | 这条缓存从 `cached_base_date` 起可复用多少天 |
+| `data_path` | 实际 detail/raw 文件路径 |
+| `payload_json` | 附加上下文，例如 path key、score top_k、candidate key 组成信息 |
+| `created_at` / `updated_at` | 索引写入和更新时间 |
+
+缓存是否有效由 `cached_base_date` 和 `valid_days` 决定：
+
+```text
+0 <= request_base_date - cached_base_date <= valid_days
+```
+
+例如 `request_base_date=2026-05-25`、`cached_base_date=2026-05-17`、`valid_days=7` 时，差值为 8 天，所以这条缓存过期。
+
+常用查看命令：
+
+```bash
+sqlite3 data/user_cache/cache_missing_scenarios_10/cache_index.sqlite \
+"SELECT cache_type, patient_id, source_type, source_id, query_family,
+        cached_base_date, valid_days, data_path
+ FROM user_cache_entries
+ WHERE patient_id='30134797'
+ ORDER BY cache_type, data_path;"
+```
+
+标记某个患者的 topK candidates 过期时，可以只改索引，不删文件：
+
+```bash
+sqlite3 data/user_cache/cache_missing_scenarios_10/cache_index.sqlite \
+"UPDATE user_cache_entries
+ SET cached_base_date='2026-05-17'
+ WHERE cache_type='topk_candidates'
+   AND patient_id='30134797';"
+```
+
+验证 topK 过期场景时，预期流程是：
+
+```text
+topK candidates 过期
+-> scored paths 仍有效
+-> 不 rebuild raw
+-> 不 rescore paths
+-> 从 scored paths 重新聚合 topK candidates
+-> 写入新的 topK candidates 索引和文件
+```
+
+验证 scored paths 缺失时，可以删除对应患者的 `scored_paths/` 和 `topk_candidates/` 文件，让索引指向不存在的文件；读取时会懒删除 stale index，然后从有效 raw paths 重新评分。
+
+验证 raw paths 缺失时，可以删除对应患者的 `raw_paths/`、`scored_paths/` 和 `topk_candidates/` 文件；读取时会懒删除 stale index，然后从 Neo4j 重新 build raw paths，再评分并生成 topK candidates。
+
+另有一套 direct path SQLite 缓存用于非患者 direct entity path 查询，核心表在 `src/similar_user/data_access/direct_path_cache_store.py` 中，包括 `direct_paths`、`source_nodes`、`taskset_nodes`、`patient_nodes` 和 `direct_path_sync_state`。这套表服务于 direct path 本身的离线同步，和上面的 `user_cache_entries` 用户中心 pipeline 缓存索引是两套机制。
+
 ## 目录说明
 
 - `config/`：统一 YAML 配置和配置加载入口

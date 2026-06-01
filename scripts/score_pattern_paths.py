@@ -199,6 +199,14 @@ def score_pattern_paths(
         base_date=base_date,
         query_family=query_family,
     )
+    LOGGER.info(
+        "Loaded raw pattern paths for scoring: source_id=%s, pattern=%s, path_count=%s, base_date=%s, query_family=%s",
+        stored_result.source_id,
+        stored_result.pattern,
+        len(stored_result.paths),
+        (stored_result.retrieval_context or {}).get("base_date"),
+        (stored_result.retrieval_context or {}).get("query_family"),
+    )
     scorer = get_path_scorer(stored_result.pattern)
     domain_paths = stored_result.to_domain_paths()
 

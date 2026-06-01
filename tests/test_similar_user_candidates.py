@@ -21,6 +21,7 @@ from scripts.build_similar_user_candidates import (
     build_topk_candidate_user_cache_context,
     build_similar_user_candidate_summary,
     build_similar_user_candidates as _build_similar_user_candidates,
+    classify_skipped_scored_patterns,
     load_cached_topk_candidate_result,
     load_saved_scored_pattern_result,
     main,
@@ -91,6 +92,67 @@ class SimilarUserCandidatesTest(unittest.TestCase):
                 score_top_k=50,
             ),
             "base_2024-01-31_qf_direct_entity_scoretopk_50",
+        )
+
+    def test_classify_skipped_scored_patterns_uses_empty_raw_path_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "graph_path_limit:",
+                        "  bands:",
+                        "    - per_g: 1",
+                        "patient_path:",
+                        "  window_days: 14",
+                        "score_pattern_paths:",
+                        "  top_k: 150",
+                        "user_cache:",
+                        "  enabled: true",
+                        f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            path_key = build_path_key(
+                config_path,
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+            )
+            scored_key = build_scored_key(path_key, 150)
+            save_pattern_result(
+                {
+                    "patient_id": "30010096",
+                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                    "retrieval_context": {
+                        "base_date": "2024-01-31",
+                        "query_family": "training_order_source_window",
+                        "path_window": {
+                            "start_date": "2024-01-17",
+                            "end_date": "2024-01-31",
+                        },
+                        "paths": [],
+                    },
+                },
+                config_path,
+            )
+
+            empty_raw_patterns, refresh_patterns = classify_skipped_scored_patterns(
+                config_path,
+                patient_id="30010096",
+                patterns=("patient_game_patient", "patient_disease_patient"),
+                scored_key=scored_key,
+                request_base_date="2024-01-31",
+            )
+
+        self.assertEqual(
+            empty_raw_patterns,
+            ["PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT"],
+        )
+        self.assertEqual(
+            refresh_patterns,
+            ["PATIENT_TASKSET_DISEASE_TASKSET_PATIENT"],
         )
 
     @patch("similar_user.services.similarity.candidate_service.LOGGER")
@@ -2264,6 +2326,74 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             "scored_paths/training_order_source_window/window_14",
             str(scored_output_paths["detail"]),
         )
+
+    def test_build_similar_user_candidates_rejects_expired_scored_path_user_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(root)
+            scored_paths_dir = root / "scored_pattern_paths"
+            old_path_key = build_path_key(
+                config_path,
+                base_date="2024-01-01",
+                query_family="training_order_source_window",
+            )
+            old_scored_key = build_scored_key(old_path_key, 150)
+            scored_cache_context = {
+                "cache_type": "scored_pattern_paths",
+                "path_key": old_path_key,
+                "scored_key": old_scored_key,
+                "score_top_k": 150,
+            }
+            save_scored_pattern_result(
+                {
+                    "source_id": "30010096",
+                    "source_parameter": "patient_id",
+                    "pattern": "PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT",
+                    "path_count": 1,
+                    "scored_path_count": 1,
+                    "retrieval_context": {
+                        "base_date": "2024-01-01",
+                        "path_window": {
+                            "start_date": "2023-12-18",
+                            "end_date": "2024-01-01",
+                        },
+                        "score_end_date": "2024-01-01",
+                    },
+                    "scores": [
+                        {
+                            "path_index": 0,
+                            "score": {"total_score": 95.0},
+                            "path": {
+                                "row": {
+                                    "p": {"id": "30010096"},
+                                    "i1": {"任务类型": "专属", "结果": "完成"},
+                                    "g": {"id": "348", "name": "真假句辨别"},
+                                    "i2": {"任务类型": "专属", "结果": "完成", "活跃": "是"},
+                                    "p2": {"id": "20113562"},
+                                }
+                            },
+                        }
+                    ],
+                    "cache_context": scored_cache_context,
+                    "user_cache_context": build_scored_path_user_cache_context(
+                        config_path,
+                        source_id="30010096",
+                        base_date="2024-01-01",
+                        query_family="training_order_source_window",
+                        scored_cache_context=scored_cache_context,
+                    ),
+                },
+                scored_paths_dir,
+            )
+
+            with self.assertRaisesRegex(FileNotFoundError, "Patient scored paths missing or expired"):
+                build_similar_user_candidates(
+                    "30010096",
+                    config_path=config_path,
+                    scored_paths_dir=scored_paths_dir,
+                    base_date="2024-02-03",
+                    query_family="training_order_source_window",
+                )
 
     @patch("scripts.build_similar_user_candidates.LOGGER")
     @patch("scripts.build_similar_user_candidates.parse_args")

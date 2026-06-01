@@ -1,0 +1,68 @@
+stage: "cache-missing-scenarios-10-users"
+
+base:
+  base_date: "2026-05-25"
+  window_days: 14
+  task_top_k: 7
+  use_llm: true
+  limit: 10
+  query_family: "training_order_dual_window"
+
+baseline_overrides:
+  # 独立缓存目录，避免污染 cache-validation-10-users 已验证缓存。
+  # SQLite: data/user_cache/cache_missing_scenarios_10/cache_index.sqlite
+  # Files:  data/user_cache/cache_missing_scenarios_10/files/...
+  user_cache.enabled: true
+  user_cache.sqlite_path: "data/user_cache/cache_missing_scenarios_10/cache_index.sqlite"
+  user_cache.raw_path_build_workers: 1
+  user_cache.raw_path_build_max_retries: 2
+  user_cache.raw_path_build_retry_sleep_seconds: 5
+
+  query.training_task_evaluation.workers: 1
+  query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+  query.training_task_prediction.prompt_candidate_compression_enabled: false
+  query.score_pattern_paths.top_k: 150
+  query.candidate_ranking.disease_course_window_days: 14
+  query.candidate_ranking.total_score_match_top_k: 1
+
+experiments:
+  - name: warmup_all_cache
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+  
+  # 运行本实验前，先删除 topK candidates 缓存，保留 raw/scored。
+  # 预期：不 rebuild raw，不 rescore paths，从 scored paths 重新聚合 topK candidates。
+  - name: topk_missing_rebuild_from_scored
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+
+  # 运行本实验前，先删除 scored paths 和 topK candidates，保留 raw paths。
+  # 预期：不 rebuild raw，重新 score paths，再生成 topK candidates。
+  - name: scored_missing_rescore_from_raw
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+
+  # 运行本实验前，删除 raw paths、scored paths、topK candidates。
+  # 预期：重新 build raw paths -> score paths -> topK candidates。
+  - name: raw_missing_rebuild_all
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+
+  # 运行本实验前，将 topK candidates 标记为过期，保留有效 scored paths。
+  # 预期：topK miss/expired，从 scored paths 重新聚合 topK candidates。
+  - name: topk_expired_rebuild_from_scored
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+  
+  
+  # 运行本实验前，将 scored paths 标记为过期。
+  # 预期：重新 score paths，再生成 topK candidates。
+  - name: scored_expired_rescore_from_raw
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1

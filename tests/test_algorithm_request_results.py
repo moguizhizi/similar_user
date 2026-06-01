@@ -10,6 +10,8 @@ from pathlib import Path
 from similar_user.data_access.algorithm_request_results import (
     get_algorithm_request_result,
     load_algorithm_request_results,
+    normalize_algorithm_request_education,
+    normalize_algorithm_request_gender,
     normalize_patient_id,
 )
 
@@ -19,6 +21,15 @@ class AlgorithmRequestResultsTest(unittest.TestCase):
         self.assertEqual(normalize_patient_id("20123188_old"), "20123188")
         self.assertEqual(normalize_patient_id("20123188"), "20123188")
         self.assertEqual(normalize_patient_id(20123188), "20123188")
+
+    def test_normalize_algorithm_request_demographics(self) -> None:
+        self.assertEqual(normalize_algorithm_request_gender(1), "男")
+        self.assertEqual(normalize_algorithm_request_gender(2), "女")
+        self.assertEqual(normalize_algorithm_request_education(12), "未上过学")
+        self.assertEqual(normalize_algorithm_request_education(15), "高中")
+        self.assertEqual(normalize_algorithm_request_education(16), "大专")
+        self.assertEqual(normalize_algorithm_request_education(22), "大专")
+        self.assertEqual(normalize_algorithm_request_education("硕士"), "研究生")
 
     def test_get_by_patient_id_returns_matching_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
