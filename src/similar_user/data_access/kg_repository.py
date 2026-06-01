@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -38,6 +39,15 @@ from .pattern_registry import (
 
 LOGGER = get_logger(__name__)
 DEFAULT_PATH_LIMITS = [500, 1000, 2000, 3000, 5000]
+LIGHTWEIGHT_STATISTICS_ENV = "SIMILAR_USER_LIGHTWEIGHT_STATS"
+
+
+def _lightweight_statistics_enabled() -> bool:
+    """Return whether source-side group-count statistics are enabled."""
+    value = os.environ.get(LIGHTWEIGHT_STATISTICS_ENV)
+    return value is not None and value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 DEFAULT_CONFIG_PATH = Path("config/settings.yaml")
 
 
@@ -1682,9 +1692,10 @@ class KgRepository:
         if not normalized_patient_id:
             raise ValueError("patient_id must be a non-empty string.")
 
-        query = self._select_pattern_statistics_query(
-            spec.queries,
-            normalized_query_family,
+        query = self._select_pattern_statistics_query_for_pattern(
+            pattern=spec.pattern,
+            queries=spec.queries,
+            query_family=normalized_query_family,
             date_window=date_window,
         )
         parameters: dict[str, object] = {"patient_id": normalized_patient_id}
@@ -1992,12 +2003,12 @@ class KgRepository:
 
     def recommend_graph_path_limit(
         self,
-        total_paths: int,
+        total_paths: int | None,
         g_count: int,
         p2_count: int,
     ) -> GraphPathLimitRecommendation:
         """Derive a Cypher limit from fixed-pattern graph statistics."""
-        if total_paths < 0:
+        if total_paths is not None and total_paths < 0:
             raise ValueError("total_paths must be a non-negative integer.")
         if g_count < 0:
             raise ValueError("g_count must be a non-negative integer.")
@@ -2067,6 +2078,20 @@ class KgRepository:
     ) -> str:
         """Select the static statistics query for one family and date shape."""
         return queries.family(query_family.value).statistics.select(date_window)
+
+    @staticmethod
+    def _select_pattern_statistics_query_for_pattern(
+        *,
+        pattern: PathPattern,
+        queries: PatternQuerySet,
+        query_family: PatternQueryFamily,
+        date_window: QueryDateWindow,
+    ) -> str:
+        """Select a statistics query, optionally using source-side group counts."""
+        family = queries.family(query_family.value)
+        if _lightweight_statistics_enabled() and family.lightweight_statistics is not None:
+            return family.lightweight_statistics.select(date_window)
+        return family.statistics.select(date_window)
 
     @staticmethod
     def _build_pattern_path_parameters(
@@ -2173,7 +2198,7 @@ class KgRepository:
 
     @staticmethod
     def _recommend_graph_path_limit(
-        total_paths: int,
+        total_paths: int | None,
         g_count: int,
         p2_count: int,
         settings: GraphPathLimitSettings,
@@ -2193,5 +2218,10 @@ class KgRepository:
         else:
             raise ValueError("Unsupported per_g_strategy for graph_path_limit.")
 
-        limit = min(g_count * per_g, total_paths)
+        recommended_limit = g_count * per_g
+        limit = (
+            recommended_limit
+            if total_paths is None
+            else min(recommended_limit, total_paths)
+        )
         return GraphPathLimitRecommendation(per_g=per_g, limit=limit)

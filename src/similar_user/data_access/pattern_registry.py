@@ -90,6 +90,9 @@ from .cypher_queries import (
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_QUERY,
+    PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
+    PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -114,6 +117,7 @@ from .cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
@@ -215,14 +219,30 @@ class PatternQueryFamilySpec:
 
     randomized_path: QueryVariants
     statistics: QueryVariants
+    lightweight_statistics: QueryVariants | None = None
 
 
 def _training_order_game_variant_family(
     date_range_query: str,
     *,
     statistics_date_range_query: str = PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+    lightweight_statistics_date_range_query: str | None = None,
 ) -> PatternQueryFamilySpec:
     """Return a training-order family that customizes the date-range path query."""
+    statistics = QueryVariants(
+        base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
+        by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
+        by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
+        by_date_range=statistics_date_range_query,
+    )
+    lightweight_statistics = None
+    if lightweight_statistics_date_range_query is not None:
+        lightweight_statistics = QueryVariants(
+            base=statistics.base,
+            by_start_date=statistics.by_start_date,
+            by_end_date=statistics.by_end_date,
+            by_date_range=lightweight_statistics_date_range_query,
+        )
     return PatternQueryFamilySpec(
         randomized_path=QueryVariants(
             base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_QUERY,
@@ -230,12 +250,8 @@ def _training_order_game_variant_family(
             by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_RANDOMIZED_PATH_BY_END_DATE_QUERY,
             by_date_range=date_range_query,
         ),
-        statistics=QueryVariants(
-            base=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY,
-            by_start_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_START_DATE_QUERY,
-            by_end_date=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
-            by_date_range=statistics_date_range_query,
-        ),
+        statistics=statistics,
+        lightweight_statistics=lightweight_statistics,
     )
 
 
@@ -249,8 +265,23 @@ def _training_order_entity_variant_family(
     statistics_by_start_date: str,
     statistics_by_end_date: str,
     statistics_by_date_range: str,
+    lightweight_statistics_by_date_range: str | None = None,
 ) -> PatternQueryFamilySpec:
     """Return an entity-path family with a custom date-range path query."""
+    statistics = QueryVariants(
+        base=statistics_base,
+        by_start_date=statistics_by_start_date,
+        by_end_date=statistics_by_end_date,
+        by_date_range=statistics_by_date_range,
+    )
+    lightweight_statistics = None
+    if lightweight_statistics_by_date_range is not None:
+        lightweight_statistics = QueryVariants(
+            base=statistics_base,
+            by_start_date=statistics_by_start_date,
+            by_end_date=statistics_by_end_date,
+            by_date_range=lightweight_statistics_by_date_range,
+        )
     return PatternQueryFamilySpec(
         randomized_path=QueryVariants(
             base=randomized_base,
@@ -258,12 +289,8 @@ def _training_order_entity_variant_family(
             by_end_date=randomized_by_end_date,
             by_date_range=randomized_by_date_range,
         ),
-        statistics=QueryVariants(
-            base=statistics_base,
-            by_start_date=statistics_by_start_date,
-            by_end_date=statistics_by_end_date,
-            by_date_range=statistics_by_date_range,
-        ),
+        statistics=statistics,
+        lightweight_statistics=lightweight_statistics,
     )
 
 
@@ -367,6 +394,7 @@ PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT_SPEC = PathPatternSpec(
             "training_order_dual_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
                 statistics_date_range_query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+                lightweight_statistics_date_range_query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
             ),
             "training_order_local_sampling_dual_window": _training_order_game_variant_family(
                 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
@@ -502,6 +530,7 @@ PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_start_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
                 statistics_by_end_date=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+                lightweight_statistics_by_date_range=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
             ),
             "training_order_local_sampling_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
@@ -673,6 +702,7 @@ PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_start_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
                 statistics_by_end_date=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+                lightweight_statistics_by_date_range=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
             ),
             "training_order_local_sampling_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
@@ -844,6 +874,7 @@ PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SPEC = PathPatternSpec(
                 statistics_by_start_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_START_DATE_QUERY,
                 statistics_by_end_date=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_PATTERN_STATISTICS_BY_END_DATE_QUERY,
                 statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+                lightweight_statistics_by_date_range=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
             ),
             "training_order_local_sampling_dual_window": _training_order_entity_variant_family(
                 randomized_base=PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_TRAINING_ORDER_RANDOMIZED_PATH_QUERY,
