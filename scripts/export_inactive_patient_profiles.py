@@ -36,6 +36,10 @@ DEFAULT_PATIENT_IDS_PATH = Path(
     "data/patient_ids/base_2026-05-25/patients_inactive_2026-05-25.txt"
 )
 DEFAULT_OUTPUT_DIR = Path("data/direct_entity_inputs")
+EXCLUDED_PATIENT_IDS = {
+    "2027197290472624130_clinicaltrial",
+    "2031278959630569474_clinicaltrial",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,6 +85,14 @@ def export_inactive_patient_profiles(
     skipped_patient_ids: list[dict[str, str]] = []
 
     for patient_id in patient_ids:
+        if patient_id in EXCLUDED_PATIENT_IDS:
+            skipped_patient_ids.append(
+                {
+                    "patient_id": patient_id,
+                    "reason": "excluded_patient_id",
+                }
+            )
+            continue
         lookup = index.get_by_patient_id(patient_id)
         records = lookup.get("records") or []
         if not records:
@@ -204,19 +216,17 @@ def normalize_education(value: object) -> str:
     return normalize_algorithm_request_education(value)
 
 
-def normalize_education_from_sources(*values: object) -> str:
-    """Normalize education from preferred sources, falling back on later values."""
-    errors = []
+def normalize_education_from_sources(*values: object) -> str | None:
+    """Normalize education from preferred sources, returning None for unmapped values."""
     for value in values:
-        if _normalize_optional_text(value) is None:
+        text = _normalize_optional_text(value)
+        if text is None:
             continue
         try:
             return normalize_education(value)
-        except ValueError as exc:
-            errors.append(str(exc))
-    if errors:
-        raise ValueError(errors[-1])
-    raise ValueError("education is required.")
+        except ValueError:
+            continue
+    return None
 
 
 def normalize_disease_names(value: object) -> list[str]:

@@ -1,0 +1,45 @@
+stage: "direct-entity-cache-missing-scenarios-10-users"
+
+base:
+  evaluation_script: "direct_entity_profiles"
+  profiles: "data/direct_entity_inputs/base_2026-05-25/inactive_patient_profiles_2026-05-25.jsonl"
+  task_top_k: 7
+  use_llm: true
+  limit: 10
+
+baseline_overrides:
+  # 独立缓存目录，避免污染 direct_entity_profiles_smoke 和主 cache-validation 缓存。
+  # SQLite: data/user_cache/direct_entity_cache_missing_scenarios_10/cache_index.sqlite
+  # Files:  data/user_cache/direct_entity_cache_missing_scenarios_10/files/...
+  user_cache.enabled: true
+  user_cache.sqlite_path: "data/user_cache/direct_entity_cache_missing_scenarios_10/cache_index.sqlite"
+  user_cache.raw_path_build_workers: 1
+  user_cache.raw_path_build_max_retries: 2
+  user_cache.raw_path_build_retry_sleep_seconds: 5
+  user_cache.direct_raw_paths_valid_days: 60
+  user_cache.direct_scored_paths_valid_days: 60
+  user_cache.topk_candidates_valid_days: 7
+  user_cache.refresh_candidate_base_date_on_hit: true
+
+  # direct path SQLite 关闭时，缺 raw path 会回源 Neo4j 构建 direct entity paths。
+  direct_path_cache.enabled: false
+  direct_path_cache.sqlite_path: "data/direct_path_cache/direct_entity_cache_missing_scenarios_10.sqlite"
+
+  query.training_task_evaluation.workers: 1
+  query.score_pattern_paths.top_k: 150
+  query.candidate_ranking.candidate_top_k: 10
+  query.candidate_ranking.disease_course_window_days: 14
+  query.candidate_ranking.total_score_match_top_k: 1
+  query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+  query.training_task_prediction.prompt_candidate_compression_enabled: false
+  query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1"
+  query.direct_entity_path.window_days: 180
+  query.direct_entity_path.direct_path_limit: 1000
+  query.direct_entity_path_scoring.use_when_patient_exists: false
+
+experiments:
+  - name: warmup_all_cache
+    overrides: {}
+
+  - name: all_cache_hit
+    overrides: {}

@@ -159,8 +159,9 @@ def run_profile_evaluations(
 ) -> list[dict[str, Any]]:
     """Evaluate profiles sequentially or with a small thread pool."""
     if workers <= 1:
-        return [
-            evaluate_profile(
+        details = []
+        for index, profile in enumerate(profiles, start=1):
+            detail = evaluate_profile(
                 profile,
                 config_path=config_path,
                 scored_paths_dir=scored_paths_dir,
@@ -171,8 +172,15 @@ def run_profile_evaluations(
                 csv_path=csv_path,
                 timeout_seconds=timeout_seconds,
             )
-            for profile in profiles
-        ]
+            details.append(detail)
+            LOGGER.info(
+                "Evaluated direct entity prediction: index=%s/%s, patient_id=%s, status=%s",
+                index,
+                len(profiles),
+                detail.get("patient_id"),
+                detail.get("status"),
+            )
+        return details
 
     details_by_index: dict[int, dict[str, Any]] = {}
     with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -192,7 +200,16 @@ def run_profile_evaluations(
             for index, profile in enumerate(profiles)
         }
         for future in as_completed(futures):
-            details_by_index[futures[future]] = future.result()
+            index = futures[future]
+            detail = future.result()
+            details_by_index[index] = detail
+            LOGGER.info(
+                "Evaluated direct entity prediction: index=%s/%s, patient_id=%s, status=%s",
+                index + 1,
+                len(profiles),
+                detail.get("patient_id"),
+                detail.get("status"),
+            )
     return [details_by_index[index] for index in range(len(profiles))]
 
 
