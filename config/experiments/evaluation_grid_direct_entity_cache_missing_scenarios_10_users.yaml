@@ -43,3 +43,49 @@ experiments:
 
   - name: all_cache_hit
     overrides: {}
+  
+  # 运行本实验前，先删除 topK candidates 缓存，保留 raw/scored。
+  # 预期：不 rebuild raw，不 rescore paths，从 scored paths 重新聚合 topK candidates。
+  - name: topk_missing_rebuild_from_scored
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+
+  # 运行本实验前，先删除 scored paths 和 topK candidates，保留 raw paths。
+  # 预期：不 rebuild raw，重新 score paths，再生成 topK candidates。
+  - name: scored_missing_rescore_from_raw
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+
+  # 运行本实验前，删除 raw paths、scored paths、topK candidates。
+  # 预期：重新 build raw paths -> score paths -> topK candidates。
+  - name: raw_missing_rebuild_all
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+
+  # 运行本实验前，将 topK candidates 标记为过期，保留有效 scored paths。
+  # 预期：topK miss/expired，从 scored paths 重新聚合 topK candidates。
+  - name: topk_expired_rebuild_from_scored
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+
+  # 运行本实验前，将 scored paths 标记为过期。
+  # 预期：重新 score paths，再生成 topK candidates。
+  - name: scored_expired_rescore_from_raw
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+
+  # 运行本实验前，将 raw paths 标记为过期，同时让 scored paths/topK candidates 不命中。
+  # 预期：重新 build raw paths -> score paths -> topK candidates。
+  - name: raw_expired_rebuild_all
+    overrides:
+      user_cache.enabled: true
+      query.training_task_evaluation.workers: 1
+  
+  - name: all_cache_hit_worker_4
+    overrides: 
+      query.training_task_evaluation.workers: 4

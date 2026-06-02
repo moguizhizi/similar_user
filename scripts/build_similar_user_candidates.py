@@ -206,6 +206,16 @@ def build_similar_user_candidates(
         )
         return cached_result
 
+    LOGGER.info(
+        "TopK similar-user candidates cache miss: patient_id=%s, query_family=%s, cached_base_date=%s, request_base_date=%s, config_hash=%s, candidate_key=%s",
+        patient_id,
+        user_cache_context.get("query_family"),
+        user_cache_context.get("cached_base_date"),
+        base_date,
+        user_cache_context.get("config_hash"),
+        user_cache_context.get("candidate_key"),
+    )
+
     scored_key = expected_scored_key
     user_cache_settings = load_user_cache_settings(resolved_config_path)
     if user_cache_settings.enabled:
@@ -689,20 +699,40 @@ def _find_direct_entity_scored_detail_paths(
         settings = load_user_cache_settings(config_path)
         if settings.enabled:
             base_date = _extract_key_part(direct_scored_key, "base")
-            patient_root = (
-                patient_cache_root(
-                    files_root_from_sqlite_path(settings.sqlite_path),
-                    source_id,
-                )
-                / "scored_paths"
-                / "direct_entity"
-                / f"window_{load_query_settings(config_path).direct_entity_path.window_days}"
-            )
-            paths.extend(
-                sorted(
-                    patient_root.glob(
-                        f"config_*/base_{_slug_part(base_date)}/{_slug_part(pattern)}__*.detail.json"
+            query_settings = load_query_settings(config_path)
+            store = UserCacheIndexStore(settings.sqlite_path)
+            for entry in store.list_entries():
+                if (
+                    entry.cache_type != "scored_direct_entity_paths"
+                    or entry.source_type != "direct_entity_profile"
+                    or entry.source_id != source_id
+                    or entry.query_family != "direct_entity"
+                    or entry.window_days != query_settings.direct_entity_path.window_days
+                ):
+                    continue
+                if not entry.is_valid_for(base_date):
+                    continue
+                if entry.payload.get("scored_key") != direct_scored_key:
+                    continue
+                if entry.payload.get("pattern") != pattern:
+                    continue
+                detail_path = Path(entry.data_path)
+                if not detail_path.exists():
+                    store.delete_entry(entry)
+                    LOGGER.warning(
+                        "Deleted stale direct scored-path user-cache index entry because detail file is missing: patient_id=%s, source_type=%s, source_id=%s, pattern=%s, detail_path=%s",
+                        entry.patient_id,
+                        entry.source_type,
+                        entry.source_id,
+                        pattern,
+                        detail_path,
                     )
+                    continue
+                paths.append(detail_path)
+            paths.sort(
+                key=lambda path: (
+                    path.parent.name,
+                    path.name,
                 )
             )
             return paths
@@ -1147,8 +1177,10 @@ def load_cached_topk_candidate_result(
     if not detail_path.exists():
         store.delete_entry(entry)
         LOGGER.warning(
-            "Deleted stale topK candidate user-cache index entry because detail file is missing: patient_id=%s, detail_path=%s",
+            "Deleted stale topK candidate user-cache index entry because detail file is missing: patient_id=%s, source_type=%s, source_id=%s, detail_path=%s",
             entry.patient_id,
+            entry.source_type,
+            entry.source_id,
             detail_path,
         )
         return None

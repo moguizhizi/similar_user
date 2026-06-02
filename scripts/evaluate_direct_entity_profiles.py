@@ -259,7 +259,8 @@ def evaluate_profile(
             [],
             result,
         )
-        prediction_elapsed_seconds = round(time.perf_counter() - started_at, 3)
+        prediction_finished_at = time.perf_counter()
+        prediction_elapsed_seconds = round(prediction_finished_at - started_at, 3)
         validation_started_at = time.perf_counter()
         validation_result = validate_training_task_recommendation(
             validation_mode=validation_mode,
@@ -271,8 +272,9 @@ def evaluate_profile(
             csv_path=csv_path,
             timeout_seconds=timeout_seconds,
         )
+        validation_finished_at = time.perf_counter()
         validation_elapsed_seconds = round(
-            time.perf_counter() - validation_started_at,
+            validation_finished_at - validation_started_at,
             3,
         )
     except Exception as exc:
@@ -311,6 +313,10 @@ def evaluate_profile(
         "similar_user_game_counts_task_count": similar_user_game_counts_task_count,
         "candidate_training_tasks_count": candidate_training_tasks_count,
         "coverage_diagnostics": coverage_diagnostics,
+        "prediction_started_at_seconds": round(started_at, 6),
+        "prediction_finished_at_seconds": round(prediction_finished_at, 6),
+        "validation_started_at_seconds": round(validation_started_at, 6),
+        "validation_finished_at_seconds": round(validation_finished_at, 6),
         "prediction_elapsed_seconds": prediction_elapsed_seconds,
         "validation_elapsed_seconds": validation_elapsed_seconds,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
