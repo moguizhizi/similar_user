@@ -375,7 +375,6 @@ def build_patient_evaluation_command(
         "pattern": "--pattern",
         "query_family": "--query-family",
         "limit": "--limit",
-        "prompt_output_dir": "--prompt-output-dir",
     }
     for option_name, cli_flag in optional_args.items():
         option_value = base_options.get(option_name)
@@ -384,10 +383,6 @@ def build_patient_evaluation_command(
 
     if not use_llm:
         command.append("--dry-run")
-    if bool(base_options.get("no_save_prompt", False)):
-        command.append("--no-save-prompt")
-    elif base_options.get("prompt_output_dir") is None:
-        command.extend(["--prompt-output-dir", str(Path(output_dir) / "prompts")])
     return command
 
 

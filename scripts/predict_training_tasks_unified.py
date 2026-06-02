@@ -24,11 +24,13 @@ from similar_user.domain.graph_schema import (  # noqa: E402
 )
 from similar_user.services.task_prediction import DEFAULT_TASK_TOP_K  # noqa: E402
 from similar_user.utils.logger import get_logger  # noqa: E402
+from config.settings import load_query_settings  # noqa: E402
 
 from scripts.predict_training_tasks import (  # noqa: E402
     DEFAULT_CONFIG_PATH,
     run_end_to_end_training_task_prediction,
     summarize_prediction_result as summarize_patient_prediction_result,
+    write_prompt_to_file,
 )
 from scripts.predict_training_tasks_from_direct_entity import (  # noqa: E402
     predict_training_tasks_from_direct_entity,
@@ -357,6 +359,8 @@ def main() -> int:
     """Run unified training-task prediction."""
     args = parse_args()
     try:
+        query_settings = load_query_settings(args.config)
+        save_prompt = query_settings.training_task_prediction.save_prompt_enabled
         result = predict_training_tasks_unified(
             patient_id=args.patient_id,
             base_date=args.base_date,
@@ -374,7 +378,7 @@ def main() -> int:
             unknown_ids=_flatten(args.unknown_id),
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
-            include_prompt=args.include_prompt,
+            include_prompt=args.include_prompt or save_prompt,
         )
         output = summarize_unified_prediction_result(
             result,
@@ -382,7 +386,17 @@ def main() -> int:
         )
         if args.output:
             _write_json_atomic(Path(args.output), result)
+        prompt_path = None
+        if save_prompt:
+            inner_result = result.get("result")
+            if isinstance(inner_result, dict):
+                prompt_path = write_prompt_to_file(
+                    inner_result,
+                    base_date=args.base_date,
+                )
         LOGGER.info(json.dumps(output, ensure_ascii=False, indent=2, default=str))
+        if prompt_path is not None:
+            LOGGER.info("Saved training-task prediction prompt to %s", prompt_path)
     except Exception as exc:
         LOGGER.exception("Unified training task prediction failed: %s", exc)
         return 1

@@ -222,12 +222,10 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "--limit",
                 "10",
                 "--dry-run",
-                "--prompt-output-dir",
-                "data/evaluation_grid/runs/exp_001/prompts",
             ],
         )
 
-    def test_build_evaluation_command_respects_configured_prompt_dir(self) -> None:
+    def test_build_evaluation_command_ignores_prompt_dir_option(self) -> None:
         command = run_evaluation_grid.build_evaluation_command(
             base_options={
                 "base_date": "2023-10-15",
@@ -237,11 +235,7 @@ class RunEvaluationGridTest(unittest.TestCase):
             output_dir="data/evaluation_grid/runs/exp_001",
         )
 
-        self.assertIn("--prompt-output-dir", command)
-        self.assertEqual(
-            command[command.index("--prompt-output-dir") + 1],
-            "data/custom-prompts",
-        )
+        self.assertNotIn("--prompt-output-dir", command)
 
     def test_build_evaluation_command_can_use_direct_entity_profiles(self) -> None:
         command = run_evaluation_grid.build_evaluation_command(

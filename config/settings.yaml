@@ -48,6 +48,7 @@ query:
   training_task_prediction:
     task_top_k: 7
     prompt_candidate_compression_enabled: false
+    save_prompt_enabled: false
     profile_candidate_training_window_days: null
     unlock_train_candidate_tasks_enabled: false
     similar_user_game_counts_weighting_enabled: false

@@ -584,15 +584,14 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
 
     @patch("scripts.evaluate_predict_training_tasks.load_query_settings")
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
-    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
     def test_evaluate_patient_uses_base_date_as_actual_label_window(
         self,
-        mock_write_prompt: Mock,
         mock_predict: Mock,
         mock_load_query_settings: Mock,
     ) -> None:
         mock_load_query_settings.return_value = Mock(
-            training_task_evaluation=Mock(validation_mode="set")
+            training_task_evaluation=Mock(validation_mode="set"),
+            training_task_prediction=Mock(save_prompt_enabled=False),
         )
         mock_predict.return_value = {
             "training_task_prediction": {
@@ -610,9 +609,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 ],
             }
         }
-        mock_write_prompt.return_value = evaluate_predict_training_tasks.Path(
-            "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt"
-        )
         user_service = Mock()
         user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
             {"trainingDate": "2022-05-22", "g": {"id": "2", "name": "任务B"}},
@@ -707,10 +703,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertTrue(detail["task_hit"])
         self.assertEqual(detail["precision"], 0.5)
         self.assertEqual(detail["recall"], 0.5)
-        self.assertEqual(
-            detail["prompt_path"],
-            "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt",
-        )
+        self.assertIsNone(detail["prompt_path"])
         mock_predict.assert_called_once_with(
             "40",
             base_date="2022-05-22",
@@ -721,12 +714,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             query_family="date_window",
             task_top_k=5,
             use_llm=False,
-            include_prompt=True,
-        )
-        mock_write_prompt.assert_called_once_with(
-            mock_predict.return_value,
-            output_dir=evaluate_predict_training_tasks.DEFAULT_PROMPT_OUTPUT_DIR,
-            base_date="2022-05-22",
+            include_prompt=False,
         )
         user_service.get_patient_exclusive_training_task_history_by_date_window.assert_called_once_with(
             "40",
@@ -736,15 +724,14 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
 
     @patch("scripts.evaluate_predict_training_tasks.load_query_settings")
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
-    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
     def test_evaluate_patient_skips_prediction_without_actual_tasks(
         self,
-        mock_write_prompt: Mock,
         mock_predict: Mock,
         mock_load_query_settings: Mock,
     ) -> None:
         mock_load_query_settings.return_value = Mock(
-            training_task_evaluation=Mock(validation_mode="set")
+            training_task_evaluation=Mock(validation_mode="set"),
+            training_task_prediction=Mock(save_prompt_enabled=False),
         )
         user_service = Mock()
         user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = []
@@ -763,7 +750,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertIsNone(detail["task_hit"])
         self.assertEqual(detail["predicted_task_count"], 0)
         mock_predict.assert_not_called()
-        mock_write_prompt.assert_not_called()
         user_service.get_patient_exclusive_training_task_history_by_date_window.assert_called_once_with(
             "40",
             "2022-05-22",
@@ -773,10 +759,8 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
     @patch("scripts.evaluate_predict_training_tasks.load_query_settings")
     @patch("scripts.evaluate_predict_training_tasks.validate_training_task_recommendation")
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
-    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
     def test_evaluate_patient_score_mode_uses_score_validation(
         self,
-        mock_write_prompt: Mock,
         mock_predict: Mock,
         mock_validation: Mock,
         mock_load_query_settings: Mock,
@@ -787,7 +771,8 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 score_validation_url="http://score.test/training_task_score",
                 algorithm_request_results_csv="/tmp/request_results.csv",
                 score_validation_timeout=3.0,
-            )
+            ),
+            training_task_prediction=Mock(save_prompt_enabled=False),
         )
         mock_predict.return_value = {
             "patient_id": "40",
@@ -814,7 +799,6 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             base_date="2022-05-22",
             user_service=user_service,
             use_llm=False,
-            save_prompt=False,
             config_path="config/settings.yaml",
         )
 
@@ -836,13 +820,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             timeout_seconds=3.0,
         )
         mock_load_query_settings.assert_called_once_with("config/settings.yaml")
-        mock_write_prompt.assert_not_called()
 
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
-    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
     def test_evaluate_patient_marks_empty_paths_as_not_evaluable(
         self,
-        mock_write_prompt: Mock,
         mock_predict: Mock,
     ) -> None:
         mock_predict.side_effect = EmptyPathResultsError("no paths")
@@ -863,21 +844,15 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(detail["error_message"], "no paths")
         self.assertIsNone(detail["task_hit"])
         self.assertEqual(detail["predicted_task_count"], 0)
-        mock_write_prompt.assert_not_called()
 
     @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
-    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
-    def test_evaluate_patient_saves_prompt_from_prediction_failure(
+    def test_evaluate_patient_does_not_save_prompt_from_prediction_failure(
         self,
-        mock_write_prompt: Mock,
         mock_predict: Mock,
     ) -> None:
         error = RuntimeError("llm failed")
         error.llm_prompt = "prompt body"
         mock_predict.side_effect = error
-        mock_write_prompt.return_value = evaluate_predict_training_tasks.Path(
-            "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt"
-        )
         user_service = Mock()
         user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
             {"trainingDate": "2022-05-22", "g": {"id": "2", "name": "任务B"}},
@@ -892,17 +867,51 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
 
         self.assertEqual(detail["status"], "failed")
         self.assertEqual(detail["error_message"], "llm failed")
+        self.assertIsNone(detail["prompt_path"])
+
+    @patch("scripts.evaluate_predict_training_tasks.load_query_settings")
+    @patch("scripts.evaluate_predict_training_tasks.write_prompt_to_file")
+    @patch("scripts.evaluate_predict_training_tasks.run_end_to_end_training_task_prediction")
+    def test_evaluate_patient_saves_prompt_when_yaml_switch_is_enabled(
+        self,
+        mock_predict: Mock,
+        mock_write_prompt: Mock,
+        mock_load_query_settings: Mock,
+    ) -> None:
+        mock_load_query_settings.return_value = Mock(
+            training_task_evaluation=Mock(validation_mode="set"),
+            training_task_prediction=Mock(save_prompt_enabled=True),
+        )
+        mock_predict.return_value = {
+            "training_task_prediction": {
+                "predicted_training_tasks": [{"game_id": "2"}],
+                "similar_user_game_counts": [{"game_id": "2", "count": 1}],
+                "candidate_training_tasks": [{"game_id": "2"}],
+            }
+        }
+        mock_write_prompt.return_value = evaluate_predict_training_tasks.Path(
+            "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt"
+        )
+        user_service = Mock()
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-22", "g": {"id": "2", "name": "任务B"}},
+        ]
+
+        detail = evaluate_predict_training_tasks.evaluate_patient(
+            "40",
+            base_date="2022-05-22",
+            user_service=user_service,
+            use_llm=False,
+        )
+
         self.assertEqual(
             detail["prompt_path"],
             "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt",
         )
+        mock_predict.assert_called_once()
+        self.assertTrue(mock_predict.call_args.kwargs["include_prompt"])
         mock_write_prompt.assert_called_once_with(
-            {
-                "training_task_prediction": {
-                    "patient_id": "40",
-                    "llm_prompt": "prompt body",
-                }
-            },
+            mock_predict.return_value,
             output_dir=evaluate_predict_training_tasks.DEFAULT_PROMPT_OUTPUT_DIR,
             base_date="2022-05-22",
         )

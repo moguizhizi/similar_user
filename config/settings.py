@@ -103,6 +103,7 @@ class TrainingTaskPredictionSettings:
     task_top_k: int = 7
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+    save_prompt_enabled: bool = False
     profile_candidate_training_window_days: int | None = None
     unlock_train_candidate_tasks_enabled: bool = False
     similar_user_game_counts_weighting_enabled: bool = False
@@ -424,6 +425,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction prompt_template_name must be a non-empty string."
         )
+    save_prompt_enabled = training_task_prediction_data.get(
+        "save_prompt_enabled",
+        False,
+    )
+    if not isinstance(save_prompt_enabled, bool):
+        raise ValueError(
+            "training_task_prediction save_prompt_enabled must be a boolean."
+        )
     profile_candidate_training_window_days = training_task_prediction_data.get(
         "profile_candidate_training_window_days",
         None,
@@ -574,6 +583,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             task_top_k=task_top_k,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name.strip(),
+            save_prompt_enabled=save_prompt_enabled,
             profile_candidate_training_window_days=profile_candidate_training_window_days,
             unlock_train_candidate_tasks_enabled=unlock_train_candidate_tasks_enabled,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,

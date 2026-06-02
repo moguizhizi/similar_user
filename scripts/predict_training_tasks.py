@@ -13,7 +13,9 @@
 常用执行方式：
 
     python scripts/predict_training_tasks.py 40 --base-date 2022-05-22
-    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --no-save-prompt
+
+是否保存 prompt 文件由 YAML 中的
+`query.training_task_prediction.save_prompt_enabled` 统一控制。
 
 相似用户 path 构建窗口来自配置中的 `query.patient_path.window_days`；
 预测阶段的相似用户任务窗口来自配置。
@@ -134,16 +136,6 @@ def parse_args() -> argparse.Namespace:
         "--include-prompt",
         action="store_true",
         help="Include the generated LLM prompt in full output.",
-    )
-    parser.add_argument(
-        "--no-save-prompt",
-        action="store_true",
-        help="Do not save the generated LLM prompt to a text file.",
-    )
-    parser.add_argument(
-        "--prompt-output-dir",
-        default=str(DEFAULT_PROMPT_OUTPUT_DIR),
-        help="Directory used to store generated prompt text files.",
     )
     return parser.parse_args()
 
@@ -349,7 +341,7 @@ def summarize_prediction_result(
 def write_prompt_to_file(
     result: dict[str, Any],
     *,
-    output_dir: str | Path,
+    output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
     base_date: str,
 ) -> Path:
     """Write the generated LLM prompt to a searchable text file."""
@@ -379,6 +371,8 @@ def main() -> int:
     """Predict training tasks and log the JSON result."""
     args = parse_args()
     try:
+        query_settings = load_query_settings(args.config)
+        save_prompt = query_settings.training_task_prediction.save_prompt_enabled
         result = run_end_to_end_training_task_prediction(
             args.patient_id,
             base_date=args.base_date,
@@ -389,16 +383,12 @@ def main() -> int:
             query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
-            include_prompt=(args.include_prompt or not args.no_save_prompt),
+            include_prompt=args.include_prompt or save_prompt,
         )
         output = summarize_prediction_result(result, output_level=args.output_level)
         prompt_path = None
-        if not args.no_save_prompt:
-            prompt_path = write_prompt_to_file(
-                result,
-                output_dir=args.prompt_output_dir,
-                base_date=args.base_date,
-            )
+        if save_prompt:
+            prompt_path = write_prompt_to_file(result, base_date=args.base_date)
     except Exception as exc:
         LOGGER.exception("Training task prediction failed: %s", exc)
         return 1

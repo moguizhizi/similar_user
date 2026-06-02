@@ -79,6 +79,7 @@ from scripts.build_similar_user_candidates import (  # noqa: E402
     load_saved_direct_entity_scored_results,
     save_similar_user_candidates_result,
 )
+from scripts.predict_training_tasks import write_prompt_to_file  # noqa: E402
 from scripts.build_direct_entity_paths import build_direct_entity_paths  # noqa: E402
 from similar_user.data_access.algorithm_request_results import (  # noqa: E402
     normalize_algorithm_request_education,
@@ -875,6 +876,8 @@ def main() -> int:
     """Run direct-entity-only task prediction."""
     args = parse_args()
     try:
+        query_settings = load_query_settings(args.config)
+        save_prompt = query_settings.training_task_prediction.save_prompt_enabled
         result = predict_training_tasks_from_direct_entity(
             patient_id=args.patient_id,
             base_date=args.base_date,
@@ -889,13 +892,18 @@ def main() -> int:
             scored_paths_dir=args.scored_paths_dir,
             candidates_dir=args.candidates_dir,
             use_llm=not args.dry_run,
-            include_prompt=args.include_prompt,
+            include_prompt=args.include_prompt or save_prompt,
             task_top_k=args.task_top_k,
         )
         output = summarize_prediction_result(result, output_level=args.output_level)
         if args.output:
             _write_json_atomic(Path(args.output), result)
+        prompt_path = None
+        if save_prompt:
+            prompt_path = write_prompt_to_file(result, base_date=args.base_date)
         LOGGER.info(json.dumps(output, ensure_ascii=False, indent=2, default=str))
+        if prompt_path is not None:
+            LOGGER.info("Saved training-task prediction prompt to %s", prompt_path)
     except Exception as exc:
         LOGGER.exception("Direct entity task prediction failed: %s", exc)
         return 1

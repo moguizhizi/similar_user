@@ -173,16 +173,6 @@ def parse_args() -> argparse.Namespace:
         help="Analysis JSON filename under output-dir.",
     )
     parser.add_argument(
-        "--no-save-prompt",
-        action="store_true",
-        help="Do not save generated LLM prompts during evaluation.",
-    )
-    parser.add_argument(
-        "--prompt-output-dir",
-        default=str(DEFAULT_PROMPT_OUTPUT_DIR),
-        help="Directory used to store generated prompt text files.",
-    )
-    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -226,12 +216,12 @@ def evaluate_patient(
     query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
-    save_prompt: bool = True,
-    prompt_output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
 ) -> dict[str, Any]:
     """Run prediction and compare it with the patient's same-day true tasks."""
     started_at = time.perf_counter()
-    evaluation_settings = load_query_settings(config_path).training_task_evaluation
+    query_settings = load_query_settings(config_path)
+    evaluation_settings = query_settings.training_task_evaluation
+    save_prompt = query_settings.training_task_prediction.save_prompt_enabled
     validation_mode = evaluation_settings.validation_mode
     try:
         if validation_mode == "set":
@@ -271,7 +261,7 @@ def evaluate_patient(
         if save_prompt:
             prompt_path = write_prompt_to_file(
                 prediction_result,
-                output_dir=prompt_output_dir,
+                output_dir=DEFAULT_PROMPT_OUTPUT_DIR,
                 base_date=base_date,
             )
         predicted_game_ids = extract_predicted_game_ids(prediction_result)
@@ -332,7 +322,7 @@ def evaluate_patient(
                             "llm_prompt": llm_prompt,
                         }
                     },
-                    output_dir=prompt_output_dir,
+                    output_dir=DEFAULT_PROMPT_OUTPUT_DIR,
                     base_date=base_date,
                 )
             except Exception as prompt_exc:
@@ -1409,8 +1399,6 @@ def run_batch_evaluation(
                     query_family=query_family,
                     task_top_k=task_top_k,
                     use_llm=use_llm,
-                    save_prompt=save_prompt,
-                    prompt_output_dir=prompt_output_dir,
                 )
                 details.append(detail)
                 LOGGER.info(
@@ -1437,8 +1425,6 @@ def run_batch_evaluation(
                         query_family=query_family,
                         task_top_k=task_top_k,
                         use_llm=use_llm,
-                        save_prompt=save_prompt,
-                        prompt_output_dir=prompt_output_dir,
                     ): (index, patient_id)
                     for index, patient_id in enumerate(resolved_patient_ids, start=1)
                 }

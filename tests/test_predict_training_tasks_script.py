@@ -224,14 +224,14 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         self.assertIs(result, payload)
 
     @patch("scripts.predict_training_tasks.LOGGER")
+    @patch("scripts.predict_training_tasks.load_query_settings")
     @patch("scripts.predict_training_tasks.parse_args")
     @patch("scripts.predict_training_tasks.run_end_to_end_training_task_prediction")
-    @patch("scripts.predict_training_tasks.write_prompt_to_file")
     def test_main_runs_end_to_end_prediction_from_patient_id(
         self,
-        mock_write_prompt_to_file: Mock,
         mock_run_end_to_end: Mock,
         mock_parse_args: Mock,
+        mock_load_query_settings: Mock,
         mock_logger: Mock,
     ) -> None:
         end_to_end_result = {
@@ -259,11 +259,12 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             task_top_k=5,
             dry_run=True,
             include_prompt=False,
-            no_save_prompt=True,
-            prompt_output_dir="data/prompts",
             output_level="scores",
         )
         mock_run_end_to_end.return_value = end_to_end_result
+        mock_load_query_settings.return_value = Mock(
+            training_task_prediction=Mock(save_prompt_enabled=False)
+        )
 
         exit_code = predict_training_tasks.main()
 
@@ -280,7 +281,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             use_llm=False,
             include_prompt=False,
         )
-        mock_write_prompt_to_file.assert_not_called()
         mock_logger.info.assert_called_once_with(
             json.dumps(
                 {
@@ -300,14 +300,67 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         )
 
     @patch("scripts.predict_training_tasks.LOGGER")
+    @patch("scripts.predict_training_tasks.load_query_settings")
     @patch("scripts.predict_training_tasks.parse_args")
     @patch("scripts.predict_training_tasks.run_end_to_end_training_task_prediction")
-    @patch("scripts.predict_training_tasks.write_prompt_to_file")
-    def test_main_saves_prompt_by_default(
+    def test_main_includes_prompt_only_when_requested(
         self,
-        mock_write_prompt_to_file: Mock,
         mock_run_end_to_end: Mock,
         mock_parse_args: Mock,
+        mock_load_query_settings: Mock,
+        mock_logger: Mock,
+    ) -> None:
+        mock_parse_args.return_value = Mock(
+            patient_id="40",
+            base_date="2022-05-22",
+            pattern="PATTERN",
+            config="config/settings.yaml",
+            skip_path_build=True,
+            skip_path_scoring=True,
+            query_family=None,
+            task_top_k=5,
+            dry_run=True,
+            include_prompt=True,
+            output_level="full",
+        )
+        mock_run_end_to_end.return_value = {
+            "patient_id": "40",
+            "training_task_prediction": {
+                "patient_id": "40",
+                "llm_prompt": "prompt body",
+            },
+        }
+        mock_load_query_settings.return_value = Mock(
+            training_task_prediction=Mock(save_prompt_enabled=False)
+        )
+        exit_code = predict_training_tasks.main()
+
+        self.assertEqual(exit_code, 0)
+        mock_run_end_to_end.assert_called_once_with(
+            "40",
+            base_date="2022-05-22",
+            pattern="PATTERN",
+            config_path="config/settings.yaml",
+            skip_path_build=True,
+            skip_path_scoring=True,
+            query_family=None,
+            task_top_k=5,
+            use_llm=False,
+            include_prompt=True,
+        )
+        mock_logger.info.assert_called_once()
+
+    @patch("scripts.predict_training_tasks.LOGGER")
+    @patch("scripts.predict_training_tasks.write_prompt_to_file")
+    @patch("scripts.predict_training_tasks.load_query_settings")
+    @patch("scripts.predict_training_tasks.parse_args")
+    @patch("scripts.predict_training_tasks.run_end_to_end_training_task_prediction")
+    def test_main_saves_prompt_when_yaml_switch_is_enabled(
+        self,
+        mock_run_end_to_end: Mock,
+        mock_parse_args: Mock,
+        mock_load_query_settings: Mock,
+        mock_write_prompt_to_file: Mock,
         mock_logger: Mock,
     ) -> None:
         mock_parse_args.return_value = Mock(
@@ -321,9 +374,10 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             task_top_k=5,
             dry_run=True,
             include_prompt=False,
-            no_save_prompt=False,
-            prompt_output_dir="data/custom-prompts",
             output_level="full",
+        )
+        mock_load_query_settings.return_value = Mock(
+            training_task_prediction=Mock(save_prompt_enabled=True)
         )
         mock_run_end_to_end.return_value = {
             "patient_id": "40",
@@ -333,7 +387,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             },
         }
         mock_write_prompt_to_file.return_value = Path(
-            "data/custom-prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt"
+            "data/prompts/training_task_prompt_patient_40_base_date_2022-05-22.txt"
         )
 
         exit_code = predict_training_tasks.main()
@@ -353,7 +407,6 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         )
         mock_write_prompt_to_file.assert_called_once_with(
             mock_run_end_to_end.return_value,
-            output_dir="data/custom-prompts",
             base_date="2022-05-22",
         )
         self.assertEqual(mock_logger.info.call_count, 2)
