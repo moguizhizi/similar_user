@@ -226,10 +226,37 @@ def summarize_unified_prediction_result(
     if output_level == "full":
         return result
     if route == "patient_path":
-        return summarize_patient_prediction_result(inner, output_level=output_level)
+        summary = summarize_patient_prediction_result(inner, output_level=output_level)
+        return _with_route_summary(
+            summary,
+            route="patient_path",
+            patient_exists=True,
+        )
     if route == "direct_entity_path":
-        return summarize_direct_entity_prediction_result(inner, output_level=output_level)
+        summary = summarize_direct_entity_prediction_result(
+            inner,
+            output_level=output_level,
+        )
+        return _with_route_summary(
+            summary,
+            route="direct_entity_path",
+            patient_exists=False,
+        )
     raise ValueError(f"Unsupported prediction route: {route}.")
+
+
+def _with_route_summary(
+    summary: dict[str, Any],
+    *,
+    route: str,
+    patient_exists: bool,
+) -> dict[str, Any]:
+    if not isinstance(summary, dict):
+        raise ValueError("Unified prediction summary must be a JSON object.")
+    routed_summary = dict(summary)
+    routed_summary["route"] = route
+    routed_summary["patient_exists"] = patient_exists
+    return routed_summary
 
 
 def _patient_exists(patient_id: str, *, config_path: str | Path) -> bool:

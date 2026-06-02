@@ -5,7 +5,10 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock, patch
 
-from scripts.predict_training_tasks_unified import predict_training_tasks_unified
+from scripts.predict_training_tasks_unified import (
+    predict_training_tasks_unified,
+    summarize_unified_prediction_result,
+)
 
 
 class PredictTrainingTasksUnifiedTest(unittest.TestCase):
@@ -78,6 +81,57 @@ class PredictTrainingTasksUnifiedTest(unittest.TestCase):
                 config_path="config/settings.yaml",
                 use_llm=False,
             )
+
+    def test_patient_path_ids_summary_includes_route(self) -> None:
+        summary = summarize_unified_prediction_result(
+            {
+                "route": "patient_path",
+                "patient_exists": True,
+                "result": {
+                    "patient_id": "P1",
+                    "training_task_prediction": {
+                        "patient_id": "P1",
+                        "predicted_training_tasks": [{"game_id": "433"}],
+                    },
+                },
+            },
+            output_level="ids",
+        )
+
+        self.assertEqual(
+            summary,
+            {
+                "patient_id": "P1",
+                "predicted_training_task_ids": ["433"],
+                "route": "patient_path",
+                "patient_exists": True,
+            },
+        )
+
+    def test_direct_entity_ids_summary_includes_route(self) -> None:
+        summary = summarize_unified_prediction_result(
+            {
+                "route": "direct_entity_path",
+                "patient_exists": False,
+                "result": {
+                    "patient_id": "non_patient_1",
+                    "training_task_prediction": {
+                        "predicted_training_tasks": [{"game_id": "312"}],
+                    },
+                },
+            },
+            output_level="ids",
+        )
+
+        self.assertEqual(
+            summary,
+            {
+                "patient_id": "non_patient_1",
+                "predicted_training_task_ids": ["312"],
+                "route": "direct_entity_path",
+                "patient_exists": False,
+            },
+        )
 
 
 if __name__ == "__main__":
