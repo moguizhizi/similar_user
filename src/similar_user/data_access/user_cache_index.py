@@ -18,6 +18,8 @@ SUPPORTED_USER_CACHE_TYPES = frozenset(
         "topk_candidates",
     }
 )
+SQLITE_BUSY_TIMEOUT_SECONDS = 30.0
+SQLITE_BUSY_TIMEOUT_MILLISECONDS = int(SQLITE_BUSY_TIMEOUT_SECONDS * 1000)
 
 
 @dataclass(frozen=True)
@@ -304,7 +306,11 @@ class UserCacheIndexStore:
             return int(cursor.rowcount)
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.sqlite_path)
+        connection = sqlite3.connect(
+            self.sqlite_path,
+            timeout=SQLITE_BUSY_TIMEOUT_SECONDS,
+        )
+        connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MILLISECONDS}")
         connection.row_factory = sqlite3.Row
         return connection
 

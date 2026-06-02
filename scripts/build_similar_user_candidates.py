@@ -641,11 +641,22 @@ def load_saved_direct_entity_scored_results(
             config_path=config_path,
         )
         if not detail_paths:
-            pattern_dir = Path(scored_paths_dir) / normalized_scored_key / pattern
+            search_scope = str(Path(scored_paths_dir) / normalized_scored_key / pattern)
+            if config_path is not None:
+                settings = load_user_cache_settings(config_path)
+                if settings.enabled:
+                    search_scope = str(
+                        patient_cache_root(
+                            files_root_from_sqlite_path(settings.sqlite_path),
+                            normalized_source_id,
+                        )
+                        / "scored_paths"
+                        / "direct_entity"
+                    )
             LOGGER.warning(
-                "Saved direct entity scored detail not found for pattern %s: %s",
+                "Saved direct entity scored detail not found for pattern %s: searched=%s",
                 pattern,
-                pattern_dir,
+                search_scope,
             )
             continue
         for detail_path in detail_paths:
@@ -816,7 +827,7 @@ def save_similar_user_candidates_result(
     _write_json_atomic(detail_path, build_similar_user_candidate_detail(result))
     _write_json_atomic(summary_path, build_similar_user_candidate_summary(result))
     _register_topk_candidate_user_cache(result, detail_path, summary_path)
-    LOGGER.debug(
+    LOGGER.info(
         "Saved similar-user candidates result: source_id=%s, detail_path=%s, summary_path=%s",
         result.get("source_id"),
         detail_path,
@@ -1385,6 +1396,14 @@ def _register_topk_candidate_user_cache(
         ),
     )
     store.upsert_entry(entry)
+    LOGGER.info(
+        "Registered topK candidates in user cache: source_type=%s, source_id=%s, query_family=%s, cached_base_date=%s, data_path=%s",
+        entry.source_type,
+        entry.source_id,
+        entry.query_family,
+        entry.cached_base_date,
+        entry.data_path,
+    )
 
 
 def _validate_cached_topk_candidate_result(

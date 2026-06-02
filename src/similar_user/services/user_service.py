@@ -654,14 +654,19 @@ class UserService:
             path_window,
         )
 
-        total_paths = int(active_statistics.get("totalPaths", 0))
         group_count = self._extract_pattern_group_count(
             pattern,
             active_statistics,
         )
-        p2_count = int(active_statistics.get("p2Count", 0))
+        raw_total_paths = active_statistics.get("totalPaths")
+        total_paths = (
+            None
+            if raw_total_paths is None
+            else int(raw_total_paths or 0)
+        )
+        p2_count = int(active_statistics.get("p2Count") or 0)
 
-        if total_paths <= 0:
+        if group_count <= 0:
             LOGGER.warning(
                 "No available paths after statistics evaluation: source_id=%s, active_statistics=%s",
                 source_id,

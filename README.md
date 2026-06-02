@@ -304,6 +304,23 @@ data/user_cache/cache_missing_scenarios_10/files/...
 
 例如 `request_base_date=2026-05-25`、`cached_base_date=2026-05-17`、`valid_days=7` 时，差值为 8 天，所以这条缓存过期。
 
+#### 有效期配置对应关系
+
+`valid_days` 不是独立手写字段，而是在写入 `user_cache_entries` 时由 `config/settings.yaml` 的 `user_cache.*_valid_days` 配置填入。患者 path 和非患者 direct entity path 共用同一张 `user_cache_entries` 表，但各阶段使用的配置项不同：
+
+| 流程 | 阶段 | SQLite `cache_type` | 典型 `source_type` | `valid_days` 来源 |
+| --- | --- | --- | --- | --- |
+| 患者 path | raw paths | `raw_paths` | `patient` | `user_cache.patient_raw_paths_valid_days` |
+| 患者 path | scored paths | `scored_paths` | `patient` | `user_cache.patient_scored_paths_valid_days` |
+| 患者 path | topK candidates | `topk_candidates` | `patient` | `user_cache.topk_candidates_valid_days` |
+| 非患者 direct entity path | direct raw paths | `raw_paths` | `disease` / `symptom` / `unknown` | `user_cache.direct_raw_paths_valid_days` |
+| 非患者 direct entity path | scored direct entity paths | `scored_direct_entity_paths` | `direct_entity_profile` | `user_cache.direct_scored_paths_valid_days` |
+| 非患者 direct entity path | topK candidates | `topk_candidates` | `direct_entity_profile` | `user_cache.topk_candidates_valid_days` |
+
+因此，topK candidates 的有效期标记在两条流程中是同一套：都使用 `cache_type='topk_candidates'` 和 `user_cache.topk_candidates_valid_days`。区别在于患者 path 的 `source_type='patient'`，非患者 direct entity path 的 `source_type='direct_entity_profile'`、`query_family='direct_entity'`。
+
+direct entity scored path 在 SQLite 中登记为 `cache_type='scored_direct_entity_paths'`；它的文件目录为了沿用 scored path 存储结构，会落在 `scored_paths/direct_entity/...` 下。判断是否过期时以 SQLite 里的 `cache_type`、`cached_base_date` 和 `valid_days` 为准。
+
 常用查看命令：
 
 ```bash

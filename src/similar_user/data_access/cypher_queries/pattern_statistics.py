@@ -700,6 +700,79 @@ RETURN
     count(DISTINCT p2) AS p2Count
 """.strip()
 
+PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    s1.`总分` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+RETURN
+    null AS totalPaths,
+    count(DISTINCT g) AS gCount,
+    null AS p2Count,
+    'source_group_count' AS statisticsMode
+""".strip()
+
+PATIENT_TASKSET_DISEASE_TASKSET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(dis:Disease)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    s1.`总分` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+RETURN
+    null AS totalPaths,
+    count(DISTINCT dis) AS disCount,
+    null AS p2Count,
+    'source_group_count' AS statisticsMode
+""".strip()
+
+PATIENT_TASKSET_SYMPTOM_TASKSET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(sym:Symptom)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    s1.`总分` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+RETURN
+    null AS totalPaths,
+    count(DISTINCT sym) AS symCount,
+    null AS p2Count,
+    'source_group_count' AS statisticsMode
+""".strip()
+
+PATIENT_TASKSET_UNKNOWN_TASKSET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(un:Unknown)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    s1.`总分` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+RETURN
+    null AS totalPaths,
+    count(DISTINCT un) AS unCount,
+    null AS p2Count,
+    'source_group_count' AS statisticsMode
+""".strip()
+
 PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY = _require_taskset_total_score(
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_QUERY
 )
