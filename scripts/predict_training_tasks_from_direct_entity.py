@@ -640,7 +640,7 @@ def _build_direct_entity_cache_probe_result(
     unknown_ids: list[str],
     top_k: int | None,
 ) -> dict[str, Any]:
-    """Build direct-entity cache metadata without reading raw path files."""
+    """构造 direct entity 缓存探针结果，不读取完整 path，也不做实际打分。"""
     resolution = resolve_scoring_input(
         kg_repository=None,
         patient_id=patient_id,
