@@ -71,6 +71,15 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V3 = (
     "返回 JSON 对象，不要添加 Markdown。\n\n"
 )
 
+TASK_PREDICTION_PROMPT_TEMPLATE_V4 = (
+    "请基于以下 JSON 预测目标用户下一阶段训练任务。"
+    "只能从 candidate_training_tasks 选择 game_id/game_name，且不要重复。"
+    "综合 similar_user_game_counts 的总体次数、similar_user_candidates 的相似度分数、"
+    "similar_user_task_evidence 的高相似用户证据排序。"
+    "返回 output_requirement.top_k 个任务；候选不足时返回全部。"
+    "只返回合法 JSON，不要 Markdown。\n\n"
+)
+
 TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1 = (
     "请根据以下 JSON 数据，为一个不一定存在于知识图谱中的目标用户预测下一阶段更可能适合的训练任务。"
     "字段含义：target_profile 是目标用户画像；target_entities 是目标用户输入的疾病、症状、未知实体；"
@@ -92,6 +101,7 @@ TASK_PREDICTION_PROMPT_TEMPLATES = {
     "TASK_PREDICTION_PROMPT_TEMPLATE_V1": TASK_PREDICTION_PROMPT_TEMPLATE_V1,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V2": TASK_PREDICTION_PROMPT_TEMPLATE_V2,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V3": TASK_PREDICTION_PROMPT_TEMPLATE_V3,
+    "TASK_PREDICTION_PROMPT_TEMPLATE_V4": TASK_PREDICTION_PROMPT_TEMPLATE_V4,
     "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1": (
         TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1
     ),
@@ -1233,11 +1243,22 @@ def build_task_prediction_prompt(
         和 game_name 必须来自这里，避免生成库外任务。
     task_top_k：要求 LLM 返回的推荐任务数量上限。
     """
-    payload = {
-        "patient_id": patient_id,
-        "similar_user_game_counts": similar_user_game_counts,
-        "candidate_training_tasks": candidate_training_tasks,
-        "output_requirement": {
+    normalized_prompt_template_name = prompt_template_name.strip()
+    if normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_V4":
+        output_requirement: dict[str, Any] = {
+            "top_k": task_top_k,
+            "format": {
+                "patient_id": patient_id,
+                "predicted_training_tasks": [
+                    {
+                        "game_id": "from candidate_training_tasks",
+                        "game_name": "from candidate_training_tasks",
+                    }
+                ],
+            },
+        }
+    else:
+        output_requirement = {
             "top_k": task_top_k,
             "format": {
                 "patient_id": patient_id,
@@ -1252,9 +1273,13 @@ def build_task_prediction_prompt(
                     }
                 ],
             },
-        },
+        }
+    payload = {
+        "patient_id": patient_id,
+        "similar_user_game_counts": similar_user_game_counts,
+        "candidate_training_tasks": candidate_training_tasks,
+        "output_requirement": output_requirement,
     }
-    normalized_prompt_template_name = prompt_template_name.strip()
     if candidate_source is not None:
         payload["candidate_source"] = candidate_source
     if normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1":
@@ -1262,7 +1287,10 @@ def build_task_prediction_prompt(
         payload["target_entities"] = target_entities or {}
         payload["similar_user_candidates"] = similar_user_candidates or []
         payload["similar_user_task_evidence"] = similar_user_task_evidence or []
-    elif normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_V2":
+    elif normalized_prompt_template_name in {
+        "TASK_PREDICTION_PROMPT_TEMPLATE_V2",
+        "TASK_PREDICTION_PROMPT_TEMPLATE_V4",
+    }:
         payload["similar_user_candidates"] = similar_user_candidates or []
         payload["similar_user_task_evidence"] = similar_user_task_evidence or []
     prompt_template = get_task_prediction_prompt_template(normalized_prompt_template_name)
