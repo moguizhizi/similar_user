@@ -108,6 +108,7 @@ from src.similar_user.data_access.cypher_queries import (
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_TRAINING_ORDER_LOCAL_SAMPLING_DUAL_WINDOW_RANDOMIZED_PATH_BY_DATE_RANGE_QUERY,
+    PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_DUAL_WINDOW_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
     PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_END_DATE_QUERY,
@@ -2985,6 +2986,48 @@ class KgRepositoryTest(unittest.TestCase):
         self.assertEqual(result, [{"totalPaths": 5, "gCount": 1, "p2Count": 2}])
         mock_client.run_query.assert_called_once_with(
             query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_DATED_PATTERN_STATISTICS_BY_DATE_RANGE_QUERY,
+            parameters={
+                "patient_id": "30010096",
+                "start_date": "2022-01-01",
+                "end_date": "2022-01-13",
+            },
+        )
+
+    def test_get_pattern_statistics_prefers_lightweight_dual_window_query(
+        self,
+    ) -> None:
+        mock_client = Mock()
+        mock_client.run_query.return_value = [
+            {
+                "totalPaths": None,
+                "gCount": 1,
+                "p2Count": None,
+                "statisticsMode": "source_group_count",
+            }
+        ]
+        repository = KgRepository(client=mock_client)
+
+        result = repository.get_pattern_statistics(
+            pattern=PathPattern.PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
+            query_family=PatternQueryFamily.TRAINING_ORDER_DUAL_WINDOW,
+            patient_id=" 30010096 ",
+            start_date=" 2022-01-01 ",
+            end_date=" 2022-01-13 ",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "totalPaths": None,
+                    "gCount": 1,
+                    "p2Count": None,
+                    "statisticsMode": "source_group_count",
+                }
+            ],
+        )
+        mock_client.run_query.assert_called_once_with(
+            query=PATIENT_TASK_SET_TASK_GAME_TASK_SET_PATIENT_SOURCE_GROUP_COUNT_BY_DATE_RANGE_QUERY,
             parameters={
                 "patient_id": "30010096",
                 "start_date": "2022-01-01",
