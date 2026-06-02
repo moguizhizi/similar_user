@@ -56,8 +56,10 @@ LEADERBOARD_FIELDS = (
     "success_count",
     "failed_count",
     "avg_prediction_elapsed_seconds",
+    "batch_prediction_elapsed_seconds",
     "p95_prediction_elapsed_seconds",
     "avg_validation_elapsed_seconds",
+    "batch_validation_elapsed_seconds",
     "p95_validation_elapsed_seconds",
     "similar_user_candidate_task_coverage",
     "candidate_task_supported_rate",
@@ -212,6 +214,22 @@ def build_named_experiment_overrides(
     return named_overrides
 
 
+def build_named_experiment_base_overrides(
+    experiments: list[Any],
+) -> list[dict[str, Any]]:
+    """Read optional per-experiment command-line base overrides."""
+    base_overrides: list[dict[str, Any]] = []
+    for experiment in experiments:
+        if not isinstance(experiment, dict):
+            raise ValueError("Each experiment must be a mapping.")
+        overrides = experiment.get("base_overrides") or {}
+        if not isinstance(overrides, dict):
+            raw_name = experiment.get("name") or "unnamed"
+            raise ValueError(f"Experiment base_overrides must be a mapping: {raw_name}")
+        base_overrides.append(dict(overrides))
+    return base_overrides
+
+
 def build_experiment_override_specs(
     experiment_config: dict[str, Any],
 ) -> list[tuple[str | None, dict[str, Any]]]:
@@ -233,6 +251,22 @@ def build_experiment_override_specs(
         (None, merge_overrides(baseline_overrides, overrides))
         for overrides in build_grid_overrides(grid)
     ]
+
+
+def build_experiment_base_override_specs(
+    experiment_config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build per-run base option overrides for evaluation CLI arguments."""
+    experiments = experiment_config.get("experiments")
+    if experiments is not None:
+        if not isinstance(experiments, list) or not experiments:
+            raise ValueError("experiments must be a non-empty list when provided.")
+        return build_named_experiment_base_overrides(experiments)
+
+    grid = experiment_config.get("grid") or {}
+    if not isinstance(grid, dict):
+        raise ValueError("experiment grid section must be a mapping.")
+    return [{} for _ in build_grid_overrides(grid)]
 
 
 def get_baseline_overrides(experiment_config: dict[str, Any]) -> dict[str, Any]:
@@ -331,6 +365,14 @@ def build_evaluation_command(
             base_options=base_options,
             config_path=config_path,
             output_dir=output_dir,
+            prediction_mode="direct_entity",
+        )
+    if evaluation_script == "unified_prediction":
+        return build_direct_entity_profiles_evaluation_command(
+            base_options=base_options,
+            config_path=config_path,
+            output_dir=output_dir,
+            prediction_mode="unified",
         )
     if evaluation_script not in {
         DEFAULT_EVALUATION_SCRIPT,
@@ -391,8 +433,9 @@ def build_direct_entity_profiles_evaluation_command(
     base_options: dict[str, Any],
     config_path: str | Path,
     output_dir: str | Path,
+    prediction_mode: str = "direct_entity",
 ) -> list[str]:
-    """Build the evaluate_direct_entity_profiles.py command for one run."""
+    """Build the profile-based evaluation command for one run."""
     profiles = base_options.get("profiles")
     if not isinstance(profiles, str) or not profiles.strip():
         raise ValueError(
@@ -412,6 +455,8 @@ def build_direct_entity_profiles_evaluation_command(
         str(task_top_k),
         "--output-dir",
         str(output_dir),
+        "--prediction-mode",
+        prediction_mode,
     ]
 
     optional_args = {
@@ -450,7 +495,14 @@ def build_grid_runs(
     base_config = load_yaml_config(settings_path)
     runs: list[EvaluationGridRun] = []
     override_specs = build_experiment_override_specs(experiment_config)
-    for index, (name, overrides) in enumerate(override_specs, start=1):
+    base_override_specs = build_experiment_base_override_specs(experiment_config)
+    if len(base_override_specs) != len(override_specs):
+        raise ValueError("Experiment override and base_override counts must match.")
+    for index, ((name, overrides), base_overrides) in enumerate(
+        zip(override_specs, base_override_specs, strict=True),
+        start=1,
+    ):
+        run_base_options = {**base_options, **base_overrides}
         run_name = (
             build_named_run_name(index, name)
             if name is not None
@@ -458,7 +510,7 @@ def build_grid_runs(
         )
         generated_config = build_config_for_overrides(
             base_config,
-            _with_base_patient_path_window_override(base_options, overrides),
+            _with_base_patient_path_window_override(run_base_options, overrides),
         )
         config_path = write_generated_config(
             generated_config,
@@ -467,7 +519,7 @@ def build_grid_runs(
         )
         output_dir = Path(output_root) / "runs" / run_name
         command = build_evaluation_command(
-            base_options=base_options,
+            base_options=run_base_options,
             config_path=config_path,
             output_dir=output_dir,
         )

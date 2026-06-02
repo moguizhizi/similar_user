@@ -116,6 +116,84 @@ class RunEvaluationGridTest(unittest.TestCase):
             ],
         )
 
+    def test_build_experiment_base_override_specs_reads_named_experiments(
+        self,
+    ) -> None:
+        specs = run_evaluation_grid.build_experiment_base_override_specs(
+            {
+                "experiments": [
+                    {
+                        "name": "baseline",
+                        "overrides": {},
+                    },
+                    {
+                        "name": "incremental",
+                        "base_overrides": {
+                            "limit": 600,
+                            "patient_list_dir": "data/patient_ids/incremental",
+                        },
+                        "overrides": {},
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual(
+            specs,
+            [
+                {},
+                {
+                    "limit": 600,
+                    "patient_list_dir": "data/patient_ids/incremental",
+                },
+            ],
+        )
+
+    def test_build_grid_runs_applies_per_experiment_base_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = Path(temp_dir) / "runs"
+            generated_config_dir = Path(temp_dir) / "configs"
+            with patch(
+                "scripts.run_evaluation_grid.load_yaml_config",
+                return_value={"query": {"patient_path": {}}},
+            ):
+                runs = run_evaluation_grid.build_grid_runs(
+                    experiment_config={
+                        "base": {
+                            "base_date": "2026-05-25",
+                            "task_top_k": 7,
+                            "use_llm": False,
+                            "limit": 500,
+                        },
+                        "experiments": [
+                            {
+                                "name": "baseline",
+                                "overrides": {},
+                            },
+                            {
+                                "name": "incremental",
+                                "base_overrides": {
+                                    "limit": 600,
+                                    "patient_list_dir": "data/patient_ids/incremental",
+                                },
+                                "overrides": {},
+                            },
+                        ],
+                    },
+                    settings_path="config/settings.yaml",
+                    output_root=output_root,
+                    generated_config_dir=generated_config_dir,
+                )
+
+        self.assertEqual(len(runs), 2)
+        self.assertEqual(runs[0].command[runs[0].command.index("--limit") + 1], "500")
+        self.assertEqual(runs[1].command[runs[1].command.index("--limit") + 1], "600")
+        self.assertIn("--patient-list-dir", runs[1].command)
+        self.assertEqual(
+            runs[1].command[runs[1].command.index("--patient-list-dir") + 1],
+            "data/patient_ids/incremental",
+        )
+
     def test_get_stage_name_requires_stage(self) -> None:
         self.assertEqual(
             run_evaluation_grid.get_stage_name({"stage": "coarse_10_users"}),
@@ -263,6 +341,44 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "7",
                 "--output-dir",
                 "data/evaluation_grid/runs/exp_001",
+                "--prediction-mode",
+                "direct_entity",
+                "--limit",
+                "10",
+                "--workers",
+                "2",
+                "--dry-run",
+            ],
+        )
+
+    def test_build_evaluation_command_can_use_unified_prediction(self) -> None:
+        command = run_evaluation_grid.build_evaluation_command(
+            base_options={
+                "evaluation_script": "unified_prediction",
+                "profiles": "data/direct_entity_inputs/profiles.jsonl",
+                "task_top_k": 7,
+                "use_llm": False,
+                "limit": 10,
+                "workers": 2,
+            },
+            config_path="data/evaluation_grid/generated_configs/exp_001.yaml",
+            output_dir="data/evaluation_grid/runs/exp_001",
+        )
+
+        self.assertEqual(
+            command[1:],
+            [
+                "scripts/evaluate_direct_entity_profiles.py",
+                "--profiles",
+                "data/direct_entity_inputs/profiles.jsonl",
+                "--config",
+                "data/evaluation_grid/generated_configs/exp_001.yaml",
+                "--task-top-k",
+                "7",
+                "--output-dir",
+                "data/evaluation_grid/runs/exp_001",
+                "--prediction-mode",
+                "unified",
                 "--limit",
                 "10",
                 "--workers",

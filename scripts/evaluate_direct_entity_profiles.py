@@ -32,6 +32,9 @@ from scripts.predict_training_tasks_from_direct_entity import (  # noqa: E402
     DEFAULT_SCORED_OUTPUT_DIR,
     predict_training_tasks_from_direct_entity,
 )
+from scripts.predict_training_tasks_unified import (  # noqa: E402
+    predict_training_tasks_unified,
+)
 from scripts.predict_training_tasks_from_profiles import (  # noqa: E402
     DEFAULT_PROFILE_PATH,
     load_profiles,
@@ -74,6 +77,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--workers", type=int)
     parser.add_argument(
+        "--prediction-mode",
+        choices=("direct_entity", "unified"),
+        default="direct_entity",
+        help="Prediction function used for each profile.",
+    )
+    parser.add_argument(
         "--output-level",
         choices=("ids", "scores", "full"),
         default="scores",
@@ -95,6 +104,7 @@ def evaluate_direct_entity_profiles(
     task_top_k: int | None = None,
     use_llm: bool = True,
     workers: int | None = None,
+    prediction_mode: str = "direct_entity",
 ) -> dict[str, Any]:
     """Run direct-entity predictions and write grid-compatible evaluation outputs."""
     started_at = time.perf_counter()
@@ -115,6 +125,7 @@ def evaluate_direct_entity_profiles(
         task_top_k=resolved_task_top_k,
         use_llm=use_llm,
         workers=resolved_workers,
+        prediction_mode=prediction_mode,
         validation_mode=evaluation_settings.validation_mode,
         score_url=evaluation_settings.score_validation_url,
         csv_path=evaluation_settings.algorithm_request_results_csv,
@@ -129,6 +140,8 @@ def evaluate_direct_entity_profiles(
             "workers": resolved_workers,
             "task_top_k": resolved_task_top_k,
             "use_llm": use_llm,
+            "prediction_mode": prediction_mode,
+            "route_counts": build_route_counts(details),
             "batch_elapsed_seconds": round(time.perf_counter() - started_at, 3),
         }
     )
@@ -152,6 +165,7 @@ def run_profile_evaluations(
     task_top_k: int,
     use_llm: bool,
     workers: int,
+    prediction_mode: str,
     validation_mode: str,
     score_url: str,
     csv_path: str | Path,
@@ -167,6 +181,7 @@ def run_profile_evaluations(
                 scored_paths_dir=scored_paths_dir,
                 task_top_k=task_top_k,
                 use_llm=use_llm,
+                prediction_mode=prediction_mode,
                 validation_mode=validation_mode,
                 score_url=score_url,
                 csv_path=csv_path,
@@ -192,6 +207,7 @@ def run_profile_evaluations(
                 scored_paths_dir=scored_paths_dir,
                 task_top_k=task_top_k,
                 use_llm=use_llm,
+                prediction_mode=prediction_mode,
                 validation_mode=validation_mode,
                 score_url=score_url,
                 csv_path=csv_path,
@@ -220,6 +236,7 @@ def evaluate_profile(
     scored_paths_dir: str | Path,
     task_top_k: int,
     use_llm: bool,
+    prediction_mode: str,
     validation_mode: str,
     score_url: str,
     csv_path: str | Path,
@@ -230,25 +247,15 @@ def evaluate_profile(
     patient_id = str(profile.get("patient_id") or "").strip()
     base_date = str(profile.get("base_date") or "").strip()
     try:
-        result = predict_training_tasks_from_direct_entity(
-            patient_id=patient_id,
-            base_date=base_date,
-            age=profile.get("age"),
-            education=profile.get("education"),
-            gender=profile.get("gender"),
-            disease_ids=normalize_profile_list(profile.get("disease_ids")),
-            disease_names=[
-                str(name)
-                for name in profile.get("disease_names") or []
-                if str(name).strip()
-            ],
-            symptom_ids=normalize_profile_list(profile.get("symptom_ids")),
-            unknown_ids=normalize_profile_list(profile.get("unknown_ids")),
+        routed_result = predict_profile_training_tasks(
+            profile,
             config_path=config_path,
             scored_paths_dir=scored_paths_dir,
-            use_llm=use_llm,
             task_top_k=task_top_k,
+            use_llm=use_llm,
+            prediction_mode=prediction_mode,
         )
+        result = unwrap_unified_result(routed_result)
         predicted_game_ids = extract_predicted_game_ids(result)
         similar_user_game_counts_task_count = count_similar_user_game_count_tasks(
             result
@@ -291,6 +298,9 @@ def evaluate_profile(
     return {
         "patient_id": patient_id,
         "base_date": base_date,
+        "prediction_mode": prediction_mode,
+        "route": routed_result.get("route"),
+        "patient_exists": routed_result.get("patient_exists"),
         "status": validation_result["status"],
         "validation_mode": validation_result["validation_mode"],
         "reason": validation_result.get("reason"),
@@ -321,6 +331,67 @@ def evaluate_profile(
         "validation_elapsed_seconds": validation_elapsed_seconds,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
     }
+
+
+def predict_profile_training_tasks(
+    profile: dict[str, Any],
+    *,
+    config_path: str | Path,
+    scored_paths_dir: str | Path,
+    task_top_k: int,
+    use_llm: bool,
+    prediction_mode: str,
+) -> dict[str, Any]:
+    """Run one profile through direct-entity or unified prediction."""
+    patient_id = str(profile.get("patient_id") or "").strip()
+    base_date = str(profile.get("base_date") or "").strip()
+    disease_names = [
+        str(name) for name in profile.get("disease_names") or [] if str(name).strip()
+    ]
+    common_kwargs = {
+        "patient_id": patient_id,
+        "base_date": base_date,
+        "age": profile.get("age"),
+        "education": profile.get("education"),
+        "gender": profile.get("gender"),
+        "disease_ids": normalize_profile_list(profile.get("disease_ids")),
+        "disease_names": disease_names,
+        "symptom_ids": normalize_profile_list(profile.get("symptom_ids")),
+        "unknown_ids": normalize_profile_list(profile.get("unknown_ids")),
+        "config_path": config_path,
+        "use_llm": use_llm,
+        "task_top_k": task_top_k,
+    }
+    if prediction_mode == "direct_entity":
+        result = predict_training_tasks_from_direct_entity(
+            **common_kwargs,
+            scored_paths_dir=scored_paths_dir,
+        )
+        return {
+            "route": "direct_entity_path",
+            "patient_exists": False,
+            "result": result,
+        }
+    if prediction_mode == "unified":
+        return predict_training_tasks_unified(**common_kwargs)
+    raise ValueError(f"Unsupported prediction_mode: {prediction_mode}")
+
+
+def unwrap_unified_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Return the inner prediction payload from a routed result."""
+    inner = result.get("result")
+    return inner if isinstance(inner, dict) else result
+
+
+def build_route_counts(details: list[dict[str, Any]]) -> dict[str, int]:
+    """Count evaluated profiles by unified route."""
+    counts: dict[str, int] = {}
+    for detail in details:
+        route = detail.get("route")
+        if not isinstance(route, str) or not route:
+            route = "unknown"
+        counts[route] = counts.get(route, 0) + 1
+    return counts
 
 
 def select_profiles(
@@ -404,6 +475,7 @@ def main() -> int:
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             workers=args.workers,
+            prediction_mode=args.prediction_mode,
         )
     except Exception as exc:
         LOGGER.exception("Direct entity profile evaluation failed: %s", exc)
