@@ -12,6 +12,9 @@ llm:
   max_retries: 3
   backoff_factor: 1.5
 
+api:
+  max_concurrent_predictions: 4
+
 query:
   graph_path_limit:
     per_g_strategy: "band"
