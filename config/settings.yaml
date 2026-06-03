@@ -100,3 +100,8 @@ user_cache:
   raw_path_build_retry_sleep_seconds: 5
   cleanup_max_age_days: 30
   keep_latest_per_source: 2
+  cleanup_background_enabled: true
+  cleanup_run_hour: 1
+  cleanup_run_minute: 0
+  cleanup_timezone: "Asia/Shanghai"
+  cleanup_lock_path: "data/user_cache/cleanup.lock"
