@@ -610,6 +610,60 @@ RETURN row
 LIMIT $limit
 """.strip()
 
+AGE_EDU_TWO_STAGE_DUAL_WINDOW_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    s1.`总分` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date) AND
+    s1.`执行年龄` IS NOT NULL AND
+    s1.`执行学历` IS NOT NULL
+
+WITH p, s1, i1, g
+
+MATCH (g)
+--(i2:TaskInstance)
+--(s2:TaskInstanceSet)
+--(p2:Patient)
+
+WHERE
+    p <> p2 AND
+    s2.`训练日期` IS NOT NULL AND
+    s2.`总分` IS NOT NULL AND
+    date(s1.`训练日期`) >= date(s2.`训练日期`) AND
+    date(s2.`训练日期`) >= date($start_date) AND
+    date(s2.`训练日期`) < date($end_date) AND
+    s2.`执行年龄` IS NOT NULL AND
+    s2.`执行学历` IS NOT NULL AND
+    abs(toInteger(s2.`执行年龄`) - toInteger(s1.`执行年龄`)) <= 5 AND
+    s1.`执行学历` = s2.`执行学历`
+
+WITH g, p, s1, i1, i2, s2, p2
+ORDER BY id(g), id(p2), date(s2.`训练日期`) DESC, id(s2), id(i2)
+
+WITH g, p2, collect({
+    p: p,
+    s1: s1,
+    i1: i1,
+    g: g,
+    i2: i2,
+    s2: s2,
+    p2: p2
+})[0] AS row
+
+WITH g, collect(row)[0..$per_g] AS rows
+
+UNWIND rows AS row
+
+RETURN row
+LIMIT $limit
+""".strip()
+
 ORIGINAL_QUERY = _require_taskset_total_score(ORIGINAL_QUERY)
 LOCAL_SAMPLING_QUERY = _require_taskset_total_score(LOCAL_SAMPLING_QUERY)
 AGE_ONLY_QUERY = _require_taskset_total_score(AGE_ONLY_QUERY)
@@ -660,6 +714,7 @@ QUERY_VARIANTS = {
     "training_order_local_sampling_dual_window": LOCAL_SAMPLING_DUAL_WINDOW_QUERY,
     "training_order_age_dual_window": AGE_ONLY_DUAL_WINDOW_QUERY,
     "training_order_age_edu_dual_window": AGE_EDU_DUAL_WINDOW_QUERY,
+    "training_order_age_edu_two_stage_dual_window": AGE_EDU_TWO_STAGE_DUAL_WINDOW_QUERY,
     "training_order_age_i1_completion_dual_window": AGE_I1_COMPLETION_DUAL_WINDOW_QUERY,
     "training_order_age_i2_completion_dual_window": AGE_I2_COMPLETION_DUAL_WINDOW_QUERY,
     "training_order_age_completed_dual_window": LAYER1_AGE_COMPLETION_DUAL_WINDOW_QUERY,
@@ -723,6 +778,24 @@ RETURN
     count(DISTINCT p2) AS p2Count
 """.strip()
 
+GCOUNT_ONLY_STATISTICS_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(s1:TaskInstanceSet)
+--(i1:TaskInstance)
+--(g:Game)
+
+WHERE
+    s1.`训练日期` IS NOT NULL AND
+    s1.`总分` IS NOT NULL AND
+    date(s1.`训练日期`) >= date($start_date) AND
+    date(s1.`训练日期`) < date($end_date)
+
+RETURN
+    null AS totalPaths,
+    count(DISTINCT g) AS gCount,
+    null AS p2Count
+""".strip()
+
 ORIGINAL_STATISTICS_QUERY = _require_taskset_total_score(ORIGINAL_STATISTICS_QUERY)
 APPROX_STATISTICS_QUERY = _require_taskset_total_score(APPROX_STATISTICS_QUERY)
 ORIGINAL_DUAL_WINDOW_STATISTICS_QUERY = _require_candidate_taskset_date_window(
@@ -731,13 +804,16 @@ ORIGINAL_DUAL_WINDOW_STATISTICS_QUERY = _require_candidate_taskset_date_window(
 APPROX_DUAL_WINDOW_STATISTICS_QUERY = _require_candidate_taskset_date_window(
     APPROX_STATISTICS_QUERY
 )
+GCOUNT_ONLY_DUAL_WINDOW_STATISTICS_QUERY = GCOUNT_ONLY_STATISTICS_QUERY
 
 
 STATISTICS_VARIANTS = {
     "stats_training_order_source_window": ORIGINAL_STATISTICS_QUERY,
     "stats_training_order_approx_group_source_window": APPROX_STATISTICS_QUERY,
+    "stats_training_order_gcount_only_source_window": GCOUNT_ONLY_STATISTICS_QUERY,
     "stats_training_order_dual_window": ORIGINAL_DUAL_WINDOW_STATISTICS_QUERY,
     "stats_training_order_approx_group_dual_window": APPROX_DUAL_WINDOW_STATISTICS_QUERY,
+    "stats_training_order_gcount_only_dual_window": GCOUNT_ONLY_DUAL_WINDOW_STATISTICS_QUERY,
 }
 
 ALL_VARIANTS = {**QUERY_VARIANTS, **STATISTICS_VARIANTS}
