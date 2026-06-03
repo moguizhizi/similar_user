@@ -1219,7 +1219,49 @@ class TaskPredictionTest(unittest.TestCase):
                 use_llm=False,
             )
 
-    def test_predict_from_pipeline_result_attaches_prompt_to_llm_errors(self) -> None:
+    def test_predict_from_pipeline_result_falls_back_when_candidates_are_empty(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_direct_entity_scoring_profile.return_value = [
+            {
+                "age_at_base_date": 66,
+                "education": "本科",
+                "gender": "男",
+            }
+        ]
+        user_service.get_profile_matched_exclusive_tasks.return_value = [
+            {
+                "g": {"id": "G1", "name": "画像任务1", "任务类型": "专属"},
+                "support_count": 10,
+                "patient_count": 3,
+                "latest_training_date": "2022-05-20",
+            }
+        ]
+        user_service.get_global_popular_exclusive_tasks.return_value = []
+        user_service.get_distinct_training_games.return_value = []
+        service = TrainingTaskPredictionService(user_service=user_service)
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": []},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=1,
+        )
+
+        self.assertEqual(result["prediction_status"], "success")
+        self.assertTrue(result["fallback_used"])
+        self.assertEqual(result["fallback_reason"], "empty_candidates")
+        self.assertEqual(result["fallback_source"], "profile_matched_tasks")
+        self.assertEqual(result["prediction_failure_stage"], "candidate")
+        self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "G1")
+        self.assertTrue(result["candidate_source"]["patient_profile_loaded"])
+
+    def test_predict_from_pipeline_result_falls_back_on_llm_errors(self) -> None:
         user_service = Mock()
         user_service.get_patient_training_task_history_by_date_window.return_value = [
             {"trainingDate": "2022-05-21", "g": {"id": "9", "name": "目标任务"}}
@@ -1237,7 +1279,46 @@ class TaskPredictionTest(unittest.TestCase):
             llm_client=llm_client,
         )
 
-        with self.assertRaisesRegex(RuntimeError, "llm failed") as context:
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": ["201"]},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=True,
+            include_prompt=True,
+            task_top_k=1,
+        )
+
+        self.assertEqual(result["prediction_status"], "success")
+        self.assertTrue(result["fallback_used"])
+        self.assertEqual(result["fallback_reason"], "llm_failed")
+        self.assertEqual(result["fallback_source"], "candidate_training_tasks")
+        self.assertEqual(result["prediction_failure_stage"], "llm")
+        self.assertEqual(result["prediction_error_type"], "RuntimeError")
+        self.assertEqual(result["prediction_error_message"], "llm failed")
+        self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "1")
+        self.assertIn("candidate_training_tasks", result["llm_prompt"])
+
+    def test_predict_from_pipeline_result_can_disable_llm_fallback(self) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.return_value = []
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-10", "g": {"id": "1", "name": "任务A"}}
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "1", "name": "任务A"}}
+        ]
+        llm_client = Mock()
+        llm_client.chat.side_effect = RuntimeError("llm failed")
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            llm_client=llm_client,
+            fallback_enabled=False,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "llm failed"):
             service.predict_from_pipeline_result(
                 {
                     "patient_id": "40",
@@ -1248,9 +1329,6 @@ class TaskPredictionTest(unittest.TestCase):
                 use_llm=True,
                 task_top_k=1,
             )
-
-        self.assertIn("candidate_training_tasks", context.exception.llm_prompt)
-        self.assertEqual(context.exception.patient_id, "40")
 
 
 if __name__ == "__main__":

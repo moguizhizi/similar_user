@@ -14,6 +14,8 @@ PREDICTION_METADATA_FIELDS = (
     "prediction_error_message",
     "fallback_used",
     "fallback_reason",
+    "fallback_source",
+    "fallback_candidates_count",
 )
 
 VALIDATION_METADATA_FIELDS = (
@@ -27,18 +29,24 @@ def build_prediction_success_metadata(
     *,
     fallback_used: bool = False,
     fallback_reason: str | None = None,
+    fallback_source: str | None = None,
+    fallback_candidates_count: int | None = None,
     failure_stage: str | None = None,
     failure_reason: str | None = None,
+    error_type: str | None = None,
+    error_message: str | None = None,
 ) -> dict[str, Any]:
     """Return standard metadata for a successful prediction."""
     return {
         "prediction_status": "success",
         "prediction_failure_stage": failure_stage,
         "prediction_failure_reason": failure_reason,
-        "prediction_error_type": None,
-        "prediction_error_message": None,
+        "prediction_error_type": error_type,
+        "prediction_error_message": error_message,
         "fallback_used": bool(fallback_used),
         "fallback_reason": fallback_reason,
+        "fallback_source": fallback_source,
+        "fallback_candidates_count": fallback_candidates_count,
     }
 
 
@@ -53,6 +61,8 @@ def build_prediction_failure_metadata(exc: Exception) -> dict[str, Any]:
         "prediction_error_message": str(exc),
         "fallback_used": False,
         "fallback_reason": None,
+        "fallback_source": None,
+        "fallback_candidates_count": None,
     }
 
 
@@ -137,6 +147,11 @@ def summarize_prediction_visibility(details: list[dict[str, Any]]) -> dict[str, 
         for detail in details
         if detail.get("fallback_reason")
     )
+    fallback_source_counts = Counter(
+        str(detail.get("fallback_source"))
+        for detail in details
+        if detail.get("fallback_source")
+    )
     fallback_used_count = sum(1 for detail in details if detail.get("fallback_used"))
     return {
         "prediction_status_counts": dict(sorted(prediction_status_counts.items())),
@@ -144,4 +159,5 @@ def summarize_prediction_visibility(details: list[dict[str, Any]]) -> dict[str, 
         "prediction_failure_reason_counts": dict(sorted(failure_reason_counts.items())),
         "fallback_used_count": fallback_used_count,
         "fallback_reason_counts": dict(sorted(fallback_reason_counts.items())),
+        "fallback_source_counts": dict(sorted(fallback_source_counts.items())),
     }

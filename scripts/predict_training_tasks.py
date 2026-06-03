@@ -241,6 +241,7 @@ def run_training_task_prediction(
             algorithm_request_results_csv=algorithm_request_results_csv,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
+            fallback_enabled=query_settings.training_task_prediction.fallback_enabled,
         )
         return service.predict_from_pipeline_result(
             pipeline_result,

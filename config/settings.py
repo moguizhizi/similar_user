@@ -109,6 +109,7 @@ class TrainingTaskPredictionSettings:
     unlock_train_candidate_tasks_enabled: bool = False
     similar_user_game_counts_weighting_enabled: bool = False
     similar_user_game_counts_weighted_sort_enabled: bool = False
+    fallback_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -476,6 +477,11 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction similar_user_game_counts_weighted_sort_enabled must be a boolean."
         )
+    fallback_enabled = training_task_prediction_data.get("fallback_enabled", True)
+    if not isinstance(fallback_enabled, bool):
+        raise ValueError(
+            "training_task_prediction fallback_enabled must be a boolean."
+        )
     validation_mode = training_task_evaluation_data.get("validation_mode", "set")
     if not isinstance(validation_mode, str) or validation_mode.strip() not in {
         "set",
@@ -602,6 +608,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             unlock_train_candidate_tasks_enabled=unlock_train_candidate_tasks_enabled,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
+            fallback_enabled=fallback_enabled,
         ),
         training_task_evaluation=TrainingTaskEvaluationSettings(
             validation_mode=validation_mode.strip(),

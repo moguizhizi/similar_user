@@ -487,6 +487,9 @@ def predict_training_tasks_from_direct_entity(
             similar_user_game_counts_weighted_sort_enabled=(
                 query_settings.training_task_prediction.similar_user_game_counts_weighted_sort_enabled
             ),
+            fallback_enabled=(
+                query_settings.training_task_prediction.fallback_enabled
+            ),
         )
         prediction_result = prediction_service.predict_from_direct_entity_candidates(
             patient_id=normalized_patient_id,

@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from .llm_client import LlmClient
+from .task_prediction_fallback import (
+    TaskPredictionFallbackService,
+    build_candidate_task_fallback_prediction,
+)
 from .task_prediction_failure import build_prediction_success_metadata
 from .user_service import UserService
 from ..utils.logger import get_logger
@@ -150,6 +154,7 @@ class TrainingTaskPredictionService:
     algorithm_request_results_csv: str | None = None
     similar_user_game_counts_weighting_enabled: bool = False
     similar_user_game_counts_weighted_sort_enabled: bool = False
+    fallback_enabled: bool = True
 
     def __post_init__(self) -> None:
         validate_prompt_weighting_compatibility(
@@ -172,7 +177,15 @@ class TrainingTaskPredictionService:
         target_task_window = build_target_task_window(base_date)
         candidates = extract_similar_user_candidates(pipeline_result)
         if not candidates:
-            raise ValueError("similar user pipeline output does not contain candidates.")
+            if not self.fallback_enabled:
+                raise ValueError(
+                    "similar user pipeline output does not contain candidates."
+                )
+            return self._predict_patient_empty_candidates_fallback(
+                patient_id=resolved_patient_id,
+                base_date=base_date,
+                task_top_k=task_top_k,
+            )
 
         target_history = self.user_service.get_patient_training_task_history_by_date_window(
             resolved_patient_id,
@@ -313,6 +326,7 @@ class TrainingTaskPredictionService:
 
         llm_prediction: dict[str, Any] | None = None
         raw_llm_output: str | None = None
+        llm_error: Exception | None = None
         if use_llm:
             if self.llm_client is None:
                 raise ValueError("llm_client is required when use_llm is true.")
@@ -326,7 +340,51 @@ class TrainingTaskPredictionService:
             except Exception as exc:
                 setattr(exc, "llm_prompt", prompt)
                 setattr(exc, "patient_id", resolved_patient_id)
-                raise
+                if not self.fallback_enabled:
+                    raise
+                llm_error = exc
+
+        predicted_tasks = _resolve_predicted_tasks(
+            llm_prediction,
+            rule_based_tasks,
+        )
+        if self.fallback_enabled and (llm_error is not None or not predicted_tasks):
+            fallback_reason = "llm_failed" if llm_error is not None else "llm_empty_output"
+            fallback_result = build_candidate_task_fallback_prediction(
+                patient_id=resolved_patient_id,
+                candidate_training_tasks=prompt_candidate_tasks,
+                task_top_k=task_top_k,
+                reason=fallback_reason,
+                failure_stage="llm" if use_llm else "prediction",
+                error=llm_error,
+                llm_prompt=prompt if include_prompt else None,
+                raw_llm_output=raw_llm_output,
+            )
+            fallback_result.update(
+                {
+                    "candidate_source": {
+                        **fallback_result["candidate_source"],
+                        "source": "run_similar_user_pipeline.py",
+                        "candidate_count": len(candidates),
+                        "candidate_ids": [
+                            candidate.patient_id for candidate in candidates
+                        ],
+                        "has_candidate_scores": any(
+                            candidate.candidate_score is not None
+                            for candidate in candidates
+                        ),
+                        "candidate_task_windows": candidate_task_windows,
+                        "candidate_task_source": candidate_source_type,
+                    },
+                    "prompt_candidate_selection": prompt_candidate_selection,
+                    "raw_similar_user_game_counts": raw_similar_user_game_counts,
+                    "similar_user_game_counts": prompt_similar_user_game_counts,
+                    "similar_user_task_evidence": prompt_similar_user_task_evidence,
+                    "prompt_template": self.prompt_template_name,
+                    "llm_prediction": llm_prediction,
+                }
+            )
+            return fallback_result
 
         result: dict[str, Any] = {
             "patient_id": resolved_patient_id,
@@ -347,10 +405,7 @@ class TrainingTaskPredictionService:
             "similar_user_task_evidence": prompt_similar_user_task_evidence,
             "candidate_training_tasks": prompt_candidate_tasks,
             "prompt_template": self.prompt_template_name,
-            "predicted_training_tasks": _resolve_predicted_tasks(
-                llm_prediction,
-                rule_based_tasks,
-            ),
+            "predicted_training_tasks": predicted_tasks,
             "llm_prediction": llm_prediction,
         }
         if include_prompt:
@@ -400,6 +455,34 @@ class TrainingTaskPredictionService:
                 exc,
             )
             return []
+
+    def _predict_patient_empty_candidates_fallback(
+        self,
+        *,
+        patient_id: str,
+        base_date: str,
+        task_top_k: int,
+    ) -> dict[str, Any]:
+        profile = _load_patient_fallback_profile(
+            self.user_service,
+            patient_id=patient_id,
+            base_date=base_date,
+        )
+        result = TaskPredictionFallbackService(self.user_service).predict_from_profile(
+            patient_id=patient_id,
+            base_date=base_date,
+            age=profile.get("age"),
+            education=profile.get("education"),
+            gender=profile.get("gender"),
+            task_top_k=task_top_k,
+            reason="empty_candidates",
+        )
+        result["candidate_source"] = {
+            **result["candidate_source"],
+            "source": "patient_path_empty_candidates_fallback",
+            "patient_profile_loaded": profile.get("loaded"),
+        }
+        return result
 
     def predict_from_direct_entity_candidates(
         self,
@@ -522,6 +605,7 @@ class TrainingTaskPredictionService:
 
         llm_prediction: dict[str, Any] | None = None
         raw_llm_output: str | None = None
+        llm_error: Exception | None = None
         if use_llm:
             if self.llm_client is None:
                 raise ValueError("llm_client is required when use_llm is true.")
@@ -535,7 +619,59 @@ class TrainingTaskPredictionService:
             except Exception as exc:
                 setattr(exc, "llm_prompt", prompt)
                 setattr(exc, "patient_id", resolved_patient_id)
-                raise
+                if not self.fallback_enabled:
+                    raise
+                llm_error = exc
+
+        predicted_tasks = _resolve_predicted_tasks(
+            llm_prediction,
+            rule_based_tasks,
+        )
+        if self.fallback_enabled and (llm_error is not None or not predicted_tasks):
+            fallback_reason = "llm_failed" if llm_error is not None else "llm_empty_output"
+            fallback_result = build_candidate_task_fallback_prediction(
+                patient_id=resolved_patient_id,
+                candidate_training_tasks=prompt_candidate_tasks,
+                task_top_k=task_top_k,
+                reason=fallback_reason,
+                failure_stage="llm" if use_llm else "prediction",
+                error=llm_error,
+                llm_prompt=prompt if include_prompt else None,
+                raw_llm_output=raw_llm_output,
+            )
+            fallback_result.update(
+                {
+                    "candidate_source": {
+                        **fallback_result["candidate_source"],
+                        "source": "direct_entity_paths",
+                        "candidate_count": len(candidates),
+                        "candidate_ids": [
+                            candidate.patient_id for candidate in candidates
+                        ],
+                        "candidate_task_windows": candidate_task_windows,
+                    },
+                    "target_profile": target_profile or {},
+                    "target_entities": target_entities or {},
+                    "prompt_candidate_selection": {
+                        "enabled": self.prompt_candidate_compression_enabled,
+                        "selected_candidate_count": len(prompt_candidate_game_ids),
+                        "source_similar_user_game_count": len(similar_user_game_counts),
+                        "source_candidate_task_count": len(candidate_tasks),
+                        "similar_user_game_counts_weighting_enabled": (
+                            self.similar_user_game_counts_weighting_enabled
+                        ),
+                        "similar_user_game_counts_weighted_sort_enabled": (
+                            self.similar_user_game_counts_weighted_sort_enabled
+                        ),
+                    },
+                    "raw_similar_user_game_counts": raw_similar_user_game_counts,
+                    "similar_user_game_counts": prompt_similar_user_game_counts,
+                    "similar_user_task_evidence": prompt_similar_user_task_evidence,
+                    "prompt_template": self.prompt_template_name,
+                    "llm_prediction": llm_prediction,
+                }
+            )
+            return fallback_result
 
         result: dict[str, Any] = {
             "patient_id": resolved_patient_id,
@@ -565,10 +701,7 @@ class TrainingTaskPredictionService:
             "similar_user_task_evidence": prompt_similar_user_task_evidence,
             "candidate_training_tasks": prompt_candidate_tasks,
             "prompt_template": self.prompt_template_name,
-            "predicted_training_tasks": _resolve_predicted_tasks(
-                llm_prediction,
-                rule_based_tasks,
-            ),
+            "predicted_training_tasks": predicted_tasks,
             "llm_prediction": llm_prediction,
         }
         if include_prompt:
@@ -643,6 +776,38 @@ def _extract_direct_entity_candidates(
         candidates.append(candidate)
         seen_patient_ids.add(candidate.patient_id)
     return candidates
+
+
+def _load_patient_fallback_profile(
+    user_service: UserService,
+    *,
+    patient_id: str,
+    base_date: str,
+) -> dict[str, Any]:
+    try:
+        rows = user_service.get_patient_direct_entity_scoring_profile(
+            patient_id,
+            base_date,
+        )
+    except Exception as exc:
+        LOGGER.warning(
+            "Failed to load patient fallback profile: patient_id=%s, base_date=%s, error=%s",
+            patient_id,
+            base_date,
+            exc,
+        )
+        return {"loaded": False, "age": None, "education": None, "gender": None}
+    if not rows:
+        return {"loaded": False, "age": None, "education": None, "gender": None}
+    row = rows[0]
+    if not isinstance(row, dict):
+        return {"loaded": False, "age": None, "education": None, "gender": None}
+    return {
+        "loaded": True,
+        "age": row.get("age_at_base_date") or row.get("profile_age"),
+        "education": row.get("education"),
+        "gender": row.get("gender"),
+    }
 
 
 def parse_json_object_from_text(text: str) -> dict[str, Any]:
