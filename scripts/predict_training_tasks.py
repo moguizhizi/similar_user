@@ -44,6 +44,10 @@ from similar_user.services.task_prediction import (
     DEFAULT_TASK_TOP_K,
     TrainingTaskPredictionService,
 )
+from similar_user.services.task_prediction_failure import (
+    build_prediction_failure_metadata,
+    prediction_metadata_from_nested_result,
+)
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 from config.settings import load_query_settings
@@ -79,31 +83,6 @@ def parse_args() -> argparse.Namespace:
         "--skip-path-scoring",
         action="store_true",
         help="Use existing saved scored paths and only run candidate ranking.",
-    )
-    parser.add_argument(
-        "--query-family",
-        default=None,
-        choices=(
-            "training_order_source_window",
-            "date_window",
-            "training_order_local_sampling_source_window",
-            "training_order_age_source_window",
-            "training_order_age_edu_source_window",
-            "training_order_age_completed_source_window",
-            "training_order_age_edu_completed_source_window",
-            "training_order_age_edu_task_completed_source_window",
-            "training_order_dual_window",
-            "training_order_local_sampling_dual_window",
-            "training_order_age_dual_window",
-            "training_order_age_edu_dual_window",
-            "training_order_age_completed_dual_window",
-            "training_order_age_edu_completed_dual_window",
-            "training_order_age_edu_task_completed_dual_window",
-        ),
-        help=(
-            "Query family for paired-statistics path building. Defaults to "
-            "training_order_source_window enforces s1/s2 training-date order and filters by the s1 date window; date_window only filters by the s1 date window."
-        ),
     )
     parser.add_argument(
         "--config",
@@ -316,6 +295,7 @@ def summarize_prediction_result(
     if output_level == "ids":
         return {
             "patient_id": result.get("patient_id"),
+            **prediction_metadata_from_nested_result(result),
             "predicted_training_task_ids": [
                 prediction.get("game_id")
                 for prediction in predictions
@@ -325,6 +305,7 @@ def summarize_prediction_result(
     if output_level == "scores":
         return {
             "patient_id": result.get("patient_id"),
+            **prediction_metadata_from_nested_result(result),
             "predicted_training_tasks": [
                 {
                     "game_id": prediction.get("game_id"),
@@ -380,7 +361,6 @@ def main() -> int:
             config_path=args.config,
             skip_path_build=args.skip_path_build,
             skip_path_scoring=args.skip_path_scoring,
-            query_family=args.query_family,
             task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             include_prompt=args.include_prompt or save_prompt,
@@ -390,7 +370,18 @@ def main() -> int:
         if save_prompt:
             prompt_path = write_prompt_to_file(result, base_date=args.base_date)
     except Exception as exc:
-        LOGGER.exception("Training task prediction failed: %s", exc)
+        failure = build_prediction_failure_metadata(exc)
+        LOGGER.exception(
+            "Training task prediction failed: patient_id=%s, prediction_status=%s, "
+            "prediction_failure_stage=%s, prediction_failure_reason=%s, "
+            "prediction_error_type=%s, prediction_error_message=%s",
+            args.patient_id,
+            failure.get("prediction_status"),
+            failure.get("prediction_failure_stage"),
+            failure.get("prediction_failure_reason"),
+            failure.get("prediction_error_type"),
+            failure.get("prediction_error_message"),
+        )
         return 1
 
     LOGGER.info(json.dumps(output, ensure_ascii=False, indent=2, default=str))

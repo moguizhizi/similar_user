@@ -415,7 +415,6 @@ def build_patient_evaluation_command(
         "patient_id": "--patient-id",
         "patient_list_dir": "--patient-list-dir",
         "pattern": "--pattern",
-        "query_family": "--query-family",
         "limit": "--limit",
     }
     for option_name, cli_flag in optional_args.items():
@@ -464,6 +463,7 @@ def build_direct_entity_profiles_evaluation_command(
         "limit": "--limit",
         "patient_id": "--patient-id",
         "workers": "--workers",
+        "pattern": "--pattern",
     }
     for option_name, cli_flag in optional_args.items():
         option_value = base_options.get(option_name)
@@ -474,6 +474,11 @@ def build_direct_entity_profiles_evaluation_command(
                 command.extend([cli_flag, str(patient_id)])
             continue
         command.extend([cli_flag, str(option_value)])
+
+    if bool(base_options.get("skip_path_build", False)):
+        command.append("--skip-path-build")
+    if bool(base_options.get("skip_path_scoring", False)):
+        command.append("--skip-path-scoring")
 
     if not use_llm:
         command.append("--dry-run")
@@ -510,7 +515,7 @@ def build_grid_runs(
         )
         generated_config = build_config_for_overrides(
             base_config,
-            _with_base_patient_path_window_override(run_base_options, overrides),
+            _with_base_patient_path_overrides(run_base_options, overrides),
         )
         config_path = write_generated_config(
             generated_config,
@@ -536,16 +541,20 @@ def build_grid_runs(
     return runs
 
 
-def _with_base_patient_path_window_override(
+def _with_base_patient_path_overrides(
     base_options: dict[str, Any],
     overrides: dict[str, Any],
 ) -> dict[str, Any]:
-    """Carry legacy base.window_days into the generated YAML config."""
+    """Carry base patient-path options into the generated YAML config."""
     merged_overrides = dict(overrides)
     if "query.patient_path.window_days" not in merged_overrides:
         window_days = base_options.get("window_days")
         if window_days is not None:
             merged_overrides["query.patient_path.window_days"] = window_days
+    if "query.patient_path.query_family" not in merged_overrides:
+        query_family = base_options.get("query_family")
+        if query_family is not None:
+            merged_overrides["query.patient_path.query_family"] = query_family
     return merged_overrides
 
 

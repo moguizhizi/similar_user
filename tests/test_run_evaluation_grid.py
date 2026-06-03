@@ -194,6 +194,21 @@ class RunEvaluationGridTest(unittest.TestCase):
             "data/patient_ids/incremental",
         )
 
+    def test_base_query_family_is_written_to_generated_config_overrides(self) -> None:
+        overrides = run_evaluation_grid._with_base_patient_path_overrides(
+            {
+                "window_days": 14,
+                "query_family": "training_order_dual_window",
+            },
+            {},
+        )
+
+        self.assertEqual(overrides["query.patient_path.window_days"], 14)
+        self.assertEqual(
+            overrides["query.patient_path.query_family"],
+            "training_order_dual_window",
+        )
+
     def test_get_stage_name_requires_stage(self) -> None:
         self.assertEqual(
             run_evaluation_grid.get_stage_name({"stage": "coarse_10_users"}),
@@ -324,6 +339,9 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "use_llm": False,
                 "limit": 10,
                 "workers": 2,
+                "query_family": "training_order_dual_window",
+                "skip_path_build": True,
+                "skip_path_scoring": True,
             },
             config_path="data/evaluation_grid/generated_configs/exp_001.yaml",
             output_dir="data/evaluation_grid/runs/exp_001",
@@ -347,6 +365,8 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "10",
                 "--workers",
                 "2",
+                "--skip-path-build",
+                "--skip-path-scoring",
                 "--dry-run",
             ],
         )

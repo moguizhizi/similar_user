@@ -52,6 +52,7 @@ class PatientPathSettings:
     """Configuration for patient-start pattern path retrieval."""
 
     window_days: int = 14
+    query_family: str | None = None
 
 
 @dataclass(frozen=True)
@@ -349,6 +350,12 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         or patient_path_window_days <= 0
     ):
         raise ValueError("patient_path window_days must be a positive integer.")
+    patient_path_query_family = patient_path_data.get("query_family")
+    if patient_path_query_family is not None and (
+        not isinstance(patient_path_query_family, str)
+        or not patient_path_query_family.strip()
+    ):
+        raise ValueError("patient_path query_family must be a non-empty string.")
 
     scored_path_top_k = score_pattern_paths_data.get("top_k")
     if scored_path_top_k is not None and (
@@ -570,7 +577,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             ),
         ),
         pattern_path_storage=PatternPathStorageSettings(output_dir=output_dir.strip()),
-        patient_path=PatientPathSettings(window_days=patient_path_window_days),
+        patient_path=PatientPathSettings(
+            window_days=patient_path_window_days,
+            query_family=(
+                patient_path_query_family.strip()
+                if isinstance(patient_path_query_family, str)
+                else None
+            ),
+        ),
         score_pattern_paths=ScorePatternPathsSettings(top_k=scored_path_top_k),
         candidate_ranking=CandidateRankingSettings(
             candidate_top_k=candidate_top_k,

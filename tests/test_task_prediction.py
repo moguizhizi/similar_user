@@ -15,6 +15,7 @@ from src.similar_user.services.task_prediction import (
     TASK_PREDICTION_PROMPT_TEMPLATE_V1,
     TASK_PREDICTION_PROMPT_TEMPLATE_V2,
     TASK_PREDICTION_PROMPT_TEMPLATE_V3,
+    TASK_PREDICTION_PROMPT_TEMPLATE_V4,
     TrainingTaskPredictionService,
     build_candidate_task_window,
     build_candidate_training_tasks,
@@ -110,6 +111,29 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertIn('"patient_id": "201"', prompt)
         self.assertIn('"candidate_score": 2.5', prompt)
 
+    def test_build_task_prediction_prompt_uses_compact_v4_template(self) -> None:
+        prompt = build_task_prediction_prompt(
+            patient_id="40",
+            similar_user_candidates=[
+                {"patient_id": "201", "candidate_score": 2.5},
+            ],
+            similar_user_task_evidence=[
+                {"patient_id": "201", "tasks": [{"game_id": "1", "count": 3}]},
+            ],
+            similar_user_game_counts=[],
+            candidate_training_tasks=[],
+            task_top_k=7,
+            prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V4",
+        )
+
+        self.assertTrue(prompt.startswith(TASK_PREDICTION_PROMPT_TEMPLATE_V4))
+        self.assertIn('"similar_user_candidates"', prompt)
+        self.assertIn('"similar_user_task_evidence"', prompt)
+        self.assertNotIn('"rank"', prompt)
+        self.assertNotIn("confidence", prompt)
+        self.assertNotIn("reason", prompt)
+        self.assertNotIn("supporting_candidate_ids", prompt)
+
     def test_load_unlock_train_candidate_tasks_uses_unlock_train_keys(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             csv_path = Path(tmp_dir) / "request.csv"
@@ -192,8 +216,9 @@ class TaskPredictionTest(unittest.TestCase):
     def test_basic_prompt_templates_do_not_describe_weighted_count(self) -> None:
         self.assertNotIn("weighted_count", TASK_PREDICTION_PROMPT_TEMPLATE_V1)
         self.assertNotIn("weighted_count", TASK_PREDICTION_PROMPT_TEMPLATE_V2)
+        self.assertNotIn("weighted_count", TASK_PREDICTION_PROMPT_TEMPLATE_V4)
 
-    def test_only_v2_prompt_template_describes_task_evidence_payload(self) -> None:
+    def test_v2_and_v4_prompt_templates_describe_task_evidence_payload(self) -> None:
         self.assertNotIn(
             "similar_user_task_evidence",
             TASK_PREDICTION_PROMPT_TEMPLATE_V1,
@@ -201,6 +226,10 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertIn(
             "similar_user_task_evidence",
             TASK_PREDICTION_PROMPT_TEMPLATE_V2,
+        )
+        self.assertIn(
+            "similar_user_task_evidence",
+            TASK_PREDICTION_PROMPT_TEMPLATE_V4,
         )
         self.assertNotIn(
             "similar_user_task_evidence",
@@ -722,6 +751,9 @@ class TaskPredictionTest(unittest.TestCase):
         )
 
         self.assertEqual(result["patient_id"], "40")
+        self.assertEqual(result["prediction_status"], "success")
+        self.assertFalse(result["fallback_used"])
+        self.assertIsNone(result["prediction_failure_stage"])
         self.assertEqual(result["candidate_source"]["candidate_ids"], ["201", "202"])
         self.assertEqual(
             result["raw_similar_user_game_counts"],

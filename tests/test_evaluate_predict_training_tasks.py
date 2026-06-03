@@ -23,15 +23,12 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 "40",
                 "--base-date",
                 "2022-05-22",
-                "--query-family",
-                "date_window",
             ],
         ):
             args = evaluate_predict_training_tasks.parse_args()
 
         self.assertEqual(args.patient_id, "40")
         self.assertEqual(args.base_date, "2022-05-22")
-        self.assertEqual(args.query_family, "date_window")
         self.assertEqual(
             args.analysis_file,
             "predict_training_tasks_analysis.json",
@@ -152,6 +149,8 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             [
                 {
                     "status": "success_evaluated",
+                    "prediction_status": "success",
+                    "fallback_used": False,
                     "task_hit": True,
                     "precision": 0.5,
                     "recall": 1.0,
@@ -183,9 +182,18 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                         },
                     },
                     "elapsed_seconds": 1.0,
+                    "prediction_started_at_seconds": 10.0,
+                    "prediction_finished_at_seconds": 15.0,
+                    "validation_started_at_seconds": 15.0,
+                    "validation_finished_at_seconds": 17.0,
                 },
                 {
                     "status": "success_evaluated",
+                    "prediction_status": "success",
+                    "fallback_used": True,
+                    "fallback_reason": "empty_candidates",
+                    "prediction_failure_stage": "candidate",
+                    "prediction_failure_reason": "empty_candidates",
                     "task_hit": False,
                     "precision": 0.0,
                     "recall": 0.0,
@@ -217,6 +225,10 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                         },
                     },
                     "elapsed_seconds": 3.0,
+                    "prediction_started_at_seconds": 12.0,
+                    "prediction_finished_at_seconds": 20.0,
+                    "validation_started_at_seconds": 20.0,
+                    "validation_finished_at_seconds": 23.0,
                 },
                 {
                     "status": "success_not_evaluable",
@@ -224,6 +236,9 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
                 },
                 {
                     "status": "failed",
+                    "prediction_status": "failed",
+                    "prediction_failure_stage": "llm",
+                    "prediction_failure_reason": "llm_error",
                     "elapsed_seconds": 4.0,
                 },
             ]
@@ -232,6 +247,14 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         self.assertEqual(summary["total_count"], 4)
         self.assertEqual(summary["success_count"], 3)
         self.assertEqual(summary["failed_count"], 1)
+        self.assertEqual(summary["prediction_status_counts"], {"failed": 1, "success": 2})
+        self.assertEqual(summary["prediction_failure_stage_counts"], {"candidate": 1, "llm": 1})
+        self.assertEqual(
+            summary["prediction_failure_reason_counts"],
+            {"empty_candidates": 1, "llm_error": 1},
+        )
+        self.assertEqual(summary["fallback_used_count"], 1)
+        self.assertEqual(summary["fallback_reason_counts"], {"empty_candidates": 1})
         self.assertEqual(summary["not_evaluable_count"], 1)
         self.assertEqual(summary["evaluated_count"], 2)
         self.assertEqual(summary["coverage_rate"], 0.75)
@@ -263,6 +286,8 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         )
         self.assertEqual(summary["avg_elapsed_seconds"], 2.5)
         self.assertEqual(summary["p95_elapsed_seconds"], 4.0)
+        self.assertEqual(summary["batch_prediction_elapsed_seconds"], 10.0)
+        self.assertEqual(summary["batch_validation_elapsed_seconds"], 8.0)
 
     def test_summarize_evaluation_details_calculates_score_metrics(self) -> None:
         summary = evaluate_predict_training_tasks.summarize_evaluation_details(
@@ -520,6 +545,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             training_task_prediction=Mock(
                 prompt_candidate_compression_enabled=True,
                 prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V1",
+                unlock_train_candidate_tasks_enabled=True,
                 similar_user_game_counts_weighting_enabled=True,
                 similar_user_game_counts_weighted_sort_enabled=False,
             ),
@@ -557,6 +583,7 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
             config["prompt_template"],
             "TASK_PREDICTION_PROMPT_TEMPLATE_V1",
         )
+        self.assertTrue(config["unlock_train_candidate_tasks_enabled"])
         self.assertTrue(config["similar_user_game_counts_weighting_enabled"])
         self.assertFalse(config["similar_user_game_counts_weighted_sort_enabled"])
         mock_load_query_settings.assert_called_once_with("config/settings.yaml")
@@ -1124,6 +1151,9 @@ class EvaluatePredictTrainingTasksTest(unittest.TestCase):
         mock_export_patient_ids.assert_not_called()
         mock_run_batch_evaluation.assert_called_once()
         self.assertEqual(mock_run_batch_evaluation.call_args.args[0], ["40", "41"])
+        written_summary = mock_write_outputs.call_args.args[1]
+        self.assertIn("batch_elapsed_seconds", written_summary)
+        self.assertEqual(written_summary["workers"], 1)
 
     @patch("scripts.evaluate_predict_training_tasks.write_analysis_output")
     @patch("scripts.evaluate_predict_training_tasks.write_outputs")

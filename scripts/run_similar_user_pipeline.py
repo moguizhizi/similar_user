@@ -91,31 +91,6 @@ def parse_args() -> argparse.Namespace:
         help="Deprecated compatibility flag; cache lookup now decides whether paths are rescored.",
     )
     parser.add_argument(
-        "--query-family",
-        default=None,
-        choices=(
-            "training_order_source_window",
-            "date_window",
-            "training_order_local_sampling_source_window",
-            "training_order_age_source_window",
-            "training_order_age_edu_source_window",
-            "training_order_age_completed_source_window",
-            "training_order_age_edu_completed_source_window",
-            "training_order_age_edu_task_completed_source_window",
-            "training_order_dual_window",
-            "training_order_local_sampling_dual_window",
-            "training_order_age_dual_window",
-            "training_order_age_edu_dual_window",
-            "training_order_age_completed_dual_window",
-            "training_order_age_edu_completed_dual_window",
-            "training_order_age_edu_task_completed_dual_window",
-        ),
-        help=(
-            "Query family for paired-statistics path building. Defaults to "
-            "training_order_source_window enforces s1/s2 training-date order and filters by the s1 date window; date_window only filters by the s1 date window."
-        ),
-    )
-    parser.add_argument(
         "--base-date",
         required=True,
         help="Exclusive window end date used to build paths, for example 2022-05-22.",
@@ -151,7 +126,11 @@ def run_similar_user_pipeline(
         resolved_window_days,
         resolved_config_path,
     )
-    effective_query_family = query_family or "training_order_source_window"
+    effective_query_family = (
+        query_family
+        or _resolve_patient_path_query_family(resolved_config_path)
+        or "training_order_source_window"
+    )
     path_generation = None
     direct_entity_scoring = None
     candidate_result, direct_entity_scoring = _build_patient_candidates_with_auto_refresh(
@@ -210,6 +189,12 @@ def _summarize_path_result(path_result: dict[str, object]) -> dict[str, object]:
         "path_window": path_window,
         "path_count": len(paths),
     }
+
+
+def _resolve_patient_path_query_family(config_path: str | Path) -> str | None:
+    """Return the configured patient-path query family when present."""
+    query_settings = load_query_settings(config_path)
+    return query_settings.patient_path.query_family
 
 
 def _raise_if_path_results_empty(
@@ -574,7 +559,6 @@ def main() -> int:
             skip_path_build=args.skip_path_build,
             skip_path_scoring=args.skip_path_scoring,
             base_date=args.base_date,
-            query_family=args.query_family,
         )
     except Exception as exc:
         LOGGER.exception(

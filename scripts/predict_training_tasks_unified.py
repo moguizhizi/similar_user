@@ -23,6 +23,10 @@ from similar_user.domain.graph_schema import (  # noqa: E402
     PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
 )
 from similar_user.services.task_prediction import DEFAULT_TASK_TOP_K  # noqa: E402
+from similar_user.services.task_prediction_failure import (  # noqa: E402
+    build_prediction_failure_metadata,
+    prediction_metadata_from_nested_result,
+)
 from similar_user.utils.logger import get_logger  # noqa: E402
 from config.settings import load_query_settings  # noqa: E402
 
@@ -57,11 +61,6 @@ def parse_args() -> argparse.Namespace:
         "--pattern",
         default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
         help="Patient-path pattern used when the patient exists.",
-    )
-    parser.add_argument(
-        "--query-family",
-        default=None,
-        help="Patient-path query family used when the patient exists.",
     )
     parser.add_argument(
         "--skip-path-build",
@@ -366,7 +365,6 @@ def main() -> int:
             base_date=args.base_date,
             config_path=args.config,
             pattern=args.pattern,
-            query_family=args.query_family,
             skip_path_build=args.skip_path_build,
             skip_path_scoring=args.skip_path_scoring,
             age=args.age,
@@ -386,6 +384,21 @@ def main() -> int:
         )
         if args.output:
             _write_json_atomic(Path(args.output), result)
+        prediction_metadata = prediction_metadata_from_nested_result(
+            result.get("result") if isinstance(result.get("result"), dict) else result
+        )
+        LOGGER.info(
+            "Unified training task prediction completed: patient_id=%s, route=%s, "
+            "prediction_status=%s, fallback_used=%s, fallback_reason=%s, "
+            "prediction_failure_stage=%s, prediction_failure_reason=%s",
+            args.patient_id,
+            result.get("route"),
+            prediction_metadata.get("prediction_status"),
+            prediction_metadata.get("fallback_used"),
+            prediction_metadata.get("fallback_reason"),
+            prediction_metadata.get("prediction_failure_stage"),
+            prediction_metadata.get("prediction_failure_reason"),
+        )
         prompt_path = None
         if save_prompt:
             inner_result = result.get("result")
@@ -398,7 +411,19 @@ def main() -> int:
         if prompt_path is not None:
             LOGGER.info("Saved training-task prediction prompt to %s", prompt_path)
     except Exception as exc:
-        LOGGER.exception("Unified training task prediction failed: %s", exc)
+        failure = build_prediction_failure_metadata(exc)
+        LOGGER.exception(
+            "Unified training task prediction failed: patient_id=%s, "
+            "prediction_status=%s, prediction_failure_stage=%s, "
+            "prediction_failure_reason=%s, prediction_error_type=%s, "
+            "prediction_error_message=%s",
+            args.patient_id,
+            failure.get("prediction_status"),
+            failure.get("prediction_failure_stage"),
+            failure.get("prediction_failure_reason"),
+            failure.get("prediction_error_type"),
+            failure.get("prediction_error_message"),
+        )
         return 1
     return 0
 

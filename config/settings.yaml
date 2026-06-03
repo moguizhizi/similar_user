@@ -29,6 +29,7 @@ query:
     output_dir: "data/pattern_paths"
   patient_path:
     window_days: 14
+    query_family: "training_order_dual_window"
   score_pattern_paths:
     top_k: 150
   candidate_ranking:
@@ -79,13 +80,14 @@ similarity:
     dimension: 64
 
 direct_path_cache:
+  # enabled=true 时，build_direct_entity_paths.py 会从 sqlite_path 指向的 direct path SQLite 读取。
   enabled: false
   sqlite_path: "data/direct_path_cache/direct_paths.sqlite"
   incremental_enabled: true
   overlap_days: 1
 
 user_cache:
-  enabled: false
+  enabled: true
   sqlite_path: "data/user_cache/cache_index.sqlite"
   patient_raw_paths_valid_days: 30
   direct_raw_paths_valid_days: 60

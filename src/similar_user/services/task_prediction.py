@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .llm_client import LlmClient
+from .task_prediction_failure import build_prediction_success_metadata
 from .user_service import UserService
 from ..utils.logger import get_logger
 
@@ -80,6 +81,17 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V4 = (
     "只返回合法 JSON，不要 Markdown。\n\n"
 )
 
+TASK_PREDICTION_PROMPT_TEMPLATE_V5 = (
+    "请作为训练任务排序器，基于以下 JSON 为目标用户选择下一阶段训练任务。"
+    "只能从 candidate_training_tasks 中选择 game_id，不要重复。"
+    "主要依据 ranking_signals 排序：优先选择 high_score_support_count、max_candidate_score、"
+    "weighted_score 较高的任务；其次考虑 total_count、supporting_user_count。"
+    "high_score_task_evidence 只包含高相似用户的明细，用来识别低频但高质量支持的任务。"
+    "不要只按 total_count 排序；中等频次但由高相似用户强支持的任务可以优先。"
+    "返回 output_requirement.top_k 个任务；候选不足时返回全部。"
+    "只返回合法 JSON，不要 Markdown。\n\n"
+)
+
 TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1 = (
     "请根据以下 JSON 数据，为一个不一定存在于知识图谱中的目标用户预测下一阶段更可能适合的训练任务。"
     "字段含义：target_profile 是目标用户画像；target_entities 是目标用户输入的疾病、症状、未知实体；"
@@ -102,6 +114,7 @@ TASK_PREDICTION_PROMPT_TEMPLATES = {
     "TASK_PREDICTION_PROMPT_TEMPLATE_V2": TASK_PREDICTION_PROMPT_TEMPLATE_V2,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V3": TASK_PREDICTION_PROMPT_TEMPLATE_V3,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V4": TASK_PREDICTION_PROMPT_TEMPLATE_V4,
+    "TASK_PREDICTION_PROMPT_TEMPLATE_V5": TASK_PREDICTION_PROMPT_TEMPLATE_V5,
     "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1": (
         TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1
     ),
@@ -317,6 +330,7 @@ class TrainingTaskPredictionService:
 
         result: dict[str, Any] = {
             "patient_id": resolved_patient_id,
+            **build_prediction_success_metadata(),
             "candidate_source": {
                 "source": "run_similar_user_pipeline.py",
                 "candidate_count": len(candidates),
@@ -345,8 +359,16 @@ class TrainingTaskPredictionService:
             result["raw_llm_output"] = raw_llm_output
 
         LOGGER.info(
-            "Built training-task prediction: patient_id=%s, candidate_count=%s, predicted_task_count=%s, used_llm=%s",
+            "Built training-task prediction: patient_id=%s, prediction_status=%s, "
+            "fallback_used=%s, fallback_reason=%s, prediction_failure_stage=%s, "
+            "prediction_failure_reason=%s, candidate_count=%s, predicted_task_count=%s, "
+            "used_llm=%s",
             resolved_patient_id,
+            result.get("prediction_status"),
+            result.get("fallback_used"),
+            result.get("fallback_reason"),
+            result.get("prediction_failure_stage"),
+            result.get("prediction_failure_reason"),
             len(candidates),
             len(result["predicted_training_tasks"]),
             use_llm,
@@ -517,6 +539,7 @@ class TrainingTaskPredictionService:
 
         result: dict[str, Any] = {
             "patient_id": resolved_patient_id,
+            **build_prediction_success_metadata(),
             "candidate_source": {
                 "source": "direct_entity_paths",
                 "candidate_count": len(candidates),
@@ -553,8 +576,16 @@ class TrainingTaskPredictionService:
         if raw_llm_output is not None:
             result["raw_llm_output"] = raw_llm_output
         LOGGER.info(
-            "Built direct entity training-task prediction: patient_id=%s, candidate_count=%s, predicted_task_count=%s, used_llm=%s",
+            "Built direct entity training-task prediction: patient_id=%s, "
+            "prediction_status=%s, fallback_used=%s, fallback_reason=%s, "
+            "prediction_failure_stage=%s, prediction_failure_reason=%s, "
+            "candidate_count=%s, predicted_task_count=%s, used_llm=%s",
             resolved_patient_id,
+            result.get("prediction_status"),
+            result.get("fallback_used"),
+            result.get("fallback_reason"),
+            result.get("prediction_failure_stage"),
+            result.get("prediction_failure_reason"),
             len(candidates),
             len(result["predicted_training_tasks"]),
             use_llm,
@@ -1118,6 +1149,220 @@ def filter_candidate_tasks_to_ids(
     ]
 
 
+def build_v5_candidate_training_tasks(
+    candidate_training_tasks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep only fields needed for V5 prompt candidate validation."""
+    compact_tasks: list[dict[str, Any]] = []
+    for task in candidate_training_tasks:
+        game_id = _normalize_text(task.get("game_id"))
+        if game_id is None:
+            continue
+        compact_task: dict[str, Any] = {
+            "game_id": game_id,
+            "game_name": _normalize_text(task.get("game_name")),
+        }
+        task_type = _normalize_text(task.get("task_type"))
+        if task_type is not None:
+            compact_task["task_type"] = task_type
+        for key in ("appearance_count", "weighted_score"):
+            value = task.get(key)
+            if value is not None:
+                compact_task[key] = value
+        compact_tasks.append(compact_task)
+    return compact_tasks
+
+
+def build_v5_ranking_signals(
+    *,
+    similar_user_game_counts: list[dict[str, Any]],
+    candidate_training_tasks: list[dict[str, Any]],
+    similar_user_candidates: list[dict[str, Any]] | None,
+    similar_user_task_evidence: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Build task-level ranking signals while avoiding full low-score evidence."""
+    candidate_score_by_id = {
+        str(candidate.get("patient_id")): _normalize_float(
+            candidate.get("candidate_score")
+        )
+        for candidate in similar_user_candidates or []
+        if isinstance(candidate, dict) and candidate.get("patient_id") is not None
+    }
+    sorted_candidate_ids = [
+        patient_id
+        for patient_id, _score in sorted(
+            candidate_score_by_id.items(),
+            key=lambda item: (-(item[1] or 0.0), item[0]),
+        )
+    ]
+    high_score_candidate_ids = set(sorted_candidate_ids[:PROMPT_HIGH_SCORE_USER_COUNT])
+
+    signals_by_game_id: dict[str, dict[str, Any]] = {}
+
+    def signal_for(game_id: str) -> dict[str, Any]:
+        return signals_by_game_id.setdefault(
+            game_id,
+            {
+                "game_id": game_id,
+                "game_name": None,
+                "total_count": 0,
+                "supporting_user_count": 0,
+                "high_score_support_count": 0,
+                "max_candidate_score": None,
+                "avg_candidate_score": None,
+                "appearance_count": None,
+                "weighted_score": None,
+                "top_supporting_users": [],
+            },
+        )
+
+    for task in candidate_training_tasks:
+        game_id = _normalize_text(task.get("game_id"))
+        if game_id is None:
+            continue
+        signal = signal_for(game_id)
+        signal["game_name"] = _normalize_text(task.get("game_name"))
+        if task.get("appearance_count") is not None:
+            signal["appearance_count"] = task.get("appearance_count")
+        if task.get("weighted_score") is not None:
+            signal["weighted_score"] = task.get("weighted_score")
+
+    for game_count in similar_user_game_counts:
+        game_id = _normalize_text(game_count.get("game_id"))
+        if game_id is None:
+            continue
+        signal = signal_for(game_id)
+        signal["game_name"] = signal.get("game_name") or _normalize_text(
+            game_count.get("game_name")
+        )
+        if game_count.get("count") is not None:
+            signal["total_count"] = game_count.get("count")
+        for key in (
+            "weighted_count",
+            "supporting_user_count",
+            "avg_support_score",
+            "max_support_score",
+        ):
+            value = game_count.get(key)
+            if value is not None:
+                signal[key] = value
+
+    support_scores_by_game_id: dict[str, list[float]] = {}
+    support_users_by_game_id: dict[str, set[str]] = {}
+    high_score_users_by_game_id: dict[str, set[str]] = {}
+    for evidence in similar_user_task_evidence or []:
+        if not isinstance(evidence, dict):
+            continue
+        patient_id = _normalize_text(evidence.get("patient_id"))
+        if patient_id is None:
+            continue
+        candidate_score = _normalize_float(
+            evidence.get("candidate_score", candidate_score_by_id.get(patient_id))
+        )
+        tasks = evidence.get("tasks")
+        if not isinstance(tasks, list):
+            continue
+        for task in tasks:
+            if not isinstance(task, dict):
+                continue
+            game_id = _normalize_text(task.get("game_id"))
+            if game_id is None:
+                continue
+            signal = signal_for(game_id)
+            signal["game_name"] = signal.get("game_name") or _normalize_text(
+                task.get("game_name")
+            )
+            support_users_by_game_id.setdefault(game_id, set()).add(patient_id)
+            if patient_id in high_score_candidate_ids:
+                high_score_users_by_game_id.setdefault(game_id, set()).add(patient_id)
+            if candidate_score is not None:
+                support_scores_by_game_id.setdefault(game_id, []).append(candidate_score)
+                top_users = signal["top_supporting_users"]
+                if isinstance(top_users, list):
+                    top_users.append(
+                        {
+                            "patient_id": patient_id,
+                            "candidate_score": candidate_score,
+                            "count": task.get("count"),
+                        }
+                    )
+
+    for game_id, signal in signals_by_game_id.items():
+        support_users = support_users_by_game_id.get(game_id, set())
+        if support_users:
+            signal["supporting_user_count"] = len(support_users)
+        high_score_users = high_score_users_by_game_id.get(game_id, set())
+        signal["high_score_support_count"] = len(high_score_users)
+        support_scores = support_scores_by_game_id.get(game_id, [])
+        if support_scores:
+            signal["max_candidate_score"] = round(max(support_scores), 4)
+            signal["avg_candidate_score"] = round(
+                sum(support_scores) / len(support_scores),
+                4,
+            )
+        top_users = signal.get("top_supporting_users")
+        if isinstance(top_users, list):
+            signal["top_supporting_users"] = sorted(
+                top_users,
+                key=lambda item: (
+                    -float(item.get("candidate_score") or 0.0),
+                    -int(item.get("count") or 0),
+                    str(item.get("patient_id") or ""),
+                ),
+            )[:3]
+
+    return sorted(
+        signals_by_game_id.values(),
+        key=lambda item: (
+            -int(item.get("high_score_support_count") or 0),
+            -float(item.get("max_candidate_score") or 0.0),
+            -float(item.get("weighted_score") or item.get("weighted_count") or 0.0),
+            -int(item.get("total_count") or item.get("appearance_count") or 0),
+            str(item.get("game_id") or ""),
+        ),
+    )
+
+
+def build_v5_high_score_task_evidence(
+    similar_user_task_evidence: list[dict[str, Any]] | None,
+    *,
+    max_users: int,
+    max_tasks_per_user: int,
+) -> list[dict[str, Any]]:
+    """Keep task evidence only for the highest-score candidates."""
+    scored_evidence = sorted(
+        [item for item in similar_user_task_evidence or [] if isinstance(item, dict)],
+        key=lambda item: (
+            -float(_normalize_float(item.get("candidate_score")) or 0.0),
+            str(item.get("patient_id") or ""),
+        ),
+    )
+    compact_evidence: list[dict[str, Any]] = []
+    for evidence in scored_evidence[: max(0, max_users)]:
+        tasks = evidence.get("tasks")
+        if not isinstance(tasks, list):
+            tasks = []
+        compact_tasks = []
+        for task in tasks[: max(0, max_tasks_per_user)]:
+            if not isinstance(task, dict):
+                continue
+            compact_tasks.append(
+                {
+                    "game_id": task.get("game_id"),
+                    "game_name": task.get("game_name"),
+                    "count": task.get("count"),
+                }
+            )
+        compact_evidence.append(
+            {
+                "patient_id": evidence.get("patient_id"),
+                "candidate_score": evidence.get("candidate_score"),
+                "tasks": compact_tasks,
+            }
+        )
+    return compact_evidence
+
+
 def select_prompt_candidate_game_ids(
     similar_user_game_counts: list[dict[str, Any]],
     similar_user_task_evidence: list[dict[str, Any]],
@@ -1257,6 +1502,23 @@ def build_task_prediction_prompt(
                 ],
             },
         }
+    elif normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_V5":
+        output_requirement = {
+            "top_k": task_top_k,
+            "format": {
+                "patient_id": patient_id,
+                "predicted_training_tasks": [
+                    {
+                        "rank": 1,
+                        "game_id": "from candidate_training_tasks",
+                        "game_name": "from candidate_training_tasks",
+                        "confidence": 0.0,
+                        "reason": "brief ranking evidence",
+                        "supporting_candidate_ids": ["candidate patient id"],
+                    }
+                ],
+            },
+        }
     else:
         output_requirement = {
             "top_k": task_top_k,
@@ -1274,6 +1536,39 @@ def build_task_prediction_prompt(
                 ],
             },
         }
+    if normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_V5":
+        payload = {
+            "patient_id": patient_id,
+            "candidate_training_tasks": build_v5_candidate_training_tasks(
+                candidate_training_tasks
+            ),
+            "similar_user_candidates": similar_user_candidates or [],
+            "ranking_signals": build_v5_ranking_signals(
+                similar_user_game_counts=similar_user_game_counts,
+                candidate_training_tasks=candidate_training_tasks,
+                similar_user_candidates=similar_user_candidates,
+                similar_user_task_evidence=similar_user_task_evidence,
+            ),
+            "high_score_task_evidence": build_v5_high_score_task_evidence(
+                similar_user_task_evidence,
+                max_users=PROMPT_HIGH_SCORE_USER_COUNT,
+                max_tasks_per_user=PROMPT_PER_HIGH_SCORE_USER_TOP_K,
+            ),
+            "output_requirement": output_requirement,
+        }
+        if candidate_source is not None:
+            payload["candidate_source"] = candidate_source
+        if target_profile is not None:
+            payload["target_profile"] = target_profile
+        if target_entities is not None:
+            payload["target_entities"] = target_entities
+        prompt_template = get_task_prediction_prompt_template(
+            normalized_prompt_template_name
+        )
+        return prompt_template + (
+            f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
+        )
+
     payload = {
         "patient_id": patient_id,
         "similar_user_game_counts": similar_user_game_counts,

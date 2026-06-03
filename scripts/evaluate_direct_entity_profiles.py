@@ -42,6 +42,12 @@ from scripts.predict_training_tasks_from_profiles import (  # noqa: E402
 from similar_user.services.task_recommendation_validation import (  # noqa: E402
     validate_training_task_recommendation,
 )
+from similar_user.services.task_prediction_failure import (  # noqa: E402
+    build_prediction_failure_metadata,
+    build_validation_failure_metadata,
+    build_validation_success_metadata,
+    prediction_metadata_from_nested_result,
+)
 from similar_user.utils.logger import get_logger  # noqa: E402
 
 
@@ -83,6 +89,20 @@ def parse_args() -> argparse.Namespace:
         help="Prediction function used for each profile.",
     )
     parser.add_argument(
+        "--pattern",
+        help="Unified mode: patient-path pattern used when a profile patient exists.",
+    )
+    parser.add_argument(
+        "--skip-path-build",
+        action="store_true",
+        help="Unified mode: patient path only, use existing saved raw paths.",
+    )
+    parser.add_argument(
+        "--skip-path-scoring",
+        action="store_true",
+        help="Unified mode: patient path only, use existing scored paths.",
+    )
+    parser.add_argument(
         "--output-level",
         choices=("ids", "scores", "full"),
         default="scores",
@@ -105,6 +125,10 @@ def evaluate_direct_entity_profiles(
     use_llm: bool = True,
     workers: int | None = None,
     prediction_mode: str = "direct_entity",
+    pattern: str | None = None,
+    query_family: str | None = None,
+    skip_path_build: bool = False,
+    skip_path_scoring: bool = False,
 ) -> dict[str, Any]:
     """Run direct-entity predictions and write grid-compatible evaluation outputs."""
     started_at = time.perf_counter()
@@ -126,6 +150,10 @@ def evaluate_direct_entity_profiles(
         use_llm=use_llm,
         workers=resolved_workers,
         prediction_mode=prediction_mode,
+        pattern=pattern,
+        query_family=query_family,
+        skip_path_build=skip_path_build,
+        skip_path_scoring=skip_path_scoring,
         validation_mode=evaluation_settings.validation_mode,
         score_url=evaluation_settings.score_validation_url,
         csv_path=evaluation_settings.algorithm_request_results_csv,
@@ -141,6 +169,7 @@ def evaluate_direct_entity_profiles(
             "task_top_k": resolved_task_top_k,
             "use_llm": use_llm,
             "prediction_mode": prediction_mode,
+            "query_family": query_family,
             "route_counts": build_route_counts(details),
             "batch_elapsed_seconds": round(time.perf_counter() - started_at, 3),
         }
@@ -166,6 +195,10 @@ def run_profile_evaluations(
     use_llm: bool,
     workers: int,
     prediction_mode: str,
+    pattern: str | None,
+    query_family: str | None,
+    skip_path_build: bool,
+    skip_path_scoring: bool,
     validation_mode: str,
     score_url: str,
     csv_path: str | Path,
@@ -182,6 +215,10 @@ def run_profile_evaluations(
                 task_top_k=task_top_k,
                 use_llm=use_llm,
                 prediction_mode=prediction_mode,
+                pattern=pattern,
+                query_family=query_family,
+                skip_path_build=skip_path_build,
+                skip_path_scoring=skip_path_scoring,
                 validation_mode=validation_mode,
                 score_url=score_url,
                 csv_path=csv_path,
@@ -208,6 +245,10 @@ def run_profile_evaluations(
                 task_top_k=task_top_k,
                 use_llm=use_llm,
                 prediction_mode=prediction_mode,
+                pattern=pattern,
+                query_family=query_family,
+                skip_path_build=skip_path_build,
+                skip_path_scoring=skip_path_scoring,
                 validation_mode=validation_mode,
                 score_url=score_url,
                 csv_path=csv_path,
@@ -237,6 +278,10 @@ def evaluate_profile(
     task_top_k: int,
     use_llm: bool,
     prediction_mode: str,
+    pattern: str | None,
+    query_family: str | None,
+    skip_path_build: bool,
+    skip_path_scoring: bool,
     validation_mode: str,
     score_url: str,
     csv_path: str | Path,
@@ -246,6 +291,8 @@ def evaluate_profile(
     started_at = time.perf_counter()
     patient_id = str(profile.get("patient_id") or "").strip()
     base_date = str(profile.get("base_date") or "").strip()
+    current_stage = "prediction"
+    result: dict[str, Any] | None = None
     try:
         routed_result = predict_profile_training_tasks(
             profile,
@@ -254,6 +301,10 @@ def evaluate_profile(
             task_top_k=task_top_k,
             use_llm=use_llm,
             prediction_mode=prediction_mode,
+            pattern=pattern,
+            query_family=query_family,
+            skip_path_build=skip_path_build,
+            skip_path_scoring=skip_path_scoring,
         )
         result = unwrap_unified_result(routed_result)
         predicted_game_ids = extract_predicted_game_ids(result)
@@ -268,6 +319,7 @@ def evaluate_profile(
         )
         prediction_finished_at = time.perf_counter()
         prediction_elapsed_seconds = round(prediction_finished_at - started_at, 3)
+        current_stage = "validation"
         validation_started_at = time.perf_counter()
         validation_result = validate_training_task_recommendation(
             validation_mode=validation_mode,
@@ -285,19 +337,63 @@ def evaluate_profile(
             3,
         )
     except Exception as exc:
-        return {
+        failure_stage, failure_reason = classify_profile_failure(
+            exc,
+            current_stage=current_stage,
+        )
+        if current_stage == "prediction":
+            LOGGER.error(
+                "Training task prediction failed: patient_id=%s, prediction_mode=%s, "
+                "failure_stage=%s, failure_reason=%s, error_type=%s, error_message=%s",
+                patient_id,
+                prediction_mode,
+                failure_stage,
+                failure_reason,
+                type(exc).__name__,
+                str(exc),
+            )
+        else:
+            LOGGER.error(
+                "Training task validation failed: patient_id=%s, prediction_mode=%s, "
+                "failure_stage=%s, failure_reason=%s, error_type=%s, error_message=%s",
+                patient_id,
+                prediction_mode,
+                failure_stage,
+                failure_reason,
+                type(exc).__name__,
+                str(exc),
+            )
+        detail = {
             "patient_id": patient_id,
             "base_date": base_date,
             "status": "failed",
+            "prediction_mode": prediction_mode,
+            "failure_stage": failure_stage,
+            "failure_reason": failure_reason,
             "validation_mode": validation_mode,
             "error_type": type(exc).__name__,
             "error_message": str(exc),
             "elapsed_seconds": round(time.perf_counter() - started_at, 3),
         }
+        if current_stage == "prediction":
+            detail.update(build_prediction_failure_metadata(exc))
+        else:
+            detail.update(
+                prediction_metadata_from_nested_result(result or {})
+                or {
+                    "prediction_status": "success",
+                    "fallback_used": False,
+                    "fallback_reason": None,
+                }
+            )
+            detail.update(build_validation_failure_metadata(exc))
+        return detail
 
     return {
         "patient_id": patient_id,
         "base_date": base_date,
+        **prediction_metadata_from_nested_result(result),
+        **build_validation_success_metadata(),
         "prediction_mode": prediction_mode,
         "route": routed_result.get("route"),
         "patient_exists": routed_result.get("patient_exists"),
@@ -333,6 +429,36 @@ def evaluate_profile(
     }
 
 
+def classify_profile_failure(
+    exc: Exception,
+    *,
+    current_stage: str,
+) -> tuple[str, str]:
+    """Return coarse failure stage/reason for profile prediction logs."""
+    message = str(exc).lower()
+    if current_stage == "validation":
+        if "timeout" in message:
+            return "validation", "validation_timeout"
+        return "validation", "validation_error"
+    if "education is required" in message:
+        return "input", "missing_education"
+    if "gender is required" in message:
+        return "input", "missing_gender"
+    if "age is required" in message:
+        return "input", "missing_age"
+    if "no_resolved_entity_names" in message:
+        return "entity_resolution", "no_resolved_entity_names"
+    if "missing_entity_input" in message:
+        return "input", "missing_entity_input"
+    if "candidate" in message:
+        return "candidate", "candidate_error"
+    if "llm" in message or "prompt" in message:
+        return "llm", "llm_error"
+    if "timeout" in message:
+        return "prediction", "prediction_timeout"
+    return "prediction", "prediction_error"
+
+
 def predict_profile_training_tasks(
     profile: dict[str, Any],
     *,
@@ -341,6 +467,10 @@ def predict_profile_training_tasks(
     task_top_k: int,
     use_llm: bool,
     prediction_mode: str,
+    pattern: str | None = None,
+    query_family: str | None = None,
+    skip_path_build: bool = False,
+    skip_path_scoring: bool = False,
 ) -> dict[str, Any]:
     """Run one profile through direct-entity or unified prediction."""
     patient_id = str(profile.get("patient_id") or "").strip()
@@ -373,7 +503,15 @@ def predict_profile_training_tasks(
             "result": result,
         }
     if prediction_mode == "unified":
-        return predict_training_tasks_unified(**common_kwargs)
+        unified_kwargs = {
+            **common_kwargs,
+            "query_family": query_family,
+            "skip_path_build": skip_path_build,
+            "skip_path_scoring": skip_path_scoring,
+        }
+        if pattern is not None:
+            unified_kwargs["pattern"] = pattern
+        return predict_training_tasks_unified(**unified_kwargs)
     raise ValueError(f"Unsupported prediction_mode: {prediction_mode}")
 
 
@@ -476,6 +614,9 @@ def main() -> int:
             use_llm=not args.dry_run,
             workers=args.workers,
             prediction_mode=args.prediction_mode,
+            pattern=args.pattern,
+            skip_path_build=args.skip_path_build,
+            skip_path_scoring=args.skip_path_scoring,
         )
     except Exception as exc:
         LOGGER.exception("Direct entity profile evaluation failed: %s", exc)

@@ -6,6 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any
 
+from .task_prediction_failure import build_prediction_success_metadata
 from .user_service import UserService
 
 
@@ -103,6 +104,12 @@ class DirectEntityFallbackPredictionService:
         predictions = _rank_predictions(selected)
         return {
             "patient_id": resolved_patient_id,
+            **build_prediction_success_metadata(
+                fallback_used=True,
+                fallback_reason=reason,
+                failure_stage=_fallback_failure_stage(reason),
+                failure_reason=reason,
+            ),
             "candidate_source": {
                 "source": "direct_entity_fallback",
                 "fallback_level": levels_used[0] if levels_used else "none",
@@ -307,6 +314,15 @@ def _normalize_required_text(value: object, field_name: str) -> str:
     if text is None:
         raise ValueError(f"{field_name} must be a non-empty string.")
     return text
+
+
+def _fallback_failure_stage(reason: str) -> str:
+    normalized = str(reason or "").strip().lower()
+    if normalized in {"missing_entity_input"}:
+        return "input"
+    if normalized in {"no_resolved_entity_names"}:
+        return "entity_resolution"
+    return "candidate"
 
 
 def _normalize_optional_text(value: object) -> str | None:
