@@ -142,8 +142,7 @@ def build_training_task_score_validation(
         )
 
     csv_task_ids = normalize_task_ids(recommen_train.get("id"))
-    all_task_ids = normalize_task_ids([*kg_task_ids, *csv_task_ids])
-    if not all_task_ids:
+    if not kg_task_ids and not csv_task_ids:
         return _skipped_payload(
             normalized_patient_id,
             kg_task_ids,
@@ -157,7 +156,14 @@ def build_training_task_score_validation(
         timeout_seconds=timeout_seconds,
     )
     try:
-        scored_tasks = resolved_client.score_tasks(all_task_ids, ai_params=ai_params)
+        kg_score_exchange = resolved_client.score_tasks_with_exchange(
+            kg_task_ids,
+            ai_params=ai_params,
+        )
+        csv_score_exchange = resolved_client.score_tasks_with_exchange(
+            csv_task_ids,
+            ai_params=ai_params,
+        )
     except TrainingTaskScoreError as exc:
         return {
             "status": "failed",
@@ -170,15 +176,8 @@ def build_training_task_score_validation(
             "csv_task_ids": csv_task_ids,
         }
 
-    scores_by_task_id = {
-        str(item["task_id"]): float(item["score"])
-        for item in scored_tasks
-        if isinstance(item, dict)
-        and item.get("task_id") is not None
-        and item.get("score") is not None
-    }
-    kg_scored_tasks = _select_scored_tasks(kg_task_ids, scores_by_task_id)
-    csv_scored_tasks = _select_scored_tasks(csv_task_ids, scores_by_task_id)
+    kg_scored_tasks = _normalize_scored_tasks(kg_score_exchange["scored_tasks"])
+    csv_scored_tasks = _normalize_scored_tasks(csv_score_exchange["scored_tasks"])
 
     kg_avg_score = _average_score(kg_scored_tasks)
     csv_avg_score = _average_score(csv_scored_tasks)
@@ -206,6 +205,12 @@ def build_training_task_score_validation(
         ),
         "kg_scored_tasks": kg_scored_tasks,
         "csv_scored_tasks": csv_scored_tasks,
+        "score_service_exchanges": {
+            "kg": kg_score_exchange,
+            "csv": csv_score_exchange,
+        },
+        "kg_score_exchange": kg_score_exchange,
+        "csv_score_exchange": csv_score_exchange,
     }
 
 
@@ -278,17 +283,16 @@ def _skipped_payload(
     return payload
 
 
-def _select_scored_tasks(
-    task_ids: list[str],
-    scores_by_task_id: dict[str, float],
-) -> list[dict[str, Any]]:
+def _normalize_scored_tasks(scored_tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
-            "task_id": task_id,
-            "score": round(scores_by_task_id[task_id], 4),
+            "task_id": str(item["task_id"]),
+            "score": round(float(item["score"]), 4),
         }
-        for task_id in task_ids
-        if task_id in scores_by_task_id
+        for item in scored_tasks
+        if isinstance(item, dict)
+        and item.get("task_id") is not None
+        and item.get("score") is not None
     ]
 
 

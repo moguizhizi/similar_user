@@ -15,6 +15,7 @@ from src.similar_user.services.task_prediction import (
     TASK_PREDICTION_PROMPT_TEMPLATE_V1,
     TASK_PREDICTION_PROMPT_TEMPLATE_V2,
     TASK_PREDICTION_PROMPT_TEMPLATE_V3,
+    TASK_PREDICTION_PROMPT_TEMPLATE_V4,
     TrainingTaskPredictionService,
     build_candidate_task_window,
     build_candidate_training_tasks,
@@ -110,6 +111,29 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertIn('"patient_id": "201"', prompt)
         self.assertIn('"candidate_score": 2.5', prompt)
 
+    def test_build_task_prediction_prompt_uses_compact_v4_template(self) -> None:
+        prompt = build_task_prediction_prompt(
+            patient_id="40",
+            similar_user_candidates=[
+                {"patient_id": "201", "candidate_score": 2.5},
+            ],
+            similar_user_task_evidence=[
+                {"patient_id": "201", "tasks": [{"game_id": "1", "count": 3}]},
+            ],
+            similar_user_game_counts=[],
+            candidate_training_tasks=[],
+            task_top_k=7,
+            prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_V4",
+        )
+
+        self.assertTrue(prompt.startswith(TASK_PREDICTION_PROMPT_TEMPLATE_V4))
+        self.assertIn('"similar_user_candidates"', prompt)
+        self.assertIn('"similar_user_task_evidence"', prompt)
+        self.assertNotIn('"rank"', prompt)
+        self.assertNotIn("confidence", prompt)
+        self.assertNotIn("reason", prompt)
+        self.assertNotIn("supporting_candidate_ids", prompt)
+
     def test_load_unlock_train_candidate_tasks_uses_unlock_train_keys(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             csv_path = Path(tmp_dir) / "request.csv"
@@ -192,8 +216,9 @@ class TaskPredictionTest(unittest.TestCase):
     def test_basic_prompt_templates_do_not_describe_weighted_count(self) -> None:
         self.assertNotIn("weighted_count", TASK_PREDICTION_PROMPT_TEMPLATE_V1)
         self.assertNotIn("weighted_count", TASK_PREDICTION_PROMPT_TEMPLATE_V2)
+        self.assertNotIn("weighted_count", TASK_PREDICTION_PROMPT_TEMPLATE_V4)
 
-    def test_only_v2_prompt_template_describes_task_evidence_payload(self) -> None:
+    def test_v2_and_v4_prompt_templates_describe_task_evidence_payload(self) -> None:
         self.assertNotIn(
             "similar_user_task_evidence",
             TASK_PREDICTION_PROMPT_TEMPLATE_V1,
@@ -201,6 +226,10 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertIn(
             "similar_user_task_evidence",
             TASK_PREDICTION_PROMPT_TEMPLATE_V2,
+        )
+        self.assertIn(
+            "similar_user_task_evidence",
+            TASK_PREDICTION_PROMPT_TEMPLATE_V4,
         )
         self.assertNotIn(
             "similar_user_task_evidence",
@@ -722,6 +751,9 @@ class TaskPredictionTest(unittest.TestCase):
         )
 
         self.assertEqual(result["patient_id"], "40")
+        self.assertEqual(result["prediction_status"], "success")
+        self.assertFalse(result["fallback_used"])
+        self.assertIsNone(result["prediction_failure_stage"])
         self.assertEqual(result["candidate_source"]["candidate_ids"], ["201", "202"])
         self.assertEqual(
             result["raw_similar_user_game_counts"],
@@ -1187,7 +1219,49 @@ class TaskPredictionTest(unittest.TestCase):
                 use_llm=False,
             )
 
-    def test_predict_from_pipeline_result_attaches_prompt_to_llm_errors(self) -> None:
+    def test_predict_from_pipeline_result_falls_back_when_candidates_are_empty(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_direct_entity_scoring_profile.return_value = [
+            {
+                "age_at_base_date": 66,
+                "education": "本科",
+                "gender": "男",
+            }
+        ]
+        user_service.get_profile_matched_exclusive_tasks.return_value = [
+            {
+                "g": {"id": "G1", "name": "画像任务1", "任务类型": "专属"},
+                "support_count": 10,
+                "patient_count": 3,
+                "latest_training_date": "2022-05-20",
+            }
+        ]
+        user_service.get_global_popular_exclusive_tasks.return_value = []
+        user_service.get_distinct_training_games.return_value = []
+        service = TrainingTaskPredictionService(user_service=user_service)
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": []},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=1,
+        )
+
+        self.assertEqual(result["prediction_status"], "success")
+        self.assertTrue(result["fallback_used"])
+        self.assertEqual(result["fallback_reason"], "empty_candidates")
+        self.assertEqual(result["fallback_source"], "profile_matched_tasks")
+        self.assertEqual(result["prediction_failure_stage"], "candidate")
+        self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "G1")
+        self.assertTrue(result["candidate_source"]["patient_profile_loaded"])
+
+    def test_predict_from_pipeline_result_falls_back_on_llm_errors(self) -> None:
         user_service = Mock()
         user_service.get_patient_training_task_history_by_date_window.return_value = [
             {"trainingDate": "2022-05-21", "g": {"id": "9", "name": "目标任务"}}
@@ -1205,7 +1279,46 @@ class TaskPredictionTest(unittest.TestCase):
             llm_client=llm_client,
         )
 
-        with self.assertRaisesRegex(RuntimeError, "llm failed") as context:
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": ["201"]},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=True,
+            include_prompt=True,
+            task_top_k=1,
+        )
+
+        self.assertEqual(result["prediction_status"], "success")
+        self.assertTrue(result["fallback_used"])
+        self.assertEqual(result["fallback_reason"], "llm_failed")
+        self.assertEqual(result["fallback_source"], "candidate_training_tasks")
+        self.assertEqual(result["prediction_failure_stage"], "llm")
+        self.assertEqual(result["prediction_error_type"], "RuntimeError")
+        self.assertEqual(result["prediction_error_message"], "llm failed")
+        self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "1")
+        self.assertIn("candidate_training_tasks", result["llm_prompt"])
+
+    def test_predict_from_pipeline_result_can_disable_llm_fallback(self) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.return_value = []
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-10", "g": {"id": "1", "name": "任务A"}}
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "1", "name": "任务A"}}
+        ]
+        llm_client = Mock()
+        llm_client.chat.side_effect = RuntimeError("llm failed")
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            llm_client=llm_client,
+            fallback_enabled=False,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "llm failed"):
             service.predict_from_pipeline_result(
                 {
                     "patient_id": "40",
@@ -1216,9 +1329,6 @@ class TaskPredictionTest(unittest.TestCase):
                 use_llm=True,
                 task_top_k=1,
             )
-
-        self.assertIn("candidate_training_tasks", context.exception.llm_prompt)
-        self.assertEqual(context.exception.patient_id, "40")
 
 
 if __name__ == "__main__":

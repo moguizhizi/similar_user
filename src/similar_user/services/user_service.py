@@ -61,6 +61,17 @@ class UserService:
             base_date,
         )
 
+    def get_patient_direct_entity_scoring_profile(
+        self,
+        patient_id: str,
+        base_date: str,
+    ) -> list[dict[str, object]]:
+        """Return profile fields used by fallback and direct-entity scoring."""
+        return self.kg_repository.get_patient_direct_entity_scoring_profile(
+            patient_id,
+            base_date,
+        )
+
     def get_patient_profile_gender_education_age_exclusive_task_games(
         self,
         patient_id: str,

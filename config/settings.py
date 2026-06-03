@@ -52,6 +52,7 @@ class PatientPathSettings:
     """Configuration for patient-start pattern path retrieval."""
 
     window_days: int = 14
+    query_family: str | None = None
 
 
 @dataclass(frozen=True)
@@ -103,10 +104,12 @@ class TrainingTaskPredictionSettings:
     task_top_k: int = 7
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+    save_prompt_enabled: bool = False
     profile_candidate_training_window_days: int | None = None
     unlock_train_candidate_tasks_enabled: bool = False
     similar_user_game_counts_weighting_enabled: bool = False
     similar_user_game_counts_weighted_sort_enabled: bool = False
+    fallback_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -348,6 +351,12 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         or patient_path_window_days <= 0
     ):
         raise ValueError("patient_path window_days must be a positive integer.")
+    patient_path_query_family = patient_path_data.get("query_family")
+    if patient_path_query_family is not None and (
+        not isinstance(patient_path_query_family, str)
+        or not patient_path_query_family.strip()
+    ):
+        raise ValueError("patient_path query_family must be a non-empty string.")
 
     scored_path_top_k = score_pattern_paths_data.get("top_k")
     if scored_path_top_k is not None and (
@@ -424,6 +433,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction prompt_template_name must be a non-empty string."
         )
+    save_prompt_enabled = training_task_prediction_data.get(
+        "save_prompt_enabled",
+        False,
+    )
+    if not isinstance(save_prompt_enabled, bool):
+        raise ValueError(
+            "training_task_prediction save_prompt_enabled must be a boolean."
+        )
     profile_candidate_training_window_days = training_task_prediction_data.get(
         "profile_candidate_training_window_days",
         None,
@@ -459,6 +476,11 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
     if not isinstance(similar_user_game_counts_weighted_sort_enabled, bool):
         raise ValueError(
             "training_task_prediction similar_user_game_counts_weighted_sort_enabled must be a boolean."
+        )
+    fallback_enabled = training_task_prediction_data.get("fallback_enabled", True)
+    if not isinstance(fallback_enabled, bool):
+        raise ValueError(
+            "training_task_prediction fallback_enabled must be a boolean."
         )
     validation_mode = training_task_evaluation_data.get("validation_mode", "set")
     if not isinstance(validation_mode, str) or validation_mode.strip() not in {
@@ -561,7 +583,14 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             ),
         ),
         pattern_path_storage=PatternPathStorageSettings(output_dir=output_dir.strip()),
-        patient_path=PatientPathSettings(window_days=patient_path_window_days),
+        patient_path=PatientPathSettings(
+            window_days=patient_path_window_days,
+            query_family=(
+                patient_path_query_family.strip()
+                if isinstance(patient_path_query_family, str)
+                else None
+            ),
+        ),
         score_pattern_paths=ScorePatternPathsSettings(top_k=scored_path_top_k),
         candidate_ranking=CandidateRankingSettings(
             candidate_top_k=candidate_top_k,
@@ -574,10 +603,12 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             task_top_k=task_top_k,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name.strip(),
+            save_prompt_enabled=save_prompt_enabled,
             profile_candidate_training_window_days=profile_candidate_training_window_days,
             unlock_train_candidate_tasks_enabled=unlock_train_candidate_tasks_enabled,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
+            fallback_enabled=fallback_enabled,
         ),
         training_task_evaluation=TrainingTaskEvaluationSettings(
             validation_mode=validation_mode.strip(),

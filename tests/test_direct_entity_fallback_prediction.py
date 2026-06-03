@@ -72,6 +72,11 @@ class DirectEntityFallbackPredictionTest(unittest.TestCase):
             "profile_matched_tasks",
         )
         self.assertEqual(result["target_profile"]["age"], 66)
+        self.assertEqual(result["prediction_status"], "success")
+        self.assertTrue(result["fallback_used"])
+        self.assertEqual(result["fallback_reason"], "missing_entity_input")
+        self.assertEqual(result["prediction_failure_stage"], "input")
+        self.assertEqual(result["prediction_failure_reason"], "missing_entity_input")
 
     def test_predict_uses_global_when_profile_has_no_match(self) -> None:
         user_service = Mock()

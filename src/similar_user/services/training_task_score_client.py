@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import shlex
 from typing import Any
 
 import requests
@@ -27,9 +29,36 @@ class TrainingTaskScoreClient:
         ai_params: dict[str, Any],
     ) -> list[dict[str, Any]]:
         """Return task scores aligned with the requested task ID order."""
+        return self.score_tasks_with_exchange(
+            task_ids,
+            ai_params=ai_params,
+        )["scored_tasks"]
+
+    def score_tasks_with_exchange(
+        self,
+        task_ids: list[str],
+        *,
+        ai_params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return scores plus the exact HTTP request and response payloads."""
         normalized_task_ids = _normalize_task_ids(task_ids)
         if not normalized_task_ids:
-            return []
+            return {
+                "request_sent": False,
+                "request_payload": build_training_task_score_payload(
+                    [],
+                    ai_params=ai_params,
+                ),
+                "request_curl": build_training_task_score_curl(
+                    self.url,
+                    build_training_task_score_payload(
+                        [],
+                        ai_params=ai_params,
+                    ),
+                ),
+                "response_payload": {"score": []},
+                "scored_tasks": [],
+            }
 
         payload = build_training_task_score_payload(
             normalized_task_ids,
@@ -56,13 +85,20 @@ class TrainingTaskScoreClient:
             ) from exc
 
         scores = _extract_scores(response_payload, len(normalized_task_ids))
-        return [
+        scored_tasks = [
             {
                 "task_id": task_id,
                 "score": score,
             }
             for task_id, score in zip(normalized_task_ids, scores)
         ]
+        return {
+            "request_sent": True,
+            "request_payload": payload,
+            "request_curl": build_training_task_score_curl(self.url, payload),
+            "response_payload": response_payload,
+            "scored_tasks": scored_tasks,
+        }
 
 
 def build_training_task_score_payload(
@@ -83,6 +119,18 @@ def build_training_task_score_payload(
         "age": ai_params.get("age"),
         "sicksName": ai_params.get("sicksName") or [],
     }
+
+
+def build_training_task_score_curl(url: str, payload: dict[str, Any]) -> str:
+    """Build a copy-pasteable curl command for one score-service request."""
+    body = json.dumps(payload, ensure_ascii=False)
+    return " \\\n  ".join(
+        [
+            f"curl -X POST {shlex.quote(url)}",
+            "-H 'Content-Type: application/json'",
+            f"-d {shlex.quote(body)}",
+        ]
+    )
 
 
 def _normalize_task_ids(task_ids: list[str]) -> list[str]:

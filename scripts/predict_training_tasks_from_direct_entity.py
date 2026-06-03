@@ -58,6 +58,10 @@ from similar_user.services.direct_entity_name_resolution import (  # noqa: E402
 from similar_user.services.task_prediction import (  # noqa: E402
     TrainingTaskPredictionService,
 )
+from similar_user.services.task_prediction_failure import (  # noqa: E402
+    build_prediction_failure_metadata,
+    prediction_metadata_from_nested_result,
+)
 from similar_user.services.user_service import UserService  # noqa: E402
 from similar_user.services.similarity import SimilarUserCandidateService  # noqa: E402
 from similar_user.utils.logger import get_logger  # noqa: E402
@@ -79,6 +83,7 @@ from scripts.build_similar_user_candidates import (  # noqa: E402
     load_saved_direct_entity_scored_results,
     save_similar_user_candidates_result,
 )
+from scripts.predict_training_tasks import write_prompt_to_file  # noqa: E402
 from scripts.build_direct_entity_paths import build_direct_entity_paths  # noqa: E402
 from similar_user.data_access.algorithm_request_results import (  # noqa: E402
     normalize_algorithm_request_education,
@@ -160,11 +165,6 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Skip the LLM call and return deterministic candidate-task predictions.",
-    )
-    parser.add_argument(
-        "--task-top-k",
-        type=int,
-        help="Override query.training_task_prediction.task_top_k.",
     )
     parser.add_argument(
         "--include-prompt",
@@ -437,8 +437,16 @@ def predict_training_tasks_from_direct_entity(
                 reason=fallback_reason,
             )
             LOGGER.info(
-                "Completed fallback task prediction: patient_id=%s, fallback_level=%s, predicted_task_count=%s",
+                "Completed fallback task prediction: patient_id=%s, "
+                "prediction_status=%s, fallback_used=%s, fallback_reason=%s, "
+                "prediction_failure_stage=%s, prediction_failure_reason=%s, "
+                "fallback_level=%s, predicted_task_count=%s",
                 normalized_patient_id,
+                prediction_result.get("prediction_status"),
+                prediction_result.get("fallback_used"),
+                prediction_result.get("fallback_reason"),
+                prediction_result.get("prediction_failure_stage"),
+                prediction_result.get("prediction_failure_reason"),
                 prediction_result.get("candidate_source", {}).get("fallback_level"),
                 len(prediction_result.get("predicted_training_tasks") or []),
             )
@@ -479,6 +487,9 @@ def predict_training_tasks_from_direct_entity(
             similar_user_game_counts_weighted_sort_enabled=(
                 query_settings.training_task_prediction.similar_user_game_counts_weighted_sort_enabled
             ),
+            fallback_enabled=(
+                query_settings.training_task_prediction.fallback_enabled
+            ),
         )
         prediction_result = prediction_service.predict_from_direct_entity_candidates(
             patient_id=normalized_patient_id,
@@ -504,8 +515,16 @@ def predict_training_tasks_from_direct_entity(
 
     predicted_tasks = prediction_result.get("predicted_training_tasks")
     LOGGER.info(
-        "Completed direct entity task prediction: patient_id=%s, candidate_count=%s, candidate_training_task_count=%s, predicted_task_count=%s",
+        "Completed direct entity task prediction: patient_id=%s, prediction_status=%s, "
+        "fallback_used=%s, fallback_reason=%s, prediction_failure_stage=%s, "
+        "prediction_failure_reason=%s, candidate_count=%s, "
+        "candidate_training_task_count=%s, predicted_task_count=%s",
         normalized_patient_id,
+        prediction_result.get("prediction_status"),
+        prediction_result.get("fallback_used"),
+        prediction_result.get("fallback_reason"),
+        prediction_result.get("prediction_failure_stage"),
+        prediction_result.get("prediction_failure_reason"),
         candidate_result.get("candidate_count"),
         len(prediction_result.get("candidate_training_tasks") or []),
         len(predicted_tasks if isinstance(predicted_tasks, list) else []),
@@ -548,6 +567,7 @@ def summarize_prediction_result(
     if output_level == "ids":
         return {
             "patient_id": result.get("patient_id"),
+            **prediction_metadata_from_nested_result(result),
             "predicted_training_task_ids": [
                 task.get("game_id") for task in tasks if isinstance(task, dict)
             ],
@@ -555,6 +575,7 @@ def summarize_prediction_result(
     if output_level == "scores":
         return {
             "patient_id": result.get("patient_id"),
+            **prediction_metadata_from_nested_result(result),
             "predicted_training_tasks": tasks,
         }
     return result
@@ -875,6 +896,8 @@ def main() -> int:
     """Run direct-entity-only task prediction."""
     args = parse_args()
     try:
+        query_settings = load_query_settings(args.config)
+        save_prompt = query_settings.training_task_prediction.save_prompt_enabled
         result = predict_training_tasks_from_direct_entity(
             patient_id=args.patient_id,
             base_date=args.base_date,
@@ -889,15 +912,31 @@ def main() -> int:
             scored_paths_dir=args.scored_paths_dir,
             candidates_dir=args.candidates_dir,
             use_llm=not args.dry_run,
-            include_prompt=args.include_prompt,
-            task_top_k=args.task_top_k,
+            include_prompt=args.include_prompt or save_prompt,
         )
         output = summarize_prediction_result(result, output_level=args.output_level)
         if args.output:
             _write_json_atomic(Path(args.output), result)
+        prompt_path = None
+        if save_prompt:
+            prompt_path = write_prompt_to_file(result, base_date=args.base_date)
         LOGGER.info(json.dumps(output, ensure_ascii=False, indent=2, default=str))
+        if prompt_path is not None:
+            LOGGER.info("Saved training-task prediction prompt to %s", prompt_path)
     except Exception as exc:
-        LOGGER.exception("Direct entity task prediction failed: %s", exc)
+        failure = build_prediction_failure_metadata(exc)
+        LOGGER.exception(
+            "Direct entity task prediction failed: patient_id=%s, "
+            "prediction_status=%s, prediction_failure_stage=%s, "
+            "prediction_failure_reason=%s, prediction_error_type=%s, "
+            "prediction_error_message=%s",
+            args.patient_id,
+            failure.get("prediction_status"),
+            failure.get("prediction_failure_stage"),
+            failure.get("prediction_failure_reason"),
+            failure.get("prediction_error_type"),
+            failure.get("prediction_error_message"),
+        )
         return 1
     return 0
 

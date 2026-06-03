@@ -7,13 +7,12 @@
 3. 默认调用配置中的 LLM 生成预测结果；使用 `--dry-run` 时跳过 LLM，返回确定性的候选任务结果。
 4. 最后按 `--output-level` 输出任务 ID、任务分数或完整端到端结果。
 
-如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过 path 构建。
-如果已经有可用的 scored paths，可以使用 `--skip-path-scoring` 复用已有评分结果。
-
 常用执行方式：
 
     python scripts/predict_training_tasks.py 40 --base-date 2022-05-22
-    python scripts/predict_training_tasks.py 40 --base-date 2022-05-22 --no-save-prompt
+
+是否保存 prompt 文件由 YAML 中的
+`query.training_task_prediction.save_prompt_enabled` 统一控制。
 
 相似用户 path 构建窗口来自配置中的 `query.patient_path.window_days`；
 预测阶段的相似用户任务窗口来自配置。
@@ -42,6 +41,10 @@ from similar_user.services.task_prediction import (
     DEFAULT_TASK_TOP_K,
     TrainingTaskPredictionService,
 )
+from similar_user.services.task_prediction_failure import (
+    build_prediction_failure_metadata,
+    prediction_metadata_from_nested_result,
+)
 from similar_user.services.user_service import UserService
 from similar_user.utils.logger import get_logger
 from config.settings import load_query_settings
@@ -64,46 +67,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("patient_id", help="Patient identifier used in Neo4j queries.")
     parser.add_argument(
-        "--pattern",
-        default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        help="Pattern name used to locate the saved similar-user path result.",
-    )
-    parser.add_argument(
-        "--skip-path-build",
-        action="store_true",
-        help="Use existing saved paths and only run scoring plus candidate ranking.",
-    )
-    parser.add_argument(
-        "--skip-path-scoring",
-        action="store_true",
-        help="Use existing saved scored paths and only run candidate ranking.",
-    )
-    parser.add_argument(
-        "--query-family",
-        default=None,
-        choices=(
-            "training_order_source_window",
-            "date_window",
-            "training_order_local_sampling_source_window",
-            "training_order_age_source_window",
-            "training_order_age_edu_source_window",
-            "training_order_age_completed_source_window",
-            "training_order_age_edu_completed_source_window",
-            "training_order_age_edu_task_completed_source_window",
-            "training_order_dual_window",
-            "training_order_local_sampling_dual_window",
-            "training_order_age_dual_window",
-            "training_order_age_edu_dual_window",
-            "training_order_age_completed_dual_window",
-            "training_order_age_edu_completed_dual_window",
-            "training_order_age_edu_task_completed_dual_window",
-        ),
-        help=(
-            "Query family for paired-statistics path building. Defaults to "
-            "training_order_source_window enforces s1/s2 training-date order and filters by the s1 date window; date_window only filters by the s1 date window."
-        ),
-    )
-    parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="Path to the YAML config file.",
@@ -112,12 +75,6 @@ def parse_args() -> argparse.Namespace:
         "--base-date",
         required=True,
         help="Prediction base date; target tasks use the two days before this date.",
-    )
-    parser.add_argument(
-        "--task-top-k",
-        type=int,
-        default=DEFAULT_TASK_TOP_K,
-        help="Number of predicted training tasks to return.",
     )
     parser.add_argument(
         "--output-level",
@@ -134,16 +91,6 @@ def parse_args() -> argparse.Namespace:
         "--include-prompt",
         action="store_true",
         help="Include the generated LLM prompt in full output.",
-    )
-    parser.add_argument(
-        "--no-save-prompt",
-        action="store_true",
-        help="Do not save the generated LLM prompt to a text file.",
-    )
-    parser.add_argument(
-        "--prompt-output-dir",
-        default=str(DEFAULT_PROMPT_OUTPUT_DIR),
-        help="Directory used to store generated prompt text files.",
     )
     return parser.parse_args()
 
@@ -294,6 +241,7 @@ def run_training_task_prediction(
             algorithm_request_results_csv=algorithm_request_results_csv,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,
+            fallback_enabled=query_settings.training_task_prediction.fallback_enabled,
         )
         return service.predict_from_pipeline_result(
             pipeline_result,
@@ -324,6 +272,7 @@ def summarize_prediction_result(
     if output_level == "ids":
         return {
             "patient_id": result.get("patient_id"),
+            **prediction_metadata_from_nested_result(result),
             "predicted_training_task_ids": [
                 prediction.get("game_id")
                 for prediction in predictions
@@ -333,6 +282,7 @@ def summarize_prediction_result(
     if output_level == "scores":
         return {
             "patient_id": result.get("patient_id"),
+            **prediction_metadata_from_nested_result(result),
             "predicted_training_tasks": [
                 {
                     "game_id": prediction.get("game_id"),
@@ -349,7 +299,7 @@ def summarize_prediction_result(
 def write_prompt_to_file(
     result: dict[str, Any],
     *,
-    output_dir: str | Path,
+    output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
     base_date: str,
 ) -> Path:
     """Write the generated LLM prompt to a searchable text file."""
@@ -379,28 +329,34 @@ def main() -> int:
     """Predict training tasks and log the JSON result."""
     args = parse_args()
     try:
+        query_settings = load_query_settings(args.config)
+        save_prompt = query_settings.training_task_prediction.save_prompt_enabled
+        task_top_k = query_settings.training_task_prediction.task_top_k
         result = run_end_to_end_training_task_prediction(
             args.patient_id,
             base_date=args.base_date,
-            pattern=args.pattern,
             config_path=args.config,
-            skip_path_build=args.skip_path_build,
-            skip_path_scoring=args.skip_path_scoring,
-            query_family=args.query_family,
-            task_top_k=args.task_top_k,
+            task_top_k=task_top_k,
             use_llm=not args.dry_run,
-            include_prompt=(args.include_prompt or not args.no_save_prompt),
+            include_prompt=args.include_prompt or save_prompt,
         )
         output = summarize_prediction_result(result, output_level=args.output_level)
         prompt_path = None
-        if not args.no_save_prompt:
-            prompt_path = write_prompt_to_file(
-                result,
-                output_dir=args.prompt_output_dir,
-                base_date=args.base_date,
-            )
+        if save_prompt:
+            prompt_path = write_prompt_to_file(result, base_date=args.base_date)
     except Exception as exc:
-        LOGGER.exception("Training task prediction failed: %s", exc)
+        failure = build_prediction_failure_metadata(exc)
+        LOGGER.exception(
+            "Training task prediction failed: patient_id=%s, prediction_status=%s, "
+            "prediction_failure_stage=%s, prediction_failure_reason=%s, "
+            "prediction_error_type=%s, prediction_error_message=%s",
+            args.patient_id,
+            failure.get("prediction_status"),
+            failure.get("prediction_failure_stage"),
+            failure.get("prediction_failure_reason"),
+            failure.get("prediction_error_type"),
+            failure.get("prediction_error_message"),
+        )
         return 1
 
     LOGGER.info(json.dumps(output, ensure_ascii=False, indent=2, default=str))

@@ -21,10 +21,7 @@ class DirectEntityNameResolverTest(unittest.TestCase):
             }
         ]
 
-        result = DirectEntityNameResolver(
-            repository,
-            embedding_enabled=False,
-        ).resolve_names(["注意缺陷多动障碍"])
+        result = DirectEntityNameResolver(repository).resolve_names(["注意缺陷多动障碍"])
 
         self.assertEqual(result["unresolved"], [])
         self.assertEqual(result["resolved"][0]["entity_id"], "AU_DIS_0002")
@@ -43,10 +40,7 @@ class DirectEntityNameResolverTest(unittest.TestCase):
             }
         ]
 
-        result = DirectEntityNameResolver(
-            repository,
-            embedding_enabled=False,
-        ).resolve_names([" a d h d "])
+        result = DirectEntityNameResolver(repository).resolve_names([" a d h d "])
 
         self.assertEqual(result["unresolved"], [])
         self.assertEqual(result["resolved"][0]["entity_id"], "AU_DIS_0002")
@@ -60,10 +54,7 @@ class DirectEntityNameResolverTest(unittest.TestCase):
         repository.resolve_direct_entity_name.return_value = []
         repository.get_direct_entity_alias_index.return_value = []
 
-        result = DirectEntityNameResolver(
-            repository,
-            embedding_enabled=False,
-        ).resolve_names(["不存在疾病"])
+        result = DirectEntityNameResolver(repository).resolve_names(["不存在疾病"])
 
         self.assertEqual(result["resolved"], [])
         self.assertEqual(

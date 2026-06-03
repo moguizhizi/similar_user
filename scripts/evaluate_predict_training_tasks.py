@@ -44,6 +44,12 @@ from similar_user.services.task_prediction import (
     build_game_counts_from_history,
     parse_date_value,
 )
+from similar_user.services.task_prediction_failure import (
+    build_prediction_failure_metadata,
+    build_validation_success_metadata,
+    prediction_metadata_from_nested_result,
+    summarize_prediction_visibility,
+)
 from similar_user.services.task_recommendation_validation import (
     calculate_f1,
     evaluate_prediction_sets,
@@ -95,57 +101,9 @@ def parse_args() -> argparse.Namespace:
         help="Prediction date; actual labels are tasks on this date.",
     )
     parser.add_argument(
-        "--pattern",
-        default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        help="Pattern name used by predict_training_tasks.",
-    )
-    parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="Path to the YAML config file.",
-    )
-    parser.add_argument(
-        "--skip-path-build",
-        action="store_true",
-        help="Use existing saved paths and only run scoring plus candidate ranking.",
-    )
-    parser.add_argument(
-        "--skip-path-scoring",
-        action="store_true",
-        help="Use existing saved scored paths and only run candidate ranking.",
-    )
-    parser.add_argument(
-        "--query-family",
-        default=None,
-        choices=(
-            "training_order_source_window",
-            "date_window",
-            "training_order_local_sampling_source_window",
-            "training_order_age_source_window",
-            "training_order_age_edu_source_window",
-            "training_order_age_completed_source_window",
-            "training_order_age_edu_completed_source_window",
-            "training_order_age_edu_task_completed_source_window",
-            "training_order_dual_window",
-            "training_order_local_sampling_dual_window",
-            "training_order_age_dual_window",
-            "training_order_age_edu_dual_window",
-            "training_order_age_completed_dual_window",
-            "training_order_age_edu_completed_dual_window",
-            "training_order_age_edu_task_completed_dual_window",
-        ),
-        help=(
-            "Query family for paired-statistics patterns. Defaults to training_order_source_window "
-            "for patient-series patterns and is not allowed for direct patterns. "
-            "training_order_source_window enforces s1/s2 training-date order; "
-            "date_window only filters by the s1 date window."
-        ),
-    )
-    parser.add_argument(
-        "--task-top-k",
-        type=int,
-        default=DEFAULT_TASK_TOP_K,
-        help="Number of predicted training tasks to evaluate.",
     )
     parser.add_argument(
         "--dry-run",
@@ -171,16 +129,6 @@ def parse_args() -> argparse.Namespace:
         "--analysis-file",
         default="predict_training_tasks_analysis.json",
         help="Analysis JSON filename under output-dir.",
-    )
-    parser.add_argument(
-        "--no-save-prompt",
-        action="store_true",
-        help="Do not save generated LLM prompts during evaluation.",
-    )
-    parser.add_argument(
-        "--prompt-output-dir",
-        default=str(DEFAULT_PROMPT_OUTPUT_DIR),
-        help="Directory used to store generated prompt text files.",
     )
     parser.add_argument(
         "--limit",
@@ -226,12 +174,12 @@ def evaluate_patient(
     query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
-    save_prompt: bool = True,
-    prompt_output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
 ) -> dict[str, Any]:
     """Run prediction and compare it with the patient's same-day true tasks."""
     started_at = time.perf_counter()
-    evaluation_settings = load_query_settings(config_path).training_task_evaluation
+    query_settings = load_query_settings(config_path)
+    evaluation_settings = query_settings.training_task_evaluation
+    save_prompt = query_settings.training_task_prediction.save_prompt_enabled
     validation_mode = evaluation_settings.validation_mode
     try:
         if validation_mode == "set":
@@ -271,7 +219,7 @@ def evaluate_patient(
         if save_prompt:
             prompt_path = write_prompt_to_file(
                 prediction_result,
-                output_dir=prompt_output_dir,
+                output_dir=DEFAULT_PROMPT_OUTPUT_DIR,
                 base_date=base_date,
             )
         predicted_game_ids = extract_predicted_game_ids(prediction_result)
@@ -294,7 +242,8 @@ def evaluate_patient(
             actual_game_ids,
             prediction_result,
         )
-        prediction_elapsed_seconds = round(time.perf_counter() - started_at, 3)
+        prediction_finished_at = time.perf_counter()
+        prediction_elapsed_seconds = round(prediction_finished_at - started_at, 3)
         validation_started_at = time.perf_counter()
         validation_result = validate_training_task_recommendation(
             validation_mode=validation_mode,
@@ -306,8 +255,9 @@ def evaluate_patient(
             csv_path=evaluation_settings.algorithm_request_results_csv,
             timeout_seconds=evaluation_settings.score_validation_timeout,
         )
+        validation_finished_at = time.perf_counter()
         validation_elapsed_seconds = round(
-            time.perf_counter() - validation_started_at,
+            validation_finished_at - validation_started_at,
             3,
         )
     except EmptyPathResultsError as exc:
@@ -319,6 +269,17 @@ def evaluate_patient(
             error_message=str(exc),
         )
         detail["validation_mode"] = validation_mode
+        detail.update(
+            {
+                "prediction_status": "failed",
+                "prediction_failure_stage": "candidate",
+                "prediction_failure_reason": "no_pattern_paths",
+                "prediction_error_type": type(exc).__name__,
+                "prediction_error_message": str(exc),
+                "fallback_used": False,
+                "fallback_reason": None,
+            }
+        )
         return detail
     except Exception as exc:
         prompt_path = None
@@ -332,7 +293,7 @@ def evaluate_patient(
                             "llm_prompt": llm_prompt,
                         }
                     },
-                    output_dir=prompt_output_dir,
+                    output_dir=DEFAULT_PROMPT_OUTPUT_DIR,
                     base_date=base_date,
                 )
             except Exception as prompt_exc:
@@ -348,6 +309,7 @@ def evaluate_patient(
             "base_date": base_date,
             "status": "failed",
             "validation_mode": validation_mode,
+            **build_prediction_failure_metadata(exc),
             "error_type": type(exc).__name__,
             "error_message": str(exc),
             "prompt_path": str(prompt_path) if prompt_path is not None else None,
@@ -357,6 +319,8 @@ def evaluate_patient(
     return {
         "patient_id": patient_id,
         "base_date": base_date,
+        **prediction_metadata_from_nested_result(prediction_result),
+        **build_validation_success_metadata(),
         "status": validation_result["status"],
         "validation_mode": validation_result["validation_mode"],
         "reason": validation_result.get("reason"),
@@ -382,6 +346,10 @@ def evaluate_patient(
         "actual_task_count": validation_result["actual_task_count"],
         "matched_task_count": validation_result["matched_task_count"],
         "prompt_path": str(prompt_path) if prompt_path is not None else None,
+        "prediction_started_at_seconds": round(started_at, 6),
+        "prediction_finished_at_seconds": round(prediction_finished_at, 6),
+        "validation_started_at_seconds": round(validation_started_at, 6),
+        "validation_finished_at_seconds": round(validation_finished_at, 6),
         "prediction_elapsed_seconds": prediction_elapsed_seconds,
         "validation_elapsed_seconds": validation_elapsed_seconds,
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
@@ -416,6 +384,20 @@ def build_not_evaluable_detail(
     }
     if error_message is not None:
         detail["error_message"] = error_message
+    detail.update(
+        {
+            "prediction_status": "not_run",
+            "prediction_failure_stage": None,
+            "prediction_failure_reason": None,
+            "prediction_error_type": None,
+            "prediction_error_message": None,
+            "fallback_used": False,
+            "fallback_reason": None,
+            "validation_status": "not_run",
+            "validation_failure_stage": None,
+            "validation_failure_reason": None,
+        }
+    )
     return detail
 
 
@@ -685,6 +667,16 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         for detail in details
         if isinstance(detail.get("validation_elapsed_seconds"), int | float)
     ]
+    batch_prediction_elapsed_seconds = calculate_batch_phase_elapsed_seconds(
+        details,
+        start_field="prediction_started_at_seconds",
+        end_field="prediction_finished_at_seconds",
+    )
+    batch_validation_elapsed_seconds = calculate_batch_phase_elapsed_seconds(
+        details,
+        start_field="validation_started_at_seconds",
+        end_field="validation_finished_at_seconds",
+    )
     similar_user_game_counts_task_counts = [
         int(detail["similar_user_game_counts_task_count"])
         for detail in evaluated_details
@@ -704,10 +696,13 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         and isinstance(detail.get("score_delta"), int | float)
     ]
 
+    prediction_visibility = summarize_prediction_visibility(details)
+
     return {
         "total_count": total_count,
         "success_count": success_count,
         "failed_count": len(failed_details),
+        **prediction_visibility,
         "not_evaluable_count": len(not_evaluable_details),
         "evaluated_count": len(evaluated_details),
         "coverage_rate": round(safe_divide(success_count, total_count), 4),
@@ -797,12 +792,20 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
             average_numbers(prediction_elapsed_seconds),
             4,
         ),
+        "batch_prediction_elapsed_seconds": round(
+            batch_prediction_elapsed_seconds,
+            4,
+        ),
         "p95_prediction_elapsed_seconds": round(
             percentile(prediction_elapsed_seconds, 0.95),
             4,
         ),
         "avg_validation_elapsed_seconds": round(
             average_numbers(validation_elapsed_seconds),
+            4,
+        ),
+        "batch_validation_elapsed_seconds": round(
+            batch_validation_elapsed_seconds,
             4,
         ),
         "p95_validation_elapsed_seconds": round(
@@ -1275,6 +1278,13 @@ def build_experiment_config(
     )
     if not isinstance(similar_user_game_counts_weighting_enabled, bool):
         similar_user_game_counts_weighting_enabled = False
+    unlock_train_candidate_tasks_enabled = getattr(
+        query_settings.training_task_prediction,
+        "unlock_train_candidate_tasks_enabled",
+        False,
+    )
+    if not isinstance(unlock_train_candidate_tasks_enabled, bool):
+        unlock_train_candidate_tasks_enabled = False
     similar_user_game_counts_weighted_sort_enabled = getattr(
         query_settings.training_task_prediction,
         "similar_user_game_counts_weighted_sort_enabled",
@@ -1307,6 +1317,7 @@ def build_experiment_config(
         "use_llm": use_llm,
         "workers": workers,
         "prompt_template": prompt_template_name,
+        "unlock_train_candidate_tasks_enabled": unlock_train_candidate_tasks_enabled,
         "similar_user_game_counts_weighting_enabled": similar_user_game_counts_weighting_enabled,
         "similar_user_game_counts_weighted_sort_enabled": similar_user_game_counts_weighted_sort_enabled,
         "validation_mode": validation_mode,
@@ -1358,8 +1369,6 @@ def run_batch_evaluation(
     use_llm: bool = True,
     limit: int | None = None,
     workers: int | None = None,
-    save_prompt: bool = True,
-    prompt_output_dir: str | Path = DEFAULT_PROMPT_OUTPUT_DIR,
 ) -> list[dict[str, Any]]:
     """Evaluate every patient and return per-patient details."""
     started_at = time.perf_counter()
@@ -1409,8 +1418,6 @@ def run_batch_evaluation(
                     query_family=query_family,
                     task_top_k=task_top_k,
                     use_llm=use_llm,
-                    save_prompt=save_prompt,
-                    prompt_output_dir=prompt_output_dir,
                 )
                 details.append(detail)
                 LOGGER.info(
@@ -1437,8 +1444,6 @@ def run_batch_evaluation(
                         query_family=query_family,
                         task_top_k=task_top_k,
                         use_llm=use_llm,
-                        save_prompt=save_prompt,
-                        prompt_output_dir=prompt_output_dir,
                     ): (index, patient_id)
                     for index, patient_id in enumerate(resolved_patient_ids, start=1)
                 }
@@ -1523,6 +1528,26 @@ def average_count(details: list[dict[str, Any]], field_name: str) -> float:
     return average_numbers(values)
 
 
+def calculate_batch_phase_elapsed_seconds(
+    details: list[dict[str, Any]],
+    *,
+    start_field: str,
+    end_field: str,
+) -> float:
+    """Return the wall-clock span covered by a phase across the batch."""
+    starts: list[float] = []
+    ends: list[float] = []
+    for detail in details:
+        start = detail.get(start_field)
+        end = detail.get(end_field)
+        if isinstance(start, int | float) and isinstance(end, int | float):
+            starts.append(float(start))
+            ends.append(float(end))
+    if not starts or not ends:
+        return 0.0
+    return max(ends) - min(starts)
+
+
 def average_numbers(values: list[float]) -> float:
     """Return the arithmetic mean of a number list."""
     return sum(values) / len(values) if values else 0.0
@@ -1542,6 +1567,8 @@ def main() -> int:
     args = parse_args()
     query_settings = load_query_settings(args.config)
     patient_path_window_days = query_settings.patient_path.window_days
+    patient_path_query_family = query_settings.patient_path.query_family
+    task_top_k = query_settings.training_task_prediction.task_top_k
     evaluation_workers = query_settings.training_task_evaluation.workers
     started_at = time.perf_counter()
     LOGGER.info(
@@ -1549,8 +1576,8 @@ def main() -> int:
         args.patient_id,
         args.base_date,
         patient_path_window_days,
-        args.query_family,
-        args.task_top_k,
+        patient_path_query_family,
+        task_top_k,
         not args.dry_run,
         evaluation_workers,
         args.output_dir,
@@ -1575,31 +1602,27 @@ def main() -> int:
                 "No patient IDs were provided. Use --patient-id or ensure the "
                 "base_date patient ID file can be generated."
             )
+        batch_started_at = time.perf_counter()
         details = run_batch_evaluation(
             patient_ids,
             base_date=args.base_date,
-            pattern=args.pattern,
             config_path=args.config,
-            skip_path_build=args.skip_path_build,
-            skip_path_scoring=args.skip_path_scoring,
-            query_family=args.query_family,
-            task_top_k=args.task_top_k,
+            query_family=patient_path_query_family,
+            task_top_k=task_top_k,
             use_llm=not args.dry_run,
             limit=args.limit,
             workers=evaluation_workers,
-            save_prompt=not args.no_save_prompt,
-            prompt_output_dir=args.prompt_output_dir,
         )
+        batch_elapsed_seconds = round(time.perf_counter() - batch_started_at, 3)
         summary = summarize_evaluation_details(details)
+        summary["batch_elapsed_seconds"] = batch_elapsed_seconds
+        summary["workers"] = evaluation_workers
         analysis = analyze_evaluation_details(details)
         experiment_config = build_experiment_config(
             base_date=args.base_date,
-            pattern=args.pattern,
             config_path=args.config,
-            skip_path_build=args.skip_path_build,
-            skip_path_scoring=args.skip_path_scoring,
-            query_family=args.query_family,
-            task_top_k=args.task_top_k,
+            query_family=patient_path_query_family,
+            task_top_k=task_top_k,
             use_llm=not args.dry_run,
             workers=evaluation_workers,
         )

@@ -12,6 +12,9 @@ llm:
   max_retries: 3
   backoff_factor: 1.5
 
+api:
+  max_concurrent_predictions: 4
+
 query:
   graph_path_limit:
     per_g_strategy: "band"
@@ -26,6 +29,7 @@ query:
     output_dir: "data/pattern_paths"
   patient_path:
     window_days: 14
+    query_family: "training_order_dual_window"
   score_pattern_paths:
     top_k: 150
   candidate_ranking:
@@ -48,10 +52,12 @@ query:
   training_task_prediction:
     task_top_k: 7
     prompt_candidate_compression_enabled: false
+    save_prompt_enabled: false
     profile_candidate_training_window_days: null
     unlock_train_candidate_tasks_enabled: false
     similar_user_game_counts_weighting_enabled: false
     similar_user_game_counts_weighted_sort_enabled: false
+    fallback_enabled: true
   training_task_evaluation:
     validation_mode: "score"
     workers: 1
@@ -75,13 +81,14 @@ similarity:
     dimension: 64
 
 direct_path_cache:
+  # enabled=true 时，build_direct_entity_paths.py 会从 sqlite_path 指向的 direct path SQLite 读取。
   enabled: false
   sqlite_path: "data/direct_path_cache/direct_paths.sqlite"
   incremental_enabled: true
   overlap_days: 1
 
 user_cache:
-  enabled: false
+  enabled: true
   sqlite_path: "data/user_cache/cache_index.sqlite"
   patient_raw_paths_valid_days: 30
   direct_raw_paths_valid_days: 60
@@ -94,3 +101,8 @@ user_cache:
   raw_path_build_retry_sleep_seconds: 5
   cleanup_max_age_days: 30
   keep_latest_per_source: 2
+  cleanup_background_enabled: true
+  cleanup_run_hour: 1
+  cleanup_run_minute: 0
+  cleanup_timezone: "Asia/Shanghai"
+  cleanup_lock_path: "data/user_cache/cleanup.lock"

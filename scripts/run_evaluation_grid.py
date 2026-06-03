@@ -35,7 +35,6 @@ LOGGER = get_logger(__name__)
 DEFAULT_EXPERIMENT_CONFIG_PATH = Path("config/experiments/evaluation_grid.yaml")
 DEFAULT_OUTPUT_ROOT = Path("data/evaluation_grid")
 DEFAULT_GENERATED_CONFIG_DIR = DEFAULT_OUTPUT_ROOT / "generated_configs"
-DEFAULT_TASK_TOP_K = 7
 DEFAULT_RANK_BY = "micro_recall"
 DEFAULT_EVALUATION_SCRIPT = "predict_training_tasks"
 LEADERBOARD_FIELDS = (
@@ -56,8 +55,10 @@ LEADERBOARD_FIELDS = (
     "success_count",
     "failed_count",
     "avg_prediction_elapsed_seconds",
+    "batch_prediction_elapsed_seconds",
     "p95_prediction_elapsed_seconds",
     "avg_validation_elapsed_seconds",
+    "batch_validation_elapsed_seconds",
     "p95_validation_elapsed_seconds",
     "similar_user_candidate_task_coverage",
     "candidate_task_supported_rate",
@@ -212,6 +213,22 @@ def build_named_experiment_overrides(
     return named_overrides
 
 
+def build_named_experiment_base_overrides(
+    experiments: list[Any],
+) -> list[dict[str, Any]]:
+    """Read optional per-experiment command-line base overrides."""
+    base_overrides: list[dict[str, Any]] = []
+    for experiment in experiments:
+        if not isinstance(experiment, dict):
+            raise ValueError("Each experiment must be a mapping.")
+        overrides = experiment.get("base_overrides") or {}
+        if not isinstance(overrides, dict):
+            raw_name = experiment.get("name") or "unnamed"
+            raise ValueError(f"Experiment base_overrides must be a mapping: {raw_name}")
+        base_overrides.append(dict(overrides))
+    return base_overrides
+
+
 def build_experiment_override_specs(
     experiment_config: dict[str, Any],
 ) -> list[tuple[str | None, dict[str, Any]]]:
@@ -233,6 +250,22 @@ def build_experiment_override_specs(
         (None, merge_overrides(baseline_overrides, overrides))
         for overrides in build_grid_overrides(grid)
     ]
+
+
+def build_experiment_base_override_specs(
+    experiment_config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build per-run base option overrides for evaluation CLI arguments."""
+    experiments = experiment_config.get("experiments")
+    if experiments is not None:
+        if not isinstance(experiments, list) or not experiments:
+            raise ValueError("experiments must be a non-empty list when provided.")
+        return build_named_experiment_base_overrides(experiments)
+
+    grid = experiment_config.get("grid") or {}
+    if not isinstance(grid, dict):
+        raise ValueError("experiment grid section must be a mapping.")
+    return [{} for _ in build_grid_overrides(grid)]
 
 
 def get_baseline_overrides(experiment_config: dict[str, Any]) -> dict[str, Any]:
@@ -331,6 +364,14 @@ def build_evaluation_command(
             base_options=base_options,
             config_path=config_path,
             output_dir=output_dir,
+            prediction_mode="direct_entity",
+        )
+    if evaluation_script == "unified_prediction":
+        return build_direct_entity_profiles_evaluation_command(
+            base_options=base_options,
+            config_path=config_path,
+            output_dir=output_dir,
+            prediction_mode="unified",
         )
     if evaluation_script not in {
         DEFAULT_EVALUATION_SCRIPT,
@@ -354,7 +395,6 @@ def build_patient_evaluation_command(
     base_date = base_options.get("base_date")
     if not isinstance(base_date, str) or not base_date.strip():
         raise ValueError("base.base_date must be a non-empty string.")
-    task_top_k = base_options.get("task_top_k", DEFAULT_TASK_TOP_K)
     use_llm = bool(base_options.get("use_llm", True))
     command = [
         sys.executable,
@@ -363,8 +403,6 @@ def build_patient_evaluation_command(
         base_date,
         "--config",
         str(config_path),
-        "--task-top-k",
-        str(task_top_k),
         "--output-dir",
         str(output_dir),
     ]
@@ -372,10 +410,7 @@ def build_patient_evaluation_command(
     optional_args = {
         "patient_id": "--patient-id",
         "patient_list_dir": "--patient-list-dir",
-        "pattern": "--pattern",
-        "query_family": "--query-family",
         "limit": "--limit",
-        "prompt_output_dir": "--prompt-output-dir",
     }
     for option_name, cli_flag in optional_args.items():
         option_value = base_options.get(option_name)
@@ -384,10 +419,6 @@ def build_patient_evaluation_command(
 
     if not use_llm:
         command.append("--dry-run")
-    if bool(base_options.get("no_save_prompt", False)):
-        command.append("--no-save-prompt")
-    elif base_options.get("prompt_output_dir") is None:
-        command.extend(["--prompt-output-dir", str(Path(output_dir) / "prompts")])
     return command
 
 
@@ -396,15 +427,15 @@ def build_direct_entity_profiles_evaluation_command(
     base_options: dict[str, Any],
     config_path: str | Path,
     output_dir: str | Path,
+    prediction_mode: str = "direct_entity",
 ) -> list[str]:
-    """Build the evaluate_direct_entity_profiles.py command for one run."""
+    """Build the profile-based evaluation command for one run."""
     profiles = base_options.get("profiles")
     if not isinstance(profiles, str) or not profiles.strip():
         raise ValueError(
             "base.profiles must be a non-empty string when "
             "evaluation_script is direct_entity_profiles."
         )
-    task_top_k = base_options.get("task_top_k", DEFAULT_TASK_TOP_K)
     use_llm = bool(base_options.get("use_llm", True))
     command = [
         sys.executable,
@@ -413,10 +444,10 @@ def build_direct_entity_profiles_evaluation_command(
         profiles,
         "--config",
         str(config_path),
-        "--task-top-k",
-        str(task_top_k),
         "--output-dir",
         str(output_dir),
+        "--prediction-mode",
+        prediction_mode,
     ]
 
     optional_args = {
@@ -455,7 +486,14 @@ def build_grid_runs(
     base_config = load_yaml_config(settings_path)
     runs: list[EvaluationGridRun] = []
     override_specs = build_experiment_override_specs(experiment_config)
-    for index, (name, overrides) in enumerate(override_specs, start=1):
+    base_override_specs = build_experiment_base_override_specs(experiment_config)
+    if len(base_override_specs) != len(override_specs):
+        raise ValueError("Experiment override and base_override counts must match.")
+    for index, ((name, overrides), base_overrides) in enumerate(
+        zip(override_specs, base_override_specs, strict=True),
+        start=1,
+    ):
+        run_base_options = {**base_options, **base_overrides}
         run_name = (
             build_named_run_name(index, name)
             if name is not None
@@ -463,7 +501,7 @@ def build_grid_runs(
         )
         generated_config = build_config_for_overrides(
             base_config,
-            _with_base_patient_path_window_override(base_options, overrides),
+            _with_base_patient_path_overrides(run_base_options, overrides),
         )
         config_path = write_generated_config(
             generated_config,
@@ -472,7 +510,7 @@ def build_grid_runs(
         )
         output_dir = Path(output_root) / "runs" / run_name
         command = build_evaluation_command(
-            base_options=base_options,
+            base_options=run_base_options,
             config_path=config_path,
             output_dir=output_dir,
         )
@@ -489,16 +527,24 @@ def build_grid_runs(
     return runs
 
 
-def _with_base_patient_path_window_override(
+def _with_base_patient_path_overrides(
     base_options: dict[str, Any],
     overrides: dict[str, Any],
 ) -> dict[str, Any]:
-    """Carry legacy base.window_days into the generated YAML config."""
+    """Carry base patient-path options into the generated YAML config."""
     merged_overrides = dict(overrides)
     if "query.patient_path.window_days" not in merged_overrides:
         window_days = base_options.get("window_days")
         if window_days is not None:
             merged_overrides["query.patient_path.window_days"] = window_days
+    if "query.patient_path.query_family" not in merged_overrides:
+        query_family = base_options.get("query_family")
+        if query_family is not None:
+            merged_overrides["query.patient_path.query_family"] = query_family
+    if "query.training_task_prediction.task_top_k" not in merged_overrides:
+        task_top_k = base_options.get("task_top_k")
+        if task_top_k is not None:
+            merged_overrides["query.training_task_prediction.task_top_k"] = task_top_k
     return merged_overrides
 
 
