@@ -68,27 +68,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("patient_id", help="Patient identifier used in Neo4j queries.")
     parser.add_argument(
-        "--pattern",
-        default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        help=(
-            "Legacy output field. Path build and scoring use "
-            "candidate_ranking.patterns from the config."
-        ),
-    )
-    parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="Path to the YAML config file.",
-    )
-    parser.add_argument(
-        "--skip-path-build",
-        action="store_true",
-        help="Deprecated compatibility flag; cache lookup now decides whether paths are rebuilt.",
-    )
-    parser.add_argument(
-        "--skip-path-scoring",
-        action="store_true",
-        help="Deprecated compatibility flag; cache lookup now decides whether paths are rescored.",
     )
     parser.add_argument(
         "--base-date",
@@ -554,10 +536,7 @@ def main() -> int:
     try:
         result = run_similar_user_pipeline(
             args.patient_id,
-            pattern=args.pattern,
             config_path=args.config,
-            skip_path_build=args.skip_path_build,
-            skip_path_scoring=args.skip_path_scoring,
             base_date=args.base_date,
         )
     except Exception as exc:

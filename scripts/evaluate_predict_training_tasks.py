@@ -101,30 +101,9 @@ def parse_args() -> argparse.Namespace:
         help="Prediction date; actual labels are tasks on this date.",
     )
     parser.add_argument(
-        "--pattern",
-        default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        help="Pattern name used by predict_training_tasks.",
-    )
-    parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="Path to the YAML config file.",
-    )
-    parser.add_argument(
-        "--skip-path-build",
-        action="store_true",
-        help="Use existing saved paths and only run scoring plus candidate ranking.",
-    )
-    parser.add_argument(
-        "--skip-path-scoring",
-        action="store_true",
-        help="Use existing saved scored paths and only run candidate ranking.",
-    )
-    parser.add_argument(
-        "--task-top-k",
-        type=int,
-        default=DEFAULT_TASK_TOP_K,
-        help="Number of predicted training tasks to evaluate.",
     )
     parser.add_argument(
         "--dry-run",
@@ -1589,6 +1568,7 @@ def main() -> int:
     query_settings = load_query_settings(args.config)
     patient_path_window_days = query_settings.patient_path.window_days
     patient_path_query_family = query_settings.patient_path.query_family
+    task_top_k = query_settings.training_task_prediction.task_top_k
     evaluation_workers = query_settings.training_task_evaluation.workers
     started_at = time.perf_counter()
     LOGGER.info(
@@ -1597,7 +1577,7 @@ def main() -> int:
         args.base_date,
         patient_path_window_days,
         patient_path_query_family,
-        args.task_top_k,
+        task_top_k,
         not args.dry_run,
         evaluation_workers,
         args.output_dir,
@@ -1626,12 +1606,9 @@ def main() -> int:
         details = run_batch_evaluation(
             patient_ids,
             base_date=args.base_date,
-            pattern=args.pattern,
             config_path=args.config,
-            skip_path_build=args.skip_path_build,
-            skip_path_scoring=args.skip_path_scoring,
             query_family=patient_path_query_family,
-            task_top_k=args.task_top_k,
+            task_top_k=task_top_k,
             use_llm=not args.dry_run,
             limit=args.limit,
             workers=evaluation_workers,
@@ -1643,12 +1620,9 @@ def main() -> int:
         analysis = analyze_evaluation_details(details)
         experiment_config = build_experiment_config(
             base_date=args.base_date,
-            pattern=args.pattern,
             config_path=args.config,
-            skip_path_build=args.skip_path_build,
-            skip_path_scoring=args.skip_path_scoring,
             query_family=patient_path_query_family,
-            task_top_k=args.task_top_k,
+            task_top_k=task_top_k,
             use_llm=not args.dry_run,
             workers=evaluation_workers,
         )

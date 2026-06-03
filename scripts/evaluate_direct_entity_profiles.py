@@ -79,7 +79,6 @@ def parse_args() -> argparse.Namespace:
         default=[],
         help="Optional patient ID filter. Can be supplied multiple times.",
     )
-    parser.add_argument("--task-top-k", type=int)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--workers", type=int)
     parser.add_argument(
@@ -87,20 +86,6 @@ def parse_args() -> argparse.Namespace:
         choices=("direct_entity", "unified"),
         default="direct_entity",
         help="Prediction function used for each profile.",
-    )
-    parser.add_argument(
-        "--pattern",
-        help="Unified mode: patient-path pattern used when a profile patient exists.",
-    )
-    parser.add_argument(
-        "--skip-path-build",
-        action="store_true",
-        help="Unified mode: patient path only, use existing saved raw paths.",
-    )
-    parser.add_argument(
-        "--skip-path-scoring",
-        action="store_true",
-        help="Unified mode: patient path only, use existing scored paths.",
     )
     parser.add_argument(
         "--output-level",
@@ -610,13 +595,9 @@ def main() -> int:
             details_file=args.details_file,
             limit=args.limit,
             patient_ids=args.patient_id,
-            task_top_k=args.task_top_k,
             use_llm=not args.dry_run,
             workers=args.workers,
             prediction_mode=args.prediction_mode,
-            pattern=args.pattern,
-            skip_path_build=args.skip_path_build,
-            skip_path_scoring=args.skip_path_scoring,
         )
     except Exception as exc:
         LOGGER.exception("Direct entity profile evaluation failed: %s", exc)

@@ -167,11 +167,6 @@ def parse_args() -> argparse.Namespace:
         help="Skip the LLM call and return deterministic candidate-task predictions.",
     )
     parser.add_argument(
-        "--task-top-k",
-        type=int,
-        help="Override query.training_task_prediction.task_top_k.",
-    )
-    parser.add_argument(
         "--include-prompt",
         action="store_true",
         help="Include the generated LLM prompt in full output.",
@@ -915,7 +910,6 @@ def main() -> int:
             candidates_dir=args.candidates_dir,
             use_llm=not args.dry_run,
             include_prompt=args.include_prompt or save_prompt,
-            task_top_k=args.task_top_k,
         )
         output = summarize_prediction_result(result, output_level=args.output_level)
         if args.output:

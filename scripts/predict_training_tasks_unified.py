@@ -57,21 +57,6 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_CONFIG_PATH),
         help="Path to the YAML config file.",
     )
-    parser.add_argument(
-        "--pattern",
-        default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        help="Patient-path pattern used when the patient exists.",
-    )
-    parser.add_argument(
-        "--skip-path-build",
-        action="store_true",
-        help="Patient path only: use existing saved raw paths.",
-    )
-    parser.add_argument(
-        "--skip-path-scoring",
-        action="store_true",
-        help="Patient path only: use existing scored paths.",
-    )
     parser.add_argument("--age", help="Direct entity path only: target age.")
     parser.add_argument("--education", help="Direct entity path only: target education.")
     parser.add_argument("--gender", help="Direct entity path only: target gender.")
@@ -102,12 +87,6 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=[],
         help="Direct entity path only: unknown entity IDs.",
-    )
-    parser.add_argument(
-        "--task-top-k",
-        type=int,
-        default=DEFAULT_TASK_TOP_K,
-        help="Number of predicted training tasks to return.",
     )
     parser.add_argument(
         "--output-level",
@@ -360,13 +339,11 @@ def main() -> int:
     try:
         query_settings = load_query_settings(args.config)
         save_prompt = query_settings.training_task_prediction.save_prompt_enabled
+        task_top_k = query_settings.training_task_prediction.task_top_k
         result = predict_training_tasks_unified(
             patient_id=args.patient_id,
             base_date=args.base_date,
             config_path=args.config,
-            pattern=args.pattern,
-            skip_path_build=args.skip_path_build,
-            skip_path_scoring=args.skip_path_scoring,
             age=args.age,
             education=args.education,
             gender=args.gender,
@@ -374,7 +351,7 @@ def main() -> int:
             disease_names=_flatten(args.disease_name),
             symptom_ids=_flatten(args.symptom_id),
             unknown_ids=_flatten(args.unknown_id),
-            task_top_k=args.task_top_k,
+            task_top_k=task_top_k,
             use_llm=not args.dry_run,
             include_prompt=args.include_prompt or save_prompt,
         )

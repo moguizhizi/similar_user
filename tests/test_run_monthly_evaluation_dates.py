@@ -34,8 +34,6 @@ class RunMonthlyEvaluationDatesTest(unittest.TestCase):
             base_date="2024-02-23",
             config_path="config/settings.yaml",
             use_llm=False,
-            skip_path_build=True,
-            skip_path_scoring=True,
         )
 
         self.assertEqual(
@@ -47,8 +45,6 @@ class RunMonthlyEvaluationDatesTest(unittest.TestCase):
                 "--config",
                 "config/settings.yaml",
                 "--dry-run",
-                "--skip-path-build",
-                "--skip-path-scoring",
             ],
         )
 

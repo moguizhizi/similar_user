@@ -251,18 +251,14 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_parse_args.return_value = Mock(
             patient_id="40",
             base_date="2022-05-22",
-            pattern="PATTERN",
             config="config/settings.yaml",
-            skip_path_build=True,
-            skip_path_scoring=True,
-            task_top_k=5,
             dry_run=True,
             include_prompt=False,
             output_level="scores",
         )
         mock_run_end_to_end.return_value = end_to_end_result
         mock_load_query_settings.return_value = Mock(
-            training_task_prediction=Mock(save_prompt_enabled=False)
+            training_task_prediction=Mock(save_prompt_enabled=False, task_top_k=5)
         )
 
         exit_code = predict_training_tasks.main()
@@ -271,10 +267,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_run_end_to_end.assert_called_once_with(
             "40",
             base_date="2022-05-22",
-            pattern="PATTERN",
             config_path="config/settings.yaml",
-            skip_path_build=True,
-            skip_path_scoring=True,
             task_top_k=5,
             use_llm=False,
             include_prompt=False,
@@ -311,11 +304,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_parse_args.return_value = Mock(
             patient_id="40",
             base_date="2022-05-22",
-            pattern="PATTERN",
             config="config/settings.yaml",
-            skip_path_build=True,
-            skip_path_scoring=True,
-            task_top_k=5,
             dry_run=True,
             include_prompt=True,
             output_level="full",
@@ -328,7 +317,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             },
         }
         mock_load_query_settings.return_value = Mock(
-            training_task_prediction=Mock(save_prompt_enabled=False)
+            training_task_prediction=Mock(save_prompt_enabled=False, task_top_k=5)
         )
         exit_code = predict_training_tasks.main()
 
@@ -336,10 +325,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_run_end_to_end.assert_called_once_with(
             "40",
             base_date="2022-05-22",
-            pattern="PATTERN",
             config_path="config/settings.yaml",
-            skip_path_build=True,
-            skip_path_scoring=True,
             task_top_k=5,
             use_llm=False,
             include_prompt=True,
@@ -362,17 +348,13 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_parse_args.return_value = Mock(
             patient_id="40",
             base_date="2022-05-22",
-            pattern="PATTERN",
             config="config/settings.yaml",
-            skip_path_build=True,
-            skip_path_scoring=True,
-            task_top_k=5,
             dry_run=True,
             include_prompt=False,
             output_level="full",
         )
         mock_load_query_settings.return_value = Mock(
-            training_task_prediction=Mock(save_prompt_enabled=True)
+            training_task_prediction=Mock(save_prompt_enabled=True, task_top_k=5)
         )
         mock_run_end_to_end.return_value = {
             "patient_id": "40",
@@ -391,10 +373,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
         mock_run_end_to_end.assert_called_once_with(
             "40",
             base_date="2022-05-22",
-            pattern="PATTERN",
             config_path="config/settings.yaml",
-            skip_path_build=True,
-            skip_path_scoring=True,
             task_top_k=5,
             use_llm=False,
             include_prompt=True,

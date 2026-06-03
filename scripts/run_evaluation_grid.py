@@ -35,7 +35,6 @@ LOGGER = get_logger(__name__)
 DEFAULT_EXPERIMENT_CONFIG_PATH = Path("config/experiments/evaluation_grid.yaml")
 DEFAULT_OUTPUT_ROOT = Path("data/evaluation_grid")
 DEFAULT_GENERATED_CONFIG_DIR = DEFAULT_OUTPUT_ROOT / "generated_configs"
-DEFAULT_TASK_TOP_K = 7
 DEFAULT_RANK_BY = "micro_recall"
 DEFAULT_EVALUATION_SCRIPT = "predict_training_tasks"
 LEADERBOARD_FIELDS = (
@@ -396,7 +395,6 @@ def build_patient_evaluation_command(
     base_date = base_options.get("base_date")
     if not isinstance(base_date, str) or not base_date.strip():
         raise ValueError("base.base_date must be a non-empty string.")
-    task_top_k = base_options.get("task_top_k", DEFAULT_TASK_TOP_K)
     use_llm = bool(base_options.get("use_llm", True))
     command = [
         sys.executable,
@@ -405,8 +403,6 @@ def build_patient_evaluation_command(
         base_date,
         "--config",
         str(config_path),
-        "--task-top-k",
-        str(task_top_k),
         "--output-dir",
         str(output_dir),
     ]
@@ -414,7 +410,6 @@ def build_patient_evaluation_command(
     optional_args = {
         "patient_id": "--patient-id",
         "patient_list_dir": "--patient-list-dir",
-        "pattern": "--pattern",
         "limit": "--limit",
     }
     for option_name, cli_flag in optional_args.items():
@@ -441,7 +436,6 @@ def build_direct_entity_profiles_evaluation_command(
             "base.profiles must be a non-empty string when "
             "evaluation_script is direct_entity_profiles."
         )
-    task_top_k = base_options.get("task_top_k", DEFAULT_TASK_TOP_K)
     use_llm = bool(base_options.get("use_llm", True))
     command = [
         sys.executable,
@@ -450,8 +444,6 @@ def build_direct_entity_profiles_evaluation_command(
         profiles,
         "--config",
         str(config_path),
-        "--task-top-k",
-        str(task_top_k),
         "--output-dir",
         str(output_dir),
         "--prediction-mode",
@@ -463,7 +455,6 @@ def build_direct_entity_profiles_evaluation_command(
         "limit": "--limit",
         "patient_id": "--patient-id",
         "workers": "--workers",
-        "pattern": "--pattern",
     }
     for option_name, cli_flag in optional_args.items():
         option_value = base_options.get(option_name)
@@ -474,11 +465,6 @@ def build_direct_entity_profiles_evaluation_command(
                 command.extend([cli_flag, str(patient_id)])
             continue
         command.extend([cli_flag, str(option_value)])
-
-    if bool(base_options.get("skip_path_build", False)):
-        command.append("--skip-path-build")
-    if bool(base_options.get("skip_path_scoring", False)):
-        command.append("--skip-path-scoring")
 
     if not use_llm:
         command.append("--dry-run")
@@ -555,6 +541,10 @@ def _with_base_patient_path_overrides(
         query_family = base_options.get("query_family")
         if query_family is not None:
             merged_overrides["query.patient_path.query_family"] = query_family
+    if "query.training_task_prediction.task_top_k" not in merged_overrides:
+        task_top_k = base_options.get("task_top_k")
+        if task_top_k is not None:
+            merged_overrides["query.training_task_prediction.task_top_k"] = task_top_k
     return merged_overrides
 
 

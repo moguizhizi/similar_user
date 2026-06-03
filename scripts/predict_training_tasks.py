@@ -7,9 +7,6 @@
 3. 默认调用配置中的 LLM 生成预测结果；使用 `--dry-run` 时跳过 LLM，返回确定性的候选任务结果。
 4. 最后按 `--output-level` 输出任务 ID、任务分数或完整端到端结果。
 
-如果已经有可用的离线 path 结果，可以使用 `--skip-path-build` 跳过 path 构建。
-如果已经有可用的 scored paths，可以使用 `--skip-path-scoring` 复用已有评分结果。
-
 常用执行方式：
 
     python scripts/predict_training_tasks.py 40 --base-date 2022-05-22
@@ -70,21 +67,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("patient_id", help="Patient identifier used in Neo4j queries.")
     parser.add_argument(
-        "--pattern",
-        default=PATIENT_TASKSET_TASK_GAME_TASK_TASKSET_PATIENT,
-        help="Pattern name used to locate the saved similar-user path result.",
-    )
-    parser.add_argument(
-        "--skip-path-build",
-        action="store_true",
-        help="Use existing saved paths and only run scoring plus candidate ranking.",
-    )
-    parser.add_argument(
-        "--skip-path-scoring",
-        action="store_true",
-        help="Use existing saved scored paths and only run candidate ranking.",
-    )
-    parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="Path to the YAML config file.",
@@ -93,12 +75,6 @@ def parse_args() -> argparse.Namespace:
         "--base-date",
         required=True,
         help="Prediction base date; target tasks use the two days before this date.",
-    )
-    parser.add_argument(
-        "--task-top-k",
-        type=int,
-        default=DEFAULT_TASK_TOP_K,
-        help="Number of predicted training tasks to return.",
     )
     parser.add_argument(
         "--output-level",
@@ -354,14 +330,12 @@ def main() -> int:
     try:
         query_settings = load_query_settings(args.config)
         save_prompt = query_settings.training_task_prediction.save_prompt_enabled
+        task_top_k = query_settings.training_task_prediction.task_top_k
         result = run_end_to_end_training_task_prediction(
             args.patient_id,
             base_date=args.base_date,
-            pattern=args.pattern,
             config_path=args.config,
-            skip_path_build=args.skip_path_build,
-            skip_path_scoring=args.skip_path_scoring,
-            task_top_k=args.task_top_k,
+            task_top_k=task_top_k,
             use_llm=not args.dry_run,
             include_prompt=args.include_prompt or save_prompt,
         )

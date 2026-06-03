@@ -194,11 +194,12 @@ class RunEvaluationGridTest(unittest.TestCase):
             "data/patient_ids/incremental",
         )
 
-    def test_base_query_family_is_written_to_generated_config_overrides(self) -> None:
+    def test_base_options_are_written_to_generated_config_overrides(self) -> None:
         overrides = run_evaluation_grid._with_base_patient_path_overrides(
             {
                 "window_days": 14,
                 "query_family": "training_order_dual_window",
+                "task_top_k": 7,
             },
             {},
         )
@@ -208,6 +209,7 @@ class RunEvaluationGridTest(unittest.TestCase):
             overrides["query.patient_path.query_family"],
             "training_order_dual_window",
         )
+        self.assertEqual(overrides["query.training_task_prediction.task_top_k"], 7)
 
     def test_get_stage_name_requires_stage(self) -> None:
         self.assertEqual(
@@ -308,8 +310,6 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "2023-10-15",
                 "--config",
                 "data/evaluation_grid/generated_configs/exp_001.yaml",
-                "--task-top-k",
-                "7",
                 "--output-dir",
                 "data/evaluation_grid/runs/exp_001",
                 "--limit",
@@ -355,8 +355,6 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "data/direct_entity_inputs/profiles.jsonl",
                 "--config",
                 "data/evaluation_grid/generated_configs/exp_001.yaml",
-                "--task-top-k",
-                "7",
                 "--output-dir",
                 "data/evaluation_grid/runs/exp_001",
                 "--prediction-mode",
@@ -365,8 +363,6 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "10",
                 "--workers",
                 "2",
-                "--skip-path-build",
-                "--skip-path-scoring",
                 "--dry-run",
             ],
         )
@@ -393,8 +389,6 @@ class RunEvaluationGridTest(unittest.TestCase):
                 "data/direct_entity_inputs/profiles.jsonl",
                 "--config",
                 "data/evaluation_grid/generated_configs/exp_001.yaml",
-                "--task-top-k",
-                "7",
                 "--output-dir",
                 "data/evaluation_grid/runs/exp_001",
                 "--prediction-mode",
