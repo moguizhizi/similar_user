@@ -10,13 +10,13 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 
 from config.settings import DEFAULT_CONFIG_PATH, load_yaml_config
-from scripts.predict_training_tasks_unified import (
-    predict_training_tasks_unified,
-    summarize_unified_prediction_result,
-)
+from scripts.predict_training_tasks_unified import predict_training_tasks_unified
 
 from .app import build_neo4j_health_payload
-from .external_task_prediction import build_unified_prediction_input
+from .external_task_prediction import (
+    build_external_prediction_response,
+    build_unified_prediction_input,
+)
 from .schemas import ExternalTrainingTaskPredictRequest
 
 
@@ -100,18 +100,13 @@ def predict_training_task(
                 use_llm=prediction_input.use_llm,
                 include_prompt=prediction_input.include_prompt,
             )
-            summary = summarize_unified_prediction_result(
+            response_payload = build_external_prediction_response(
                 result,
-                output_level=prediction_input.output_level,
+                source_payload=payload,
             )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    return {
-        "status": "ok",
-        "patient_id": prediction_input.patient_id,
-        "base_date": prediction_input.base_date,
-        **summary,
-    }
+    return response_payload

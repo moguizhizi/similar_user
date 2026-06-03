@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from config.settings import DEFAULT_CONFIG_PATH
 from ..services.task_prediction import DEFAULT_TASK_TOP_K
 
 
 DEFAULT_OUTPUT_LEVEL = "scores"
+DEFAULT_BASE_DATE = "2026-05-25"
 
 
 @dataclass(frozen=True)
@@ -39,7 +39,6 @@ def build_unified_prediction_input(
     payload: dict[str, Any],
     *,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
-    today: Callable[[], date] = date.today,
 ) -> UnifiedPredictionInput:
     """Normalize an external request body into unified prediction arguments."""
     if not isinstance(payload, dict):
@@ -63,7 +62,7 @@ def build_unified_prediction_input(
 
     return UnifiedPredictionInput(
         patient_id=patient_id,
-        base_date=today().isoformat(),
+        base_date=DEFAULT_BASE_DATE,
         config_path=config_path,
         age=payload.get("age", behavior.get("age")),
         education=_resolve_education(payload, behavior),
@@ -81,6 +80,48 @@ def build_unified_prediction_input(
         ),
         output_level=output_level,
     )
+
+
+def build_external_prediction_response(
+    unified_result: dict[str, Any],
+    *,
+    source_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the response shape expected by the external module."""
+    task_ids = extract_predicted_task_ids(unified_result)
+    ba_dalt_length = _resolve_ba_dalt_length(source_payload)
+    return {
+        "id": [_normalize_response_task_id(task_id) for task_id in task_ids],
+        "ba_dalt": [0] * ba_dalt_length,
+        "ba_id_list": [0] * len(task_ids),
+    }
+
+
+def extract_predicted_task_ids(unified_result: dict[str, Any]) -> list[str]:
+    """Extract predicted task IDs from raw unified prediction output."""
+    inner = unified_result.get("result") if isinstance(unified_result, dict) else None
+    if not isinstance(inner, dict):
+        return []
+
+    prediction = inner.get("training_task_prediction")
+    if not isinstance(prediction, dict):
+        return []
+
+    tasks = prediction.get("predicted_training_tasks")
+    if not isinstance(tasks, list):
+        return []
+
+    task_ids: list[str] = []
+    seen: set[str] = set()
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        task_id = _normalize_optional_text(task.get("game_id"))
+        if task_id is None or task_id in seen:
+            continue
+        task_ids.append(task_id)
+        seen.add(task_id)
+    return task_ids
 
 
 def normalize_user_id(value: object) -> str:
@@ -172,3 +213,20 @@ def _normalize_output_level(value: object) -> str:
     if text not in {"ids", "scores", "full"}:
         raise ValueError("Field 'output_level' must be one of: ids, scores, full.")
     return text
+
+
+def _resolve_ba_dalt_length(payload: dict[str, Any]) -> int:
+    pre_score_ba = payload.get("pre_score_ba")
+    if isinstance(pre_score_ba, list):
+        return len(pre_score_ba)
+    ba = payload.get("ba")
+    if isinstance(ba, list):
+        return len(ba)
+    return 0
+
+
+def _normalize_response_task_id(value: str) -> int | str:
+    try:
+        return int(value)
+    except ValueError:
+        return value

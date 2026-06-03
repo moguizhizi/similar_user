@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
 import unittest
 
 from src.similar_user.api.external_task_prediction import (
+    build_external_prediction_response,
     build_unified_prediction_input,
     normalize_user_id,
 )
@@ -26,11 +26,10 @@ class ExternalTaskPredictionAdapterTest(unittest.TestCase):
                     "edu": "高中",
                 },
             },
-            today=lambda: date(2026, 6, 2),
         )
 
         self.assertEqual(result.patient_id, "20123188")
-        self.assertEqual(result.base_date, "2026-06-02")
+        self.assertEqual(result.base_date, "2026-05-25")
         self.assertEqual(result.age, 84)
         self.assertEqual(result.gender, "女")
         self.assertEqual(result.education, "高中")
@@ -44,7 +43,34 @@ class ExternalTaskPredictionAdapterTest(unittest.TestCase):
 
     def test_rejects_missing_user_id(self) -> None:
         with self.assertRaisesRegex(ValueError, "user_id"):
-            build_unified_prediction_input({}, today=lambda: date(2026, 6, 2))
+            build_unified_prediction_input({})
+
+    def test_builds_external_response_with_zero_placeholders(self) -> None:
+        result = build_external_prediction_response(
+            {
+                "route": "patient_path",
+                "patient_exists": True,
+                "result": {
+                    "training_task_prediction": {
+                        "predicted_training_tasks": [
+                            {"game_id": "306"},
+                            {"game_id": "686"},
+                            {"game_id": "431"},
+                        ],
+                    },
+                },
+            },
+            source_payload={"pre_score_ba": [57.0, 0.0, 0.0]},
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "id": [306, 686, 431],
+                "ba_dalt": [0, 0, 0],
+                "ba_id_list": [0, 0, 0],
+            },
+        )
 
 
 if __name__ == "__main__":
