@@ -21,6 +21,7 @@ class Neo4jSettings:
     username: str
     password: str
     database: str = "neo4j"
+    log_connection_caller: bool = False
 
 
 @dataclass(frozen=True)
@@ -247,11 +248,16 @@ def load_neo4j_settings(config_path: str | Path) -> Neo4jSettings:
         missing = ", ".join(missing_fields)
         raise ValueError(f"Missing required Neo4j settings: {missing}")
 
+    log_connection_caller = data.get("log_connection_caller", False)
+    if not isinstance(log_connection_caller, bool):
+        raise ValueError("neo4j log_connection_caller must be a boolean.")
+
     return Neo4jSettings(
         uri=str(data["uri"]),
         username=str(data["username"]),
         password=str(data["password"]),
         database=str(data.get("database", "neo4j")),
+        log_connection_caller=log_connection_caller,
     )
 
 

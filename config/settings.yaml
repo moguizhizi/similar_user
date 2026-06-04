@@ -3,6 +3,7 @@ neo4j:
   username: "neo4j"
   password: "password"
   database: "neo4j"
+  log_connection_caller: false
 
 llm:
   base_url: "http://10.30.1.121:7999"

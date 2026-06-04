@@ -23,6 +23,10 @@ for candidate in (PROJECT_ROOT, SRC_ROOT):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
+from similar_user.data_access.cypher_queries import (
+    PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+    PATIENT_PROFILE_GENDER_EDUCATION_AGE_WINDOWED_EXCLUSIVE_TASK_GAME_QUERY,
+)
 from similar_user.data_access.neo4j_client import Neo4jClient
 from similar_user.utils.logger import get_logger
 
@@ -35,6 +39,9 @@ DEFAULT_END_DATE = "2026-05-25"
 DEFAULT_PER_G = 10
 DEFAULT_LIMIT = 310
 DEFAULT_TIMEOUT_SECONDS = 900
+DEFAULT_BASE_DATE = "2026-05-25"
+DEFAULT_AGE_WINDOW = 0
+DEFAULT_PROFILE_CANDIDATE_TRAINING_WINDOW_DAYS = 80
 LOGGER = get_logger(__name__)
 
 
@@ -702,7 +709,44 @@ LAYER3_ACTIVITY_TASK_TYPE_DUAL_WINDOW_QUERY = _require_candidate_taskset_date_wi
 )
 
 
+PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BATCH_BY_DATE_WINDOW_QUERY = """
+MATCH (p:Patient)
+WHERE toString(p.id) IN $patient_ids
+
+MATCH (p)
+--(s:TaskInstanceSet)
+--(i:TaskInstance)
+--(g:Game)
+
+WHERE
+    s.`训练日期` IS NOT NULL AND
+    date(s.`训练日期`) >= date($start_date) AND
+    date(s.`训练日期`) < date($end_date) AND
+    i.`任务类型` = "专属"
+
+WITH
+    toString(p.id) AS patient_id,
+    date(s.`训练日期`) AS trainingDate,
+    g
+ORDER BY patient_id, trainingDate
+
+RETURN
+    patient_id,
+    trainingDate,
+    g
+""".strip()
+
+
 QUERY_VARIANTS = {
+    "patient_exclusive_training_task_history_batch_by_date_window": (
+        PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BATCH_BY_DATE_WINDOW_QUERY
+    ),
+    "patient_exclusive_training_task_history_by_date_window": (
+        PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY
+    ),
+    "patient_profile_gender_education_age_windowed_exclusive_task_game": (
+        PATIENT_PROFILE_GENDER_EDUCATION_AGE_WINDOWED_EXCLUSIVE_TASK_GAME_QUERY
+    ),
     "training_order_source_window": ORIGINAL_QUERY,
     "training_order_local_sampling_source_window": LOCAL_SAMPLING_QUERY,
     "training_order_age_source_window": AGE_ONLY_QUERY,
@@ -806,8 +850,26 @@ APPROX_DUAL_WINDOW_STATISTICS_QUERY = _require_candidate_taskset_date_window(
 )
 GCOUNT_ONLY_DUAL_WINDOW_STATISTICS_QUERY = GCOUNT_ONLY_STATISTICS_QUERY
 
+PATIENT_PROFILE_EFFECTIVE_DATE_QUERY = """
+MATCH (p:Patient {id: $patient_id})
+--(profile_s:TaskInstanceSet)
+
+WHERE
+    p.`性别` IS NOT NULL AND
+    profile_s.`训练日期` IS NOT NULL AND
+    date(profile_s.`训练日期`) <= date($base_date)
+
+WITH
+    p,
+    max(date(profile_s.`训练日期`)) AS effective_date
+
+RETURN
+    effective_date
+""".strip()
+
 
 STATISTICS_VARIANTS = {
+    "patient_profile_effective_date": PATIENT_PROFILE_EFFECTIVE_DATE_QUERY,
     "stats_training_order_source_window": ORIGINAL_STATISTICS_QUERY,
     "stats_training_order_approx_group_source_window": APPROX_STATISTICS_QUERY,
     "stats_training_order_gcount_only_source_window": GCOUNT_ONLY_STATISTICS_QUERY,
@@ -817,6 +879,9 @@ STATISTICS_VARIANTS = {
 }
 
 ALL_VARIANTS = {**QUERY_VARIANTS, **STATISTICS_VARIANTS}
+COMPARE_VARIANTS = {
+    "compare_patient_exclusive_training_task_history_batch_by_date_window"
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -838,8 +903,27 @@ def parse_args() -> argparse.Namespace:
         "--patient-id-file",
         help="Text file containing one patient id per line. Empty lines and # comments are ignored.",
     )
+    parser.add_argument(
+        "--candidate-patient-id",
+        action="append",
+        help=(
+            "Candidate patient id for batch candidate-history benchmarks. "
+            "Can be passed multiple times. Defaults to --patient-id values."
+        ),
+    )
+    parser.add_argument(
+        "--candidate-patient-id-file",
+        help="Text file containing candidate patient ids for batch candidate-history benchmarks.",
+    )
     parser.add_argument("--start-date", default=DEFAULT_START_DATE)
     parser.add_argument("--end-date", default=DEFAULT_END_DATE)
+    parser.add_argument("--base-date", default=DEFAULT_BASE_DATE)
+    parser.add_argument("--age-window", type=int, default=DEFAULT_AGE_WINDOW)
+    parser.add_argument(
+        "--profile-candidate-training-window-days",
+        type=int,
+        default=DEFAULT_PROFILE_CANDIDATE_TRAINING_WINDOW_DAYS,
+    )
     parser.add_argument("--per-g", type=int, default=DEFAULT_PER_G)
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
     parser.add_argument(
@@ -851,7 +935,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--variant",
         action="append",
-        choices=sorted(ALL_VARIANTS),
+        choices=sorted([*ALL_VARIANTS, *COMPARE_VARIANTS]),
         help="Run one variant. Can be passed multiple times. Defaults to all variants.",
     )
     parser.add_argument(
@@ -895,6 +979,35 @@ def read_patient_ids(args: argparse.Namespace) -> list[str]:
     return normalized
 
 
+def read_candidate_patient_ids(
+    args: argparse.Namespace,
+    *,
+    fallback_patient_ids: list[str],
+) -> list[str]:
+    """Read candidate patient ids for batch history benchmarks."""
+    candidate_patient_ids: list[str] = []
+    if args.candidate_patient_id:
+        candidate_patient_ids.extend(
+            str(patient_id).strip() for patient_id in args.candidate_patient_id
+        )
+
+    if args.candidate_patient_id_file:
+        path = Path(args.candidate_patient_id_file)
+        with path.open("r", encoding="utf-8") as file:
+            for line in file:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    candidate_patient_ids.append(stripped)
+
+    normalized = []
+    seen = set()
+    for patient_id in candidate_patient_ids or fallback_patient_ids:
+        if patient_id and patient_id not in seen:
+            normalized.append(patient_id)
+            seen.add(patient_id)
+    return normalized
+
+
 def build_parameters(args: argparse.Namespace, patient_id: str) -> dict[str, object]:
     """Build Cypher parameters from parsed arguments."""
     return {
@@ -903,6 +1016,23 @@ def build_parameters(args: argparse.Namespace, patient_id: str) -> dict[str, obj
         "end_date": str(args.end_date),
         "per_g": int(args.per_g),
         "limit": int(args.limit),
+        "base_date": str(args.base_date),
+        "age_window": int(args.age_window),
+        "profile_candidate_training_window_days": int(
+            args.profile_candidate_training_window_days
+        ),
+    }
+
+
+def build_batch_history_parameters(
+    args: argparse.Namespace,
+    candidate_patient_ids: list[str],
+) -> dict[str, object]:
+    """Build parameters for batch candidate-history benchmarks."""
+    return {
+        "patient_ids": [str(patient_id) for patient_id in candidate_patient_ids],
+        "start_date": str(args.start_date),
+        "end_date": str(args.end_date),
     }
 
 
@@ -933,6 +1063,92 @@ def run_query_worker(
         queue.put(
             {
                 "variant": variant,
+                "status": "failed",
+                "row_count": None,
+                "elapsed_seconds": elapsed_seconds,
+                "error": str(exc),
+            }
+        )
+
+
+def run_candidate_history_compare_worker(
+    config_path: str,
+    candidate_patient_ids: list[str],
+    start_date: str,
+    end_date: str,
+    queue: mp.Queue,
+) -> None:
+    """Compare per-patient and batch candidate-history queries in one worker."""
+    started_at = time.perf_counter()
+    try:
+        per_patient_results: list[dict[str, object]] = []
+        individual_row_count = 0
+        individual_started_at = time.perf_counter()
+        with Neo4jClient.from_config(config_path) as client:
+            for patient_id in candidate_patient_ids:
+                patient_started_at = time.perf_counter()
+                rows = client.run_query(
+                    query=PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY,
+                    parameters={
+                        "patient_id": str(patient_id),
+                        "start_date": str(start_date),
+                        "end_date": str(end_date),
+                    },
+                )
+                patient_elapsed_seconds = round(
+                    time.perf_counter() - patient_started_at,
+                    3,
+                )
+                individual_row_count += len(rows)
+                per_patient_results.append(
+                    {
+                        "patient_id": str(patient_id),
+                        "row_count": len(rows),
+                        "elapsed_seconds": patient_elapsed_seconds,
+                    }
+                )
+            individual_elapsed_seconds = round(
+                time.perf_counter() - individual_started_at,
+                3,
+            )
+
+            batch_started_at = time.perf_counter()
+            batch_rows = client.run_query(
+                query=PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BATCH_BY_DATE_WINDOW_QUERY,
+                parameters={
+                    "patient_ids": [str(patient_id) for patient_id in candidate_patient_ids],
+                    "start_date": str(start_date),
+                    "end_date": str(end_date),
+                },
+            )
+            batch_elapsed_seconds = round(time.perf_counter() - batch_started_at, 3)
+
+        elapsed_seconds = round(time.perf_counter() - started_at, 3)
+        queue.put(
+            {
+                "variant": (
+                    "compare_patient_exclusive_training_task_history_batch_by_date_window"
+                ),
+                "status": "completed",
+                "row_count": {
+                    "individual": individual_row_count,
+                    "batch": len(batch_rows),
+                },
+                "elapsed_seconds": elapsed_seconds,
+                "individual_elapsed_seconds": individual_elapsed_seconds,
+                "batch_elapsed_seconds": batch_elapsed_seconds,
+                "candidate_patient_count": len(candidate_patient_ids),
+                "per_patient_results": per_patient_results,
+                "error": None,
+            }
+        )
+    except Exception as exc:  # pragma: no cover - defensive for external DB errors.
+        elapsed_seconds = round(time.perf_counter() - started_at, 3)
+        queue.put(
+            {
+                "variant": (
+                    "compare_patient_exclusive_training_task_history_batch_by_date_window"
+                ),
                 "status": "failed",
                 "row_count": None,
                 "elapsed_seconds": elapsed_seconds,
@@ -983,6 +1199,58 @@ def run_variant(
     }
 
 
+def run_candidate_history_compare_variant(
+    *,
+    config_path: str,
+    candidate_patient_ids: list[str],
+    start_date: str,
+    end_date: str,
+    timeout_seconds: int,
+) -> dict[str, object]:
+    """Run per-patient vs batch candidate-history comparison with timeout."""
+    context = mp.get_context("spawn")
+    queue: mp.Queue = context.Queue()
+    process = context.Process(
+        target=run_candidate_history_compare_worker,
+        args=(
+            config_path,
+            candidate_patient_ids,
+            start_date,
+            end_date,
+            queue,
+        ),
+    )
+    started_at = time.perf_counter()
+    process.start()
+    process.join(timeout_seconds)
+
+    if process.is_alive():
+        process.terminate()
+        process.join(10)
+        return {
+            "variant": (
+                "compare_patient_exclusive_training_task_history_batch_by_date_window"
+            ),
+            "status": "timeout",
+            "row_count": None,
+            "elapsed_seconds": round(time.perf_counter() - started_at, 3),
+            "candidate_patient_count": len(candidate_patient_ids),
+            "error": f"Timed out after {timeout_seconds} seconds.",
+        }
+
+    if not queue.empty():
+        return dict(queue.get())
+
+    return {
+        "variant": "compare_patient_exclusive_training_task_history_batch_by_date_window",
+        "status": "failed",
+        "row_count": None,
+        "elapsed_seconds": round(time.perf_counter() - started_at, 3),
+        "candidate_patient_count": len(candidate_patient_ids),
+        "error": f"Worker exited without result. exitcode={process.exitcode}",
+    }
+
+
 def write_output(
     *,
     output_dir: str | Path,
@@ -1016,21 +1284,85 @@ def main() -> int:
             print(variant)
         for variant in sorted(STATISTICS_VARIANTS):
             print(variant)
+        for variant in sorted(COMPARE_VARIANTS):
+            print(variant)
         return 0
 
     selected_variants = args.variant or list(QUERY_VARIANTS)
     patient_ids = read_patient_ids(args)
+    candidate_patient_ids = read_candidate_patient_ids(
+        args,
+        fallback_patient_ids=patient_ids,
+    )
 
     if args.dry_run:
         for variant in selected_variants:
             print(f"\n--- {variant} ---")
-            print(ALL_VARIANTS[variant])
+            if variant in COMPARE_VARIANTS:
+                print(PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BY_DATE_WINDOW_QUERY)
+                print("\n--- batch query ---")
+                print(PATIENT_EXCLUSIVE_TRAINING_TASK_HISTORY_BATCH_BY_DATE_WINDOW_QUERY)
+            else:
+                print(ALL_VARIANTS[variant])
         return 0
 
     results: list[dict[str, object]] = []
+    for variant in selected_variants:
+        if variant in COMPARE_VARIANTS:
+            LOGGER.info(
+                "Running candidate-history compare variant: candidate_patient_count=%s, variant=%s",
+                len(candidate_patient_ids),
+                variant,
+            )
+            result = run_candidate_history_compare_variant(
+                config_path=args.config,
+                candidate_patient_ids=candidate_patient_ids,
+                start_date=str(args.start_date),
+                end_date=str(args.end_date),
+                timeout_seconds=args.timeout_seconds,
+            )
+            LOGGER.info(
+                "Completed candidate-history compare variant: variant=%s, status=%s, row_count=%s, individual_elapsed_seconds=%s, batch_elapsed_seconds=%s",
+                result["variant"],
+                result["status"],
+                result["row_count"],
+                result.get("individual_elapsed_seconds"),
+                result.get("batch_elapsed_seconds"),
+            )
+            results.append(result)
+        elif variant == "patient_exclusive_training_task_history_batch_by_date_window":
+            LOGGER.info(
+                "Running batch candidate-history query variant: candidate_patient_count=%s, variant=%s",
+                len(candidate_patient_ids),
+                variant,
+            )
+            result = run_variant(
+                config_path=args.config,
+                variant=variant,
+                query=ALL_VARIANTS[variant],
+                parameters=build_batch_history_parameters(args, candidate_patient_ids),
+                timeout_seconds=args.timeout_seconds,
+            )
+            result["candidate_patient_count"] = len(candidate_patient_ids)
+            result["candidate_patient_ids"] = candidate_patient_ids
+            LOGGER.info(
+                "Completed batch candidate-history query variant: variant=%s, status=%s, row_count=%s, elapsed_seconds=%s",
+                result["variant"],
+                result["status"],
+                result["row_count"],
+                result["elapsed_seconds"],
+            )
+            results.append(result)
+
     for patient_id in patient_ids:
         parameters = build_parameters(args, patient_id)
         for variant in selected_variants:
+            if (
+                variant in COMPARE_VARIANTS
+                or variant
+                == "patient_exclusive_training_task_history_batch_by_date_window"
+            ):
+                continue
             LOGGER.info(
                 "Running query variant: patient_id=%s, variant=%s",
                 patient_id,
@@ -1058,11 +1390,17 @@ def main() -> int:
         output_dir=args.output_dir,
         parameters={
             "patient_ids": patient_ids,
+            "candidate_patient_ids": candidate_patient_ids,
             "start_date": str(args.start_date),
             "end_date": str(args.end_date),
             "per_g": int(args.per_g),
             "limit": int(args.limit),
             "timeout_seconds": int(args.timeout_seconds),
+            "base_date": str(args.base_date),
+            "age_window": int(args.age_window),
+            "profile_candidate_training_window_days": int(
+                args.profile_candidate_training_window_days
+            ),
         },
         selected_variants=selected_variants,
         results=results,
