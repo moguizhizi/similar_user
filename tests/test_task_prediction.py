@@ -12,6 +12,7 @@ from src.similar_user.services.task_prediction import (
     CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME,
     SimilarUserCandidate,
     TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1,
+    TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4,
     TASK_PREDICTION_PROMPT_TEMPLATE_V1,
     TASK_PREDICTION_PROMPT_TEMPLATE_V2,
     TASK_PREDICTION_PROMPT_TEMPLATE_V3,
@@ -212,6 +213,47 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertIn('"target_entities"', prompt)
         self.assertIn('"AU_DIS_0029"', prompt)
         self.assertIn('"candidate_source": "direct_entity_paths"', prompt)
+
+    def test_build_direct_entity_prompt_uses_compact_v4_template(self) -> None:
+        prompt = build_task_prediction_prompt(
+            patient_id="new-user",
+            target_profile={"age": 66, "education": "本科", "gender": "男"},
+            target_entities={
+                "disease_ids": ["AU_DIS_0029"],
+                "symptom_ids": ["AU_SYM_0001"],
+                "unknown_ids": [],
+            },
+            candidate_source="direct_entity_paths",
+            similar_user_candidates=[
+                {"patient_id": "201", "candidate_score": 2.5},
+            ],
+            similar_user_task_evidence=[
+                {
+                    "patient_id": "201",
+                    "candidate_score": 2.5,
+                    "tasks": [{"game_id": "1", "game_name": "任务A", "count": 1}],
+                }
+            ],
+            similar_user_game_counts=[],
+            candidate_training_tasks=[],
+            task_top_k=7,
+            prompt_template_name="TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4",
+        )
+
+        self.assertTrue(
+            prompt.startswith(TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4)
+        )
+        self.assertIn('"target_profile"', prompt)
+        self.assertIn('"target_entities"', prompt)
+        self.assertIn('"similar_user_candidates"', prompt)
+        self.assertIn('"similar_user_task_evidence"', prompt)
+        self.assertIn('"candidate_source": "direct_entity_paths"', prompt)
+        self.assertIn('"game_id": "from candidate_training_tasks"', prompt)
+        self.assertIn('"game_name": "from candidate_training_tasks"', prompt)
+        self.assertNotIn('"rank"', prompt)
+        self.assertNotIn("confidence", prompt)
+        self.assertNotIn("reason", prompt)
+        self.assertNotIn("supporting_candidate_ids", prompt)
 
     def test_basic_prompt_templates_do_not_describe_weighted_count(self) -> None:
         self.assertNotIn("weighted_count", TASK_PREDICTION_PROMPT_TEMPLATE_V1)

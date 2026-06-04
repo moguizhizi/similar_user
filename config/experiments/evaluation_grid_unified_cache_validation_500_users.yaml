@@ -69,4 +69,28 @@ experiments:
     overrides: 
       query.training_task_prediction.save_prompt_enabled: true
 
+  - name: qwen3_8B_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
 
+  - name: qwen3_8B_prompt_template_name_v4_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V4"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4"
+
+  - name: unlock_train_candidate_tasks_on_qwen3_8B_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: unlock_train_candidate_tasks_on_qwen3_8B_prompt_template_name_v4_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V4"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true

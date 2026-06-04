@@ -111,6 +111,16 @@ TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1 = (
     "返回 JSON 对象，不要添加 Markdown。\n\n"
 )
 
+TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4 = (
+    "请基于以下 JSON，为一个不一定存在于知识图谱中的目标用户预测下一阶段训练任务。"
+    "目标用户可能只有 target_profile 和 target_entities，不要假设存在目标用户历史训练记录。"
+    "只能从 candidate_training_tasks 选择 game_id/game_name，且不要重复。"
+    "综合 direct entity paths 匹配出的 similar_user_candidates 相似度、"
+    "similar_user_game_counts 的总体次数、similar_user_task_evidence 的高相似用户证据排序。"
+    "返回 output_requirement.top_k 个任务；候选不足时返回全部。"
+    "只返回合法 JSON，不要 Markdown。\n\n"
+)
+
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE = TASK_PREDICTION_PROMPT_TEMPLATE_V2
 TASK_PREDICTION_PROMPT_TEMPLATES = {
@@ -121,6 +131,9 @@ TASK_PREDICTION_PROMPT_TEMPLATES = {
     "TASK_PREDICTION_PROMPT_TEMPLATE_V5": TASK_PREDICTION_PROMPT_TEMPLATE_V5,
     "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1": (
         TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1
+    ),
+    "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4": (
+        TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4
     ),
 }
 WEIGHTED_GAME_COUNTS_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V3"
@@ -1654,7 +1667,10 @@ def build_task_prediction_prompt(
     task_top_k：要求 LLM 返回的推荐任务数量上限。
     """
     normalized_prompt_template_name = prompt_template_name.strip()
-    if normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_V4":
+    if normalized_prompt_template_name in {
+        "TASK_PREDICTION_PROMPT_TEMPLATE_V4",
+        "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4",
+    }:
         output_requirement: dict[str, Any] = {
             "top_k": task_top_k,
             "format": {
@@ -1742,7 +1758,10 @@ def build_task_prediction_prompt(
     }
     if candidate_source is not None:
         payload["candidate_source"] = candidate_source
-    if normalized_prompt_template_name == "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1":
+    if normalized_prompt_template_name in {
+        "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1",
+        "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4",
+    }:
         payload["target_profile"] = target_profile or {}
         payload["target_entities"] = target_entities or {}
         payload["similar_user_candidates"] = similar_user_candidates or []
