@@ -589,16 +589,25 @@ class TrainingTaskPredictionService:
             sum(len(rows) for rows in similar_user_histories.values()),
             window_days,
         )
-        candidate_tasks = build_candidate_training_tasks(
-            candidates,
-            similar_user_histories,
-            top_k=max(task_top_k, PROMPT_MAX_CANDIDATES),
+        candidate_task_source = "direct_entity_paths"
+        candidate_tasks = self._build_unlock_train_candidate_tasks(
+            resolved_patient_id
         )
+        if candidate_tasks:
+            candidate_task_source = "unlock_train"
+        else:
+            candidate_tasks = build_candidate_training_tasks(
+                candidates,
+                similar_user_histories,
+                top_k=max(task_top_k, PROMPT_MAX_CANDIDATES),
+            )
         LOGGER.info(
-            "Built direct entity task evidence: patient_id=%s, candidate_task_count=%s, task_top_k=%s",
+            "Built direct entity task evidence: patient_id=%s, candidate_task_count=%s, "
+            "task_top_k=%s, candidate_task_source=%s",
             resolved_patient_id,
             len(candidate_tasks),
             task_top_k,
+            candidate_task_source,
         )
         allowed_candidate_game_ids = _extract_candidate_task_game_ids(candidate_tasks)
         raw_similar_user_game_counts = build_similar_user_game_counts(
@@ -714,6 +723,7 @@ class TrainingTaskPredictionService:
                             candidate.patient_id for candidate in candidates
                         ],
                         "candidate_task_windows": candidate_task_windows,
+                        "candidate_task_source": candidate_task_source,
                     },
                     "target_profile": target_profile or {},
                     "target_entities": target_entities or {},
@@ -746,6 +756,7 @@ class TrainingTaskPredictionService:
                 "candidate_count": len(candidates),
                 "candidate_ids": [candidate.patient_id for candidate in candidates],
                 "candidate_task_windows": candidate_task_windows,
+                "candidate_task_source": candidate_task_source,
             },
             "target_profile": target_profile or {},
             "target_entities": target_entities or {},

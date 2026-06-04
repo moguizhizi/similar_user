@@ -1114,6 +1114,58 @@ class TaskPredictionTest(unittest.TestCase):
             "2022-05-22",
         )
 
+    def test_predict_from_direct_entity_candidates_can_use_unlock_train_tasks(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {
+                "trainingDate": "2022-05-12",
+                "g": {"id": "1", "name": "任务A"},
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            csv_path = Path(tmp_dir) / "request.csv"
+            csv_path.write_text(
+                "\n".join(
+                    [
+                        "ai_params,recommen_train",
+                        "\"\"\"{'user_id': 'new-user', 'unlock_train': {'300': 60}}\"\"\",{}",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            service = TrainingTaskPredictionService(
+                user_service=user_service,
+                unlock_train_candidate_tasks_enabled=True,
+                algorithm_request_results_csv=str(csv_path),
+            )
+
+            result = service.predict_from_direct_entity_candidates(
+                patient_id="new-user",
+                candidate_result={
+                    "candidates": [{"patient_id": "201", "candidate_score": 90.0}]
+                },
+                base_date="2022-05-22",
+                window_days=14,
+                target_profile={"age": 66, "education": "本科", "gender": "男"},
+                target_entities={"disease_ids": ["AU_DIS_0029"]},
+                use_llm=False,
+                task_top_k=1,
+            )
+
+        self.assertEqual(result["candidate_source"]["source"], "direct_entity_paths")
+        self.assertEqual(
+            result["candidate_source"]["candidate_task_source"],
+            "unlock_train",
+        )
+        self.assertEqual(
+            result["candidate_training_tasks"],
+            [{"game_id": "300", "game_name": None}],
+        )
+        self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "300")
+
     def test_predict_from_pipeline_result_omits_task_evidence_from_v1_prompt(
         self,
     ) -> None:
