@@ -154,6 +154,7 @@ class UserCacheSettings:
     patient_scored_paths_valid_days: int = 14
     direct_scored_paths_valid_days: int = 60
     topk_candidates_valid_days: int = 7
+    profile_candidate_tasks_valid_days: int = 7
     refresh_candidate_base_date_on_hit: bool = True
     raw_path_build_workers: int = 1
     raw_path_build_max_retries: int = 2
@@ -711,6 +712,11 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         "topk_candidates_valid_days",
         default=7,
     )
+    profile_candidate_tasks_valid_days = _parse_user_cache_valid_days(
+        data,
+        "profile_candidate_tasks_valid_days",
+        default=7,
+    )
     refresh_candidate_base_date_on_hit = data.get(
         "refresh_candidate_base_date_on_hit",
         True,
@@ -762,6 +768,7 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         patient_scored_paths_valid_days=patient_scored_paths_valid_days,
         direct_scored_paths_valid_days=direct_scored_paths_valid_days,
         topk_candidates_valid_days=topk_candidates_valid_days,
+        profile_candidate_tasks_valid_days=profile_candidate_tasks_valid_days,
         refresh_candidate_base_date_on_hit=refresh_candidate_base_date_on_hit,
         raw_path_build_workers=raw_path_build_workers,
         raw_path_build_max_retries=raw_path_build_max_retries,

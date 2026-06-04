@@ -95,6 +95,7 @@ user_cache:
   patient_scored_paths_valid_days: 14
   direct_scored_paths_valid_days: 60
   topk_candidates_valid_days: 7
+  profile_candidate_tasks_valid_days: 7
   refresh_candidate_base_date_on_hit: true
   raw_path_build_workers: 1
   raw_path_build_max_retries: 2
