@@ -24,7 +24,7 @@ from ..data_access.pattern_registry import (
 )
 from .direct_path_provider import DirectPathProvider
 from ..utils.logger import get_logger
-from ..utils.user_cache_paths import files_root_from_sqlite_path, patient_cache_leaf_dir
+from ..utils.user_cache_paths import files_root_from_sqlite_path, patient_cache_root
 
 
 LOGGER = get_logger(__name__)
@@ -260,12 +260,11 @@ class UserService:
         if context is None:
             return
         safe_rows = [_json_safe(row) for row in rows]
-        leaf_dir = patient_cache_leaf_dir(
+        leaf_dir = _profile_candidate_tasks_cache_leaf_dir(
             files_root_from_sqlite_path(context["sqlite_path"]),
             patient_id=context["patient_id"],
-            cache_type=PROFILE_CANDIDATE_TASKS_CACHE_TYPE,
             query_family=context["query_family"],
-            window_days=context["window_days"],
+            profile_candidate_training_window_days=profile_candidate_training_window_days,
             config_hash=context["config_hash"],
             cached_base_date=context["cached_base_date"],
         )
@@ -1594,6 +1593,46 @@ def _profile_candidate_cache_window_days(
             "profile_candidate_training_window_days must be a non-negative integer or None."
         )
     return profile_candidate_training_window_days + 2
+
+
+def _profile_candidate_tasks_cache_leaf_dir(
+    files_root: str | Path,
+    *,
+    patient_id: object,
+    query_family: object,
+    profile_candidate_training_window_days: int | None,
+    config_hash: object,
+    cached_base_date: object,
+) -> Path:
+    return (
+        patient_cache_root(files_root, patient_id)
+        / PROFILE_CANDIDATE_TASKS_CACHE_TYPE
+        / _slug_part(query_family)
+        / _profile_window_dir_name(profile_candidate_training_window_days)
+        / f"config_{_slug_part(config_hash)}"
+        / f"base_{_slug_part(cached_base_date)}"
+    )
+
+
+def _profile_window_dir_name(
+    profile_candidate_training_window_days: int | None,
+) -> str:
+    if profile_candidate_training_window_days is None:
+        return "profile_window_all"
+    return f"profile_window_{profile_candidate_training_window_days}"
+
+
+def _slug_part(value: object) -> str:
+    text = str(value).strip().lower()
+    slug: list[str] = []
+    for char in text:
+        if char.isalnum():
+            slug.append(char)
+        elif char in ("-", "_"):
+            slug.append(char)
+        else:
+            slug.append("-")
+    return "".join(slug).strip("-") or "none"
 
 
 def _short_hash(payload: dict[str, Any]) -> str:
