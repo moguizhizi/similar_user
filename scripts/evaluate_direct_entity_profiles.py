@@ -32,6 +32,7 @@ from scripts.predict_training_tasks_from_direct_entity import (  # noqa: E402
     DEFAULT_SCORED_OUTPUT_DIR,
     predict_training_tasks_from_direct_entity,
 )
+from scripts.predict_training_tasks import write_prompt_to_file  # noqa: E402
 from scripts.predict_training_tasks_unified import (  # noqa: E402
     predict_training_tasks_unified,
 )
@@ -126,6 +127,8 @@ def evaluate_direct_entity_profiles(
     evaluation_settings = query_settings.training_task_evaluation
     resolved_task_top_k = task_top_k or query_settings.training_task_prediction.task_top_k
     resolved_workers = workers or evaluation_settings.workers or 1
+    save_prompt = query_settings.training_task_prediction.save_prompt_enabled
+    prompt_output_dir = Path(output_dir) / "prompts"
 
     details = run_profile_evaluations(
         profiles,
@@ -143,6 +146,8 @@ def evaluate_direct_entity_profiles(
         score_url=evaluation_settings.score_validation_url,
         csv_path=evaluation_settings.algorithm_request_results_csv,
         timeout_seconds=evaluation_settings.score_validation_timeout,
+        save_prompt=save_prompt,
+        prompt_output_dir=prompt_output_dir,
     )
     summary = summarize_evaluation_details(details)
     summary.update(
@@ -154,6 +159,8 @@ def evaluate_direct_entity_profiles(
             "task_top_k": resolved_task_top_k,
             "use_llm": use_llm,
             "prediction_mode": prediction_mode,
+            "save_prompt_enabled": save_prompt,
+            "prompt_output_dir": str(prompt_output_dir) if save_prompt else None,
             "query_family": query_family,
             "route_counts": build_route_counts(details),
             "batch_elapsed_seconds": round(time.perf_counter() - started_at, 3),
@@ -188,6 +195,8 @@ def run_profile_evaluations(
     score_url: str,
     csv_path: str | Path,
     timeout_seconds: float,
+    save_prompt: bool = False,
+    prompt_output_dir: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     """Evaluate profiles sequentially or with a small thread pool."""
     if workers <= 1:
@@ -208,6 +217,8 @@ def run_profile_evaluations(
                 score_url=score_url,
                 csv_path=csv_path,
                 timeout_seconds=timeout_seconds,
+                save_prompt=save_prompt,
+                prompt_output_dir=prompt_output_dir,
             )
             details.append(detail)
             LOGGER.info(
@@ -238,6 +249,8 @@ def run_profile_evaluations(
                 score_url=score_url,
                 csv_path=csv_path,
                 timeout_seconds=timeout_seconds,
+                save_prompt=save_prompt,
+                prompt_output_dir=prompt_output_dir,
             ): index
             for index, profile in enumerate(profiles)
         }
@@ -271,6 +284,8 @@ def evaluate_profile(
     score_url: str,
     csv_path: str | Path,
     timeout_seconds: float,
+    save_prompt: bool = False,
+    prompt_output_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Evaluate one direct-entity profile."""
     started_at = time.perf_counter()
@@ -278,6 +293,7 @@ def evaluate_profile(
     base_date = str(profile.get("base_date") or "").strip()
     current_stage = "prediction"
     result: dict[str, Any] | None = None
+    prompt_path: Path | None = None
     try:
         routed_result = predict_profile_training_tasks(
             profile,
@@ -290,6 +306,7 @@ def evaluate_profile(
             query_family=query_family,
             skip_path_build=skip_path_build,
             skip_path_scoring=skip_path_scoring,
+            include_prompt=save_prompt,
         )
         result = unwrap_unified_result(routed_result)
         predicted_game_ids = extract_predicted_game_ids(result)
@@ -304,6 +321,13 @@ def evaluate_profile(
         )
         prediction_finished_at = time.perf_counter()
         prediction_elapsed_seconds = round(prediction_finished_at - started_at, 3)
+        prompt_path = maybe_write_prompt(
+            result,
+            patient_id=patient_id,
+            base_date=base_date,
+            save_prompt=save_prompt,
+            prompt_output_dir=prompt_output_dir,
+        )
         current_stage = "validation"
         validation_started_at = time.perf_counter()
         validation_result = validate_training_task_recommendation(
@@ -362,6 +386,15 @@ def evaluate_profile(
         }
         if current_stage == "prediction":
             detail.update(build_prediction_failure_metadata(exc))
+            prompt_path = maybe_write_exception_prompt(
+                exc,
+                patient_id=patient_id,
+                base_date=base_date,
+                save_prompt=save_prompt,
+                prompt_output_dir=prompt_output_dir,
+            )
+            if prompt_path is not None:
+                detail["prompt_path"] = str(prompt_path)
         else:
             detail.update(
                 prediction_metadata_from_nested_result(result or {})
@@ -372,6 +405,8 @@ def evaluate_profile(
                 }
             )
             detail.update(build_validation_failure_metadata(exc))
+            if prompt_path is not None:
+                detail["prompt_path"] = str(prompt_path)
         return detail
 
     return {
@@ -404,6 +439,7 @@ def evaluate_profile(
         "similar_user_game_counts_task_count": similar_user_game_counts_task_count,
         "candidate_training_tasks_count": candidate_training_tasks_count,
         "coverage_diagnostics": coverage_diagnostics,
+        "prompt_path": str(prompt_path) if prompt_path is not None else None,
         "prediction_started_at_seconds": round(started_at, 6),
         "prediction_finished_at_seconds": round(prediction_finished_at, 6),
         "validation_started_at_seconds": round(validation_started_at, 6),
@@ -413,6 +449,71 @@ def evaluate_profile(
         "elapsed_seconds": round(time.perf_counter() - started_at, 3),
     }
 
+
+
+def maybe_write_prompt(
+    result: dict[str, Any],
+    *,
+    patient_id: str,
+    base_date: str,
+    save_prompt: bool,
+    prompt_output_dir: str | Path | None,
+) -> Path | None:
+    """Persist the generated prompt when enabled, without failing evaluation."""
+    if not save_prompt:
+        return None
+    if prompt_output_dir is None:
+        return None
+    try:
+        prompt_result = dict(result)
+        if not prompt_result.get("patient_id"):
+            prompt_result["patient_id"] = patient_id
+        return write_prompt_to_file(
+            prompt_result,
+            output_dir=prompt_output_dir,
+            base_date=base_date,
+        )
+    except Exception as exc:
+        LOGGER.warning(
+            "Failed to save training-task prediction prompt: patient_id=%s, error=%s",
+            patient_id,
+            exc,
+        )
+        return None
+
+
+def maybe_write_exception_prompt(
+    exc: Exception,
+    *,
+    patient_id: str,
+    base_date: str,
+    save_prompt: bool,
+    prompt_output_dir: str | Path | None,
+) -> Path | None:
+    """Persist prompt attached to prediction exceptions when present."""
+    llm_prompt = getattr(exc, "llm_prompt", None)
+    if not save_prompt or not isinstance(llm_prompt, str) or not llm_prompt.strip():
+        return None
+    if prompt_output_dir is None:
+        return None
+    try:
+        return write_prompt_to_file(
+            {
+                "training_task_prediction": {
+                    "patient_id": patient_id,
+                    "llm_prompt": llm_prompt,
+                }
+            },
+            output_dir=prompt_output_dir,
+            base_date=base_date,
+        )
+    except Exception as prompt_exc:
+        LOGGER.warning(
+            "Failed to save failed prediction prompt: patient_id=%s, error=%s",
+            patient_id,
+            prompt_exc,
+        )
+        return None
 
 def classify_profile_failure(
     exc: Exception,
@@ -456,6 +557,7 @@ def predict_profile_training_tasks(
     query_family: str | None = None,
     skip_path_build: bool = False,
     skip_path_scoring: bool = False,
+    include_prompt: bool = False,
 ) -> dict[str, Any]:
     """Run one profile through direct-entity or unified prediction."""
     patient_id = str(profile.get("patient_id") or "").strip()
@@ -476,6 +578,7 @@ def predict_profile_training_tasks(
         "config_path": config_path,
         "use_llm": use_llm,
         "task_top_k": task_top_k,
+        "include_prompt": include_prompt,
     }
     if prediction_mode == "direct_entity":
         result = predict_training_tasks_from_direct_entity(

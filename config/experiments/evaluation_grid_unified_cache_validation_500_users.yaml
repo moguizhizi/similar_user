@@ -1,0 +1,72 @@
+stage: "unified_cache_validation_500_users"
+
+base:
+  evaluation_script: "unified_prediction"
+  profiles: "data/unified_input/unified_patient_profiles_2026-05-25_shuffled.jsonl"
+  task_top_k: 7
+  use_llm: true
+  limit: 500
+  workers: 4
+  query_family: "training_order_dual_window"
+
+baseline_overrides:
+  # 使用独立 user cache，避免污染主缓存。
+  # SQLite: data/user_cache/unified_cache_validation_500/cache_index.sqlite
+  # Files:  data/user_cache/unified_cache_validation_500/files/...
+  user_cache.enabled: true
+  user_cache.sqlite_path: "data/user_cache/unified_cache_validation_500/cache_index.sqlite"
+  user_cache.raw_path_build_workers: 1
+  user_cache.raw_path_build_max_retries: 2
+  user_cache.raw_path_build_retry_sleep_seconds: 5
+  user_cache.patient_raw_paths_valid_days: 60
+  user_cache.direct_raw_paths_valid_days: 60
+  user_cache.patient_scored_paths_valid_days: 60
+  user_cache.direct_scored_paths_valid_days: 60
+  user_cache.topk_candidates_valid_days: 7
+  user_cache.refresh_candidate_base_date_on_hit: true
+
+  # direct path SQLite 关闭时，缺 direct entity raw path 会回源 Neo4j 构建后写入独立 user cache。
+  direct_path_cache.enabled: false
+  direct_path_cache.sqlite_path: "data/direct_path_cache/direct_paths.sqlite"
+
+  query.patient_path.window_days: 14
+  query.training_task_evaluation.workers: 1
+  query.score_pattern_paths.top_k: 150
+  query.candidate_ranking.candidate_top_k: 10
+  query.candidate_ranking.disease_course_window_days: 14
+  query.candidate_ranking.total_score_match_top_k: 1
+  query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+  query.training_task_prediction.prompt_candidate_compression_enabled: false
+  query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1"
+  query.direct_entity_path.window_days: 180
+  query.direct_entity_path.direct_path_limit: 1000
+  query.direct_entity_path_scoring.use_when_patient_exists: false
+  query.candidate_ranking.scoring.game_similarity_with_diversity_score: true
+
+experiments:
+  - name: warmup_unified_mixed_workers_4
+    overrides: {}
+
+  - name: all_cache_hit_unified_mixed_workers_4
+    overrides: {}
+
+  - name: prompt_template_v5_unified_mixed_workers_4
+    overrides:
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V5"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V5"
+  
+  - name: llm_dflash_all_cache_hit_unified_mixed_workers_4
+    overrides: {}
+
+  - name: all_cache_hit_unified_mixed_workers_5
+    overrides:
+      workers: 5
+
+  - name: no_llm_unified_mixed_workers_4
+    base_overrides:
+      use_llm: false
+      workers: 4
+    overrides: 
+      query.training_task_prediction.save_prompt_enabled: true
+
+
