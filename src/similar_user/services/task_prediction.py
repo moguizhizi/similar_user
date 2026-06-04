@@ -96,6 +96,16 @@ TASK_PREDICTION_PROMPT_TEMPLATE_V5 = (
     "只返回合法 JSON，不要 Markdown。\n\n"
 )
 
+TASK_PREDICTION_PROMPT_TEMPLATE_V6 = (
+    "请基于以下 JSON 预测目标用户下一阶段训练任务。"
+    "candidate_training_tasks 是唯一候选池，保留了 game_id/game_name；"
+    "similar_user_game_counts 和 similar_user_task_evidence 是证据，证据中只保留 game_id。"
+    "选择时综合总体次数、相似用户分数和高相似用户任务证据。"
+    "只能从 candidate_training_tasks 选择 game_id/game_name，且不要重复。"
+    "返回 output_requirement.top_k 个任务；候选不足时返回全部。"
+    "只返回合法 JSON，不要 Markdown。\n\n"
+)
+
 TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1 = (
     "请根据以下 JSON 数据，为一个不一定存在于知识图谱中的目标用户预测下一阶段更可能适合的训练任务。"
     "字段含义：target_profile 是目标用户画像；target_entities 是目标用户输入的疾病、症状、未知实体；"
@@ -121,6 +131,17 @@ TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4 = (
     "只返回合法 JSON，不要 Markdown。\n\n"
 )
 
+TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6 = (
+    "请基于以下 JSON，为一个不一定存在于知识图谱中的目标用户预测下一阶段训练任务。"
+    "目标用户可能只有 target_profile 和 target_entities，不要假设存在目标用户历史训练记录。"
+    "candidate_training_tasks 是唯一候选池，保留了 game_id/game_name；"
+    "similar_user_game_counts 和 similar_user_task_evidence 是证据，证据中只保留 game_id。"
+    "选择时综合 direct entity 匹配出的相似用户分数、总体次数和高相似用户任务证据。"
+    "只能从 candidate_training_tasks 选择 game_id/game_name，且不要重复。"
+    "返回 output_requirement.top_k 个任务；候选不足时返回全部。"
+    "只返回合法 JSON，不要 Markdown。\n\n"
+)
+
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
 CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE = TASK_PREDICTION_PROMPT_TEMPLATE_V2
 TASK_PREDICTION_PROMPT_TEMPLATES = {
@@ -129,11 +150,15 @@ TASK_PREDICTION_PROMPT_TEMPLATES = {
     "TASK_PREDICTION_PROMPT_TEMPLATE_V3": TASK_PREDICTION_PROMPT_TEMPLATE_V3,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V4": TASK_PREDICTION_PROMPT_TEMPLATE_V4,
     "TASK_PREDICTION_PROMPT_TEMPLATE_V5": TASK_PREDICTION_PROMPT_TEMPLATE_V5,
+    "TASK_PREDICTION_PROMPT_TEMPLATE_V6": TASK_PREDICTION_PROMPT_TEMPLATE_V6,
     "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1": (
         TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1
     ),
     "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4": (
         TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4
+    ),
+    "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6": (
+        TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6
     ),
 }
 WEIGHTED_GAME_COUNTS_PROMPT_TEMPLATE_NAME = "TASK_PREDICTION_PROMPT_TEMPLATE_V3"
@@ -1351,6 +1376,83 @@ def build_v5_candidate_training_tasks(
     return compact_tasks
 
 
+def build_v6_candidate_training_tasks(
+    candidate_training_tasks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep task names only in the candidate pool for compact prompts."""
+    compact_tasks: list[dict[str, Any]] = []
+    for task in candidate_training_tasks:
+        game_id = _normalize_text(task.get("game_id"))
+        if game_id is None:
+            continue
+        compact_task: dict[str, Any] = {
+            "game_id": game_id,
+            "game_name": _normalize_text(task.get("game_name")),
+        }
+        for key in ("task_type", "appearance_count", "weighted_score"):
+            value = task.get(key)
+            if value is not None:
+                compact_task[key] = value
+        compact_tasks.append(compact_task)
+    return compact_tasks
+
+
+def build_v6_similar_user_game_counts(
+    similar_user_game_counts: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Drop repeated game names from aggregate evidence."""
+    compact_counts: list[dict[str, Any]] = []
+    for game_count in similar_user_game_counts:
+        if not isinstance(game_count, dict):
+            continue
+        game_id = _normalize_text(game_count.get("game_id"))
+        if game_id is None:
+            continue
+        compact_item: dict[str, Any] = {"game_id": game_id}
+        for key, value in game_count.items():
+            if key in {"game_id", "game_name"}:
+                continue
+            if value is not None:
+                compact_item[key] = value
+        compact_counts.append(compact_item)
+    return compact_counts
+
+
+def build_v6_similar_user_task_evidence(
+    similar_user_task_evidence: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Drop repeated game names from per-candidate task evidence."""
+    compact_evidence: list[dict[str, Any]] = []
+    for evidence in similar_user_task_evidence or []:
+        if not isinstance(evidence, dict):
+            continue
+        compact_item: dict[str, Any] = {}
+        for key, value in evidence.items():
+            if key == "tasks":
+                continue
+            if value is not None:
+                compact_item[key] = value
+        tasks = evidence.get("tasks")
+        compact_tasks: list[dict[str, Any]] = []
+        if isinstance(tasks, list):
+            for task in tasks:
+                if not isinstance(task, dict):
+                    continue
+                game_id = _normalize_text(task.get("game_id"))
+                if game_id is None:
+                    continue
+                compact_task: dict[str, Any] = {"game_id": game_id}
+                for key, value in task.items():
+                    if key in {"game_id", "game_name"}:
+                        continue
+                    if value is not None:
+                        compact_task[key] = value
+                compact_tasks.append(compact_task)
+        compact_item["tasks"] = compact_tasks
+        compact_evidence.append(compact_item)
+    return compact_evidence
+
+
 def build_v5_ranking_signals(
     *,
     similar_user_game_counts: list[dict[str, Any]],
@@ -1669,7 +1771,9 @@ def build_task_prediction_prompt(
     normalized_prompt_template_name = prompt_template_name.strip()
     if normalized_prompt_template_name in {
         "TASK_PREDICTION_PROMPT_TEMPLATE_V4",
+        "TASK_PREDICTION_PROMPT_TEMPLATE_V6",
         "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4",
+        "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6",
     }:
         output_requirement: dict[str, Any] = {
             "top_k": task_top_k,
@@ -1743,6 +1847,42 @@ def build_task_prediction_prompt(
             payload["target_profile"] = target_profile
         if target_entities is not None:
             payload["target_entities"] = target_entities
+        prompt_template = get_task_prediction_prompt_template(
+            normalized_prompt_template_name
+        )
+        return prompt_template + (
+            f"{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}"
+        )
+
+    if normalized_prompt_template_name in {
+        "TASK_PREDICTION_PROMPT_TEMPLATE_V6",
+        "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6",
+    }:
+        payload = {
+            "patient_id": patient_id,
+            "similar_user_game_counts": build_v6_similar_user_game_counts(
+                similar_user_game_counts
+            ),
+            "candidate_training_tasks": build_v6_candidate_training_tasks(
+                candidate_training_tasks
+            ),
+            "output_requirement": output_requirement,
+        }
+        if candidate_source is not None:
+            payload["candidate_source"] = candidate_source
+        if normalized_prompt_template_name == (
+            "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+        ):
+            payload["target_profile"] = target_profile or {}
+            payload["target_entities"] = target_entities or {}
+        if normalized_prompt_template_name in {
+            "TASK_PREDICTION_PROMPT_TEMPLATE_V6",
+            "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6",
+        }:
+            payload["similar_user_candidates"] = similar_user_candidates or []
+            payload["similar_user_task_evidence"] = (
+                build_v6_similar_user_task_evidence(similar_user_task_evidence)
+            )
         prompt_template = get_task_prediction_prompt_template(
             normalized_prompt_template_name
         )
