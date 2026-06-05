@@ -29,10 +29,13 @@ class UserCacheSettingsTest(unittest.TestCase):
                         "  patient_scored_paths_valid_days: 10",
                         "  direct_scored_paths_valid_days: 60",
                         "  topk_candidates_valid_days: 5",
+                        "  topk_candidates_stale_valid_days: 9",
                         "  refresh_candidate_base_date_on_hit: false",
                         "  raw_path_build_workers: 2",
                         "  raw_path_build_max_retries: 4",
                         "  raw_path_build_retry_sleep_seconds: 1.5",
+                        "  refresh_job_completed_retention_days: 8",
+                        "  refresh_job_failed_retention_days: 31",
                         "  cleanup_max_age_days: 21",
                         "  keep_latest_per_source: 3",
                         "  cleanup_background_enabled: true",
@@ -54,10 +57,13 @@ class UserCacheSettingsTest(unittest.TestCase):
             self.assertEqual(settings.patient_scored_paths_valid_days, 10)
             self.assertEqual(settings.direct_scored_paths_valid_days, 60)
             self.assertEqual(settings.topk_candidates_valid_days, 5)
+            self.assertEqual(settings.topk_candidates_stale_valid_days, 9)
             self.assertFalse(settings.refresh_candidate_base_date_on_hit)
             self.assertEqual(settings.raw_path_build_workers, 2)
             self.assertEqual(settings.raw_path_build_max_retries, 4)
             self.assertEqual(settings.raw_path_build_retry_sleep_seconds, 1.5)
+            self.assertEqual(settings.refresh_job_completed_retention_days, 8)
+            self.assertEqual(settings.refresh_job_failed_retention_days, 31)
             self.assertEqual(settings.cleanup_max_age_days, 21)
             self.assertEqual(settings.keep_latest_per_source, 3)
             self.assertEqual(settings.keep_latest_per_user, 3)
@@ -84,6 +90,48 @@ class UserCacheSettingsTest(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(ValueError, "topk_candidates_valid_days"):
+                load_user_cache_settings(config_path)
+
+    def test_load_user_cache_settings_defaults_stale_topk_days_to_fresh_days(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "user_cache:",
+                        "  topk_candidates_valid_days: 6",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            settings = load_user_cache_settings(config_path)
+
+        self.assertEqual(settings.topk_candidates_valid_days, 6)
+        self.assertEqual(settings.topk_candidates_stale_valid_days, 6)
+
+    def test_load_user_cache_settings_rejects_stale_topk_less_than_fresh(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "user_cache:",
+                        "  topk_candidates_valid_days: 7",
+                        "  topk_candidates_stale_valid_days: 6",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "topk_candidates_stale_valid_days",
+            ):
                 load_user_cache_settings(config_path)
 
 

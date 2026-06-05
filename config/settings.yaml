@@ -111,6 +111,9 @@ user_cache:
   # topK 候选用户结果的可复用天数；两条候选链路共用该有效期。
   topk_candidates_valid_days: 7
 
+  # topK 候选用户结果的 stale 可返回天数；超过 fresh 有效期但未超过该值时，可先返回旧结果并登记后台刷新。
+  topk_candidates_stale_valid_days: 14
+
   # profile candidate tasks 缓存的可复用天数。
   profile_candidate_tasks_valid_days: 7
 
@@ -125,6 +128,12 @@ user_cache:
 
   # raw paths 构建失败后每次重试前的等待秒数。
   raw_path_build_retry_sleep_seconds: 5
+
+  # 刷新成功的 refresh job 记录保留天数；用于短期排查刷新历史。
+  refresh_job_completed_retention_days: 7
+
+  # 刷新失败的 refresh job 记录保留天数；失败记录保留更久便于排查和重试。
+  refresh_job_failed_retention_days: 30
 
   # 清理任务保留缓存的最大天数；应不小于仍可能被读取的缓存有效期。
   cleanup_max_age_days: 30

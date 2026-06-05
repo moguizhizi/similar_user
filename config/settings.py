@@ -156,11 +156,14 @@ class UserCacheSettings:
     patient_scored_paths_valid_days: int = 14
     direct_scored_paths_valid_days: int = 60
     topk_candidates_valid_days: int = 7
+    topk_candidates_stale_valid_days: int = 7
     profile_candidate_tasks_valid_days: int = 7
     refresh_candidate_base_date_on_hit: bool = True
     raw_path_build_workers: int = 1
     raw_path_build_max_retries: int = 2
     raw_path_build_retry_sleep_seconds: float = 5.0
+    refresh_job_completed_retention_days: int = 7
+    refresh_job_failed_retention_days: int = 30
     cleanup_max_age_days: int = 30
     keep_latest_per_source: int = 2
 
@@ -725,6 +728,16 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         "topk_candidates_valid_days",
         default=7,
     )
+    topk_candidates_stale_valid_days = _parse_user_cache_valid_days(
+        data,
+        "topk_candidates_stale_valid_days",
+        default=topk_candidates_valid_days,
+    )
+    if topk_candidates_stale_valid_days < topk_candidates_valid_days:
+        raise ValueError(
+            "user_cache topk_candidates_stale_valid_days must be greater than or "
+            "equal to topk_candidates_valid_days."
+        )
     profile_candidate_tasks_valid_days = _parse_user_cache_valid_days(
         data,
         "profile_candidate_tasks_valid_days",
@@ -754,6 +767,17 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         default=5.0,
     )
 
+    refresh_job_completed_retention_days = _parse_user_cache_non_negative_int(
+        data,
+        "refresh_job_completed_retention_days",
+        default=7,
+    )
+    refresh_job_failed_retention_days = _parse_user_cache_non_negative_int(
+        data,
+        "refresh_job_failed_retention_days",
+        default=30,
+    )
+
     cleanup_max_age_days = data.get("cleanup_max_age_days", 30)
     if (
         not isinstance(cleanup_max_age_days, int)
@@ -781,11 +805,14 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         patient_scored_paths_valid_days=patient_scored_paths_valid_days,
         direct_scored_paths_valid_days=direct_scored_paths_valid_days,
         topk_candidates_valid_days=topk_candidates_valid_days,
+        topk_candidates_stale_valid_days=topk_candidates_stale_valid_days,
         profile_candidate_tasks_valid_days=profile_candidate_tasks_valid_days,
         refresh_candidate_base_date_on_hit=refresh_candidate_base_date_on_hit,
         raw_path_build_workers=raw_path_build_workers,
         raw_path_build_max_retries=raw_path_build_max_retries,
         raw_path_build_retry_sleep_seconds=raw_path_build_retry_sleep_seconds,
+        refresh_job_completed_retention_days=refresh_job_completed_retention_days,
+        refresh_job_failed_retention_days=refresh_job_failed_retention_days,
         cleanup_max_age_days=cleanup_max_age_days,
         keep_latest_per_source=keep_latest_per_source,
     )
