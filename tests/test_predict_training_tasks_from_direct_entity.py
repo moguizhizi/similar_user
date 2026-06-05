@@ -160,7 +160,7 @@ class PredictTrainingTasksFromDirectEntityTest(unittest.TestCase):
             patient_id="non_patient_1",
             base_date="2026-05-25",
             age=66,
-            education=None,
+            education="None",
             gender="男",
             disease_names=["认知-其他"],
             config_path="config/settings.yaml",

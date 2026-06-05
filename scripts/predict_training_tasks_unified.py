@@ -175,8 +175,8 @@ def predict_training_tasks_unified(
         patient_id=normalized_patient_id,
         base_date=base_date,
         age=age,
-        education=str(education),
-        gender=str(gender),
+        education=education,
+        gender=gender,
         disease_ids=disease_ids or [],
         disease_names=disease_names or [],
         symptom_ids=symptom_ids or [],
@@ -291,6 +291,8 @@ def _normalize_optional_text(value: object) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
+    if text.lower() in {"none", "null"}:
+        return None
     return text or None
 
 
