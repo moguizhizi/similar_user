@@ -335,6 +335,7 @@ def predict_training_tasks_from_direct_entity(
             candidate_user_cache_context,
             candidates_dir=candidates_dir,
             request_base_date=base_date,
+            config_path=resolved_config_path,
         )
         if cached_candidate_result is not None:
             candidate_result = cached_candidate_result

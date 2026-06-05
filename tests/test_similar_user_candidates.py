@@ -2135,6 +2135,80 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["candidate_count"], 1)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113562")
 
+    def test_load_cached_topk_candidate_result_uses_stale_cache_and_enqueues_refresh_job(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(
+                root,
+                refresh_candidate_base_date_on_hit=False,
+                topk_candidates_stale_valid_days=14,
+            )
+            output_dir = root / "similar_user_candidates"
+            scored_key = build_scored_key(
+                build_path_key(
+                    config_path,
+                    base_date="2024-01-31",
+                    query_family="training_order_source_window",
+                ),
+                150,
+            )
+            cache_context = build_candidate_cache_context(
+                config_path,
+                scored_key=scored_key,
+                disease_course_window_days=14,
+            )
+            user_cache_context = build_topk_candidate_user_cache_context(
+                config_path,
+                patient_id="30010096",
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+                scored_key=scored_key,
+                candidate_cache_context=cache_context,
+            )
+            save_similar_user_candidates_result(
+                _candidate_result(
+                    cache_context=cache_context,
+                    user_cache_context=user_cache_context,
+                ),
+                output_dir,
+            )
+
+            cached = load_cached_topk_candidate_result(
+                user_cache_context,
+                candidates_dir=output_dir,
+                request_base_date="2024-02-10",
+                config_path=config_path,
+            )
+            cached_again = load_cached_topk_candidate_result(
+                user_cache_context,
+                candidates_dir=output_dir,
+                request_base_date="2024-02-10",
+                config_path=config_path,
+            )
+            store = UserCacheIndexStore(root / "user_cache" / "cache_index.sqlite")
+            jobs = store.claim_pending_refresh_jobs(limit=10)
+
+        self.assertIsNotNone(cached)
+        assert cached is not None
+        self.assertTrue(cached["user_cache_hit"])
+        self.assertTrue(cached["user_cache_stale_hit"])
+        self.assertEqual(cached["user_cache_lookup_state"], "stale")
+        self.assertEqual(cached["user_cache_context"]["cached_base_date"], "2024-01-31")
+        self.assertEqual(cached["user_cache_context"]["stale_valid_days"], 14)
+        self.assertIsNotNone(cached.get("user_cache_refresh_job_id"))
+        self.assertEqual(
+            cached.get("user_cache_refresh_job_key"),
+            cached_again.get("user_cache_refresh_job_key") if cached_again else None,
+        )
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0].status, "running")
+        self.assertEqual(jobs[0].cache_type, "topk_candidates")
+        self.assertEqual(jobs[0].source_type, "patient")
+        self.assertEqual(jobs[0].source_id, "30010096")
+        self.assertEqual(jobs[0].request_base_date, "2024-02-10")
+
     def test_topk_user_cache_hit_refreshes_candidate_base_date(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -3016,6 +3090,7 @@ def _write_user_cache_config(
     root: Path,
     *,
     refresh_candidate_base_date_on_hit: bool = True,
+    topk_candidates_stale_valid_days: int | None = None,
 ) -> Path:
     config_path = root / "settings.yaml"
     config_path.write_text(
@@ -3046,6 +3121,14 @@ def _write_user_cache_config(
                 "  enabled: true",
                 f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
                 "  topk_candidates_valid_days: 7",
+                *(
+                    [
+                        "  topk_candidates_stale_valid_days: "
+                        f"{topk_candidates_stale_valid_days}"
+                    ]
+                    if topk_candidates_stale_valid_days is not None
+                    else []
+                ),
                 "  refresh_candidate_base_date_on_hit: "
                 f"{str(refresh_candidate_base_date_on_hit).lower()}",
             ]

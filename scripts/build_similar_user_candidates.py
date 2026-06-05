@@ -189,6 +189,7 @@ def build_similar_user_candidates(
         user_cache_context,
         candidates_dir=candidates_dir,
         request_base_date=base_date,
+        config_path=resolved_config_path,
     )
     if cached_result is not None:
         cached_result = refresh_cached_candidate_base_dates_on_hit(
@@ -1139,15 +1140,30 @@ def load_cached_topk_candidate_result(
     *,
     candidates_dir: str | Path = DEFAULT_CANDIDATES_DIR,
     request_base_date: str | None,
+    config_path: str | Path | None = None,
 ) -> dict[str, Any] | None:
-    """Load the newest valid topK candidate cache for one patient/config."""
+    """读取最新可复用的 topK 候选用户缓存。
+
+    fresh 命中时直接返回缓存；stale 命中时也返回旧缓存，并登记一条
+    refresh job 供后台刷新。未传 config_path 时，stale 窗口退化为
+    valid_days，以保持旧调用方的行为不变。
+    """
     if not user_cache_context.get("enabled"):
         return None
     request_date = _normalize_required_string(request_base_date, "base_date")
     store = UserCacheIndexStore(
         _normalize_required_string(user_cache_context.get("sqlite_path"), "sqlite_path")
     )
-    entry = store.find_latest_valid_source_entry(
+    context_valid_days = _normalize_non_negative_int(
+        user_cache_context.get("valid_days"),
+        "valid_days",
+    )
+    stale_valid_days = context_valid_days
+    if config_path is not None:
+        stale_valid_days = load_user_cache_settings(
+            config_path
+        ).topk_candidates_stale_valid_days
+    lookup = store.find_latest_reusable_source_entry(
         cache_type="topk_candidates",
         source_type=_normalize_required_string(
             user_cache_context.get("source_type"),
@@ -1170,9 +1186,11 @@ def load_cached_topk_candidate_result(
             "config_hash",
         ),
         request_base_date=request_date,
+        stale_valid_days=stale_valid_days,
     )
-    if entry is None:
+    if lookup is None:
         return None
+    entry = lookup.entry
     detail_path = Path(entry.data_path)
     if not detail_path.exists():
         store.delete_entry(entry)
@@ -1197,12 +1215,28 @@ def load_cached_topk_candidate_result(
     )
     result = dict(data)
     result["user_cache_hit"] = True
+    result["user_cache_stale_hit"] = lookup.state == "stale"
+    result["user_cache_lookup_state"] = lookup.state
     result["user_cache_context"] = {
         **user_cache_context,
         "cached_base_date": entry.cached_base_date,
         "valid_days": entry.valid_days,
+        "stale_valid_days": stale_valid_days,
     }
     result["user_cache_data_path"] = str(detail_path)
+    if lookup.state == "stale":
+        refresh_job = store.enqueue_refresh_job(
+            cache_type="topk_candidates",
+            source_type=entry.source_type,
+            source_id=entry.source_id or entry.patient_id,
+            query_family=entry.query_family,
+            window_days=entry.window_days,
+            config_hash=entry.config_hash,
+            request_base_date=request_date,
+            reason="stale_topk_hit",
+        )
+        result["user_cache_refresh_job_id"] = refresh_job.id
+        result["user_cache_refresh_job_key"] = refresh_job.job_key
     # Keep output path calculation stable even when a custom candidates_dir is supplied.
     result.setdefault("cache_context", data.get("cache_context"))
     return result
