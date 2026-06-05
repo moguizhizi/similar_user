@@ -2651,6 +2651,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_score_and_save.assert_called_once()
         self.assertEqual(result["candidate_result"]["candidate_count"], 0)
         self.assertEqual(result["candidate_result"]["candidates"], [])
+        self.assertEqual(result["candidate_result"]["patient_id"], "30010096")
         self.assertEqual(result["candidate_result"]["source_id"], "30010096")
         self.assertEqual(result["candidate_result"]["source_parameter"], "patient_id")
         mock_save_candidates.assert_called_once_with(result["candidate_result"])

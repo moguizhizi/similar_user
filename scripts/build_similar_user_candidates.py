@@ -619,6 +619,7 @@ def build_empty_candidate_result(
 ) -> dict[str, Any]:
     """Build an empty candidate result when all configured raw patterns are known empty."""
     return {
+        "patient_id": patient_id,
         "source_id": patient_id,
         "source_parameter": "patient_id",
         "pattern": selected_patterns[0] if len(selected_patterns) == 1 else None,
