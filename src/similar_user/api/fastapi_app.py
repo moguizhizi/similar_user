@@ -15,6 +15,7 @@ from scripts.predict_training_tasks_unified import predict_training_tasks_unifie
 
 from .app import build_neo4j_health_payload
 from .cache_cleanup_scheduler import run_user_cache_cleanup_daily
+from .cache_refresh_scheduler import run_user_cache_refresh_jobs_daily
 from .external_task_prediction import (
     build_external_prediction_response,
     build_unified_prediction_input,
@@ -53,23 +54,27 @@ app = FastAPI(title="similar_user API")
 
 @app.on_event("startup")
 async def startup_cache_cleanup() -> None:
-    """Start the daily user-cache cleanup loop for this worker."""
+    """Start user-cache background loops for this worker."""
     app.state.user_cache_cleanup_task = asyncio.create_task(
         run_user_cache_cleanup_daily(CONFIG_PATH)
+    )
+    app.state.user_cache_refresh_task = asyncio.create_task(
+        run_user_cache_refresh_jobs_daily(CONFIG_PATH)
     )
 
 
 @app.on_event("shutdown")
 async def shutdown_cache_cleanup() -> None:
-    """Cancel the daily user-cache cleanup loop during app shutdown."""
-    task = getattr(app.state, "user_cache_cleanup_task", None)
-    if task is None:
-        return
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    """Cancel user-cache background loops during app shutdown."""
+    for task_name in ("user_cache_cleanup_task", "user_cache_refresh_task"):
+        task = getattr(app.state, task_name, None)
+        if task is None:
+            continue
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 @app.get("/health")

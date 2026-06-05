@@ -36,6 +36,11 @@ class UserCacheSettingsTest(unittest.TestCase):
                         "  raw_path_build_retry_sleep_seconds: 1.5",
                         "  refresh_job_completed_retention_days: 8",
                         "  refresh_job_failed_retention_days: 31",
+                        "  refresh_jobs_background_enabled: true",
+                        "  refresh_jobs_run_hour: 0",
+                        "  refresh_jobs_run_minute: 30",
+                        "  refresh_jobs_batch_limit: 500",
+                        f'  refresh_jobs_lock_path: "{Path(temp_dir) / "refresh_jobs.lock"}"',
                         "  cleanup_max_age_days: 21",
                         "  keep_latest_per_source: 3",
                         "  cleanup_background_enabled: true",
@@ -64,6 +69,14 @@ class UserCacheSettingsTest(unittest.TestCase):
             self.assertEqual(settings.raw_path_build_retry_sleep_seconds, 1.5)
             self.assertEqual(settings.refresh_job_completed_retention_days, 8)
             self.assertEqual(settings.refresh_job_failed_retention_days, 31)
+            self.assertTrue(settings.refresh_jobs_background_enabled)
+            self.assertEqual(settings.refresh_jobs_run_hour, 0)
+            self.assertEqual(settings.refresh_jobs_run_minute, 30)
+            self.assertEqual(settings.refresh_jobs_batch_limit, 500)
+            self.assertEqual(
+                settings.refresh_jobs_lock_path,
+                str(Path(temp_dir) / "refresh_jobs.lock"),
+            )
             self.assertEqual(settings.cleanup_max_age_days, 21)
             self.assertEqual(settings.keep_latest_per_source, 3)
             self.assertEqual(settings.keep_latest_per_user, 3)

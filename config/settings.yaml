@@ -135,6 +135,21 @@ user_cache:
   # 刷新失败的 refresh job 记录保留天数；失败记录保留更久便于排查和重试。
   refresh_job_failed_retention_days: 30
 
+  # 是否启用 FastAPI 后台的 refresh job 每日刷新任务。
+  refresh_jobs_background_enabled: true
+
+  # refresh job 后台任务每天运行的小时，按 cleanup_timezone 解释。
+  refresh_jobs_run_hour: 0
+
+  # refresh job 后台任务每天运行的分钟，按 cleanup_timezone 解释。
+  refresh_jobs_run_minute: 30
+
+  # refresh job 后台任务每轮最多领取并处理的任务数。
+  refresh_jobs_batch_limit: 500
+
+  # refresh job 后台任务锁文件路径，用于避免多个 FastAPI worker 重复执行。
+  refresh_jobs_lock_path: "data/user_cache/refresh_jobs.lock"
+
   # 清理任务保留缓存的最大天数；应不小于仍可能被读取的缓存有效期。
   cleanup_max_age_days: 30
 

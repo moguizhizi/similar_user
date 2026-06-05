@@ -164,8 +164,18 @@ class UserCacheSettings:
     raw_path_build_retry_sleep_seconds: float = 5.0
     refresh_job_completed_retention_days: int = 7
     refresh_job_failed_retention_days: int = 30
+    refresh_jobs_background_enabled: bool = True
+    refresh_jobs_run_hour: int = 0
+    refresh_jobs_run_minute: int = 30
+    refresh_jobs_batch_limit: int = 500
+    refresh_jobs_lock_path: str = "data/user_cache/refresh_jobs.lock"
     cleanup_max_age_days: int = 30
     keep_latest_per_source: int = 2
+    cleanup_background_enabled: bool = True
+    cleanup_run_hour: int = 1
+    cleanup_run_minute: int = 0
+    cleanup_timezone: str = "Asia/Shanghai"
+    cleanup_lock_path: str = "data/user_cache/cleanup.lock"
 
     @property
     def keep_latest_per_user(self) -> int:
@@ -766,7 +776,6 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         "raw_path_build_retry_sleep_seconds",
         default=5.0,
     )
-
     refresh_job_completed_retention_days = _parse_user_cache_non_negative_int(
         data,
         "refresh_job_completed_retention_days",
@@ -777,6 +786,48 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         "refresh_job_failed_retention_days",
         default=30,
     )
+    refresh_jobs_background_enabled = data.get("refresh_jobs_background_enabled", True)
+    if not isinstance(refresh_jobs_background_enabled, bool):
+        raise ValueError(
+            "user_cache refresh_jobs_background_enabled must be a boolean."
+        )
+
+    refresh_jobs_run_hour = data.get("refresh_jobs_run_hour", 0)
+    if (
+        not isinstance(refresh_jobs_run_hour, int)
+        or isinstance(refresh_jobs_run_hour, bool)
+        or not 0 <= refresh_jobs_run_hour <= 23
+    ):
+        raise ValueError(
+            "user_cache refresh_jobs_run_hour must be an integer from 0 to 23."
+        )
+
+    refresh_jobs_run_minute = data.get("refresh_jobs_run_minute", 30)
+    if (
+        not isinstance(refresh_jobs_run_minute, int)
+        or isinstance(refresh_jobs_run_minute, bool)
+        or not 0 <= refresh_jobs_run_minute <= 59
+    ):
+        raise ValueError(
+            "user_cache refresh_jobs_run_minute must be an integer from 0 to 59."
+        )
+
+    refresh_jobs_batch_limit = data.get("refresh_jobs_batch_limit", 500)
+    if (
+        not isinstance(refresh_jobs_batch_limit, int)
+        or isinstance(refresh_jobs_batch_limit, bool)
+        or refresh_jobs_batch_limit <= 0
+    ):
+        raise ValueError(
+            "user_cache refresh_jobs_batch_limit must be a positive integer."
+        )
+
+    refresh_jobs_lock_path = data.get(
+        "refresh_jobs_lock_path",
+        "data/user_cache/refresh_jobs.lock",
+    )
+    if not isinstance(refresh_jobs_lock_path, str) or not refresh_jobs_lock_path.strip():
+        raise ValueError("user_cache refresh_jobs_lock_path must be a non-empty string.")
 
     cleanup_max_age_days = data.get("cleanup_max_age_days", 30)
     if (
@@ -797,6 +848,34 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
     ):
         raise ValueError("user_cache keep_latest_per_source must be a positive integer.")
 
+    cleanup_background_enabled = data.get("cleanup_background_enabled", True)
+    if not isinstance(cleanup_background_enabled, bool):
+        raise ValueError("user_cache cleanup_background_enabled must be a boolean.")
+
+    cleanup_run_hour = data.get("cleanup_run_hour", 1)
+    if (
+        not isinstance(cleanup_run_hour, int)
+        or isinstance(cleanup_run_hour, bool)
+        or not 0 <= cleanup_run_hour <= 23
+    ):
+        raise ValueError("user_cache cleanup_run_hour must be an integer from 0 to 23.")
+
+    cleanup_run_minute = data.get("cleanup_run_minute", 0)
+    if (
+        not isinstance(cleanup_run_minute, int)
+        or isinstance(cleanup_run_minute, bool)
+        or not 0 <= cleanup_run_minute <= 59
+    ):
+        raise ValueError("user_cache cleanup_run_minute must be an integer from 0 to 59.")
+
+    cleanup_timezone = data.get("cleanup_timezone", "Asia/Shanghai")
+    if not isinstance(cleanup_timezone, str) or not cleanup_timezone.strip():
+        raise ValueError("user_cache cleanup_timezone must be a non-empty string.")
+
+    cleanup_lock_path = data.get("cleanup_lock_path", "data/user_cache/cleanup.lock")
+    if not isinstance(cleanup_lock_path, str) or not cleanup_lock_path.strip():
+        raise ValueError("user_cache cleanup_lock_path must be a non-empty string.")
+
     return UserCacheSettings(
         enabled=enabled,
         sqlite_path=sqlite_path.strip(),
@@ -813,8 +892,18 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         raw_path_build_retry_sleep_seconds=raw_path_build_retry_sleep_seconds,
         refresh_job_completed_retention_days=refresh_job_completed_retention_days,
         refresh_job_failed_retention_days=refresh_job_failed_retention_days,
+        refresh_jobs_background_enabled=refresh_jobs_background_enabled,
+        refresh_jobs_run_hour=refresh_jobs_run_hour,
+        refresh_jobs_run_minute=refresh_jobs_run_minute,
+        refresh_jobs_batch_limit=refresh_jobs_batch_limit,
+        refresh_jobs_lock_path=refresh_jobs_lock_path.strip(),
         cleanup_max_age_days=cleanup_max_age_days,
         keep_latest_per_source=keep_latest_per_source,
+        cleanup_background_enabled=cleanup_background_enabled,
+        cleanup_run_hour=cleanup_run_hour,
+        cleanup_run_minute=cleanup_run_minute,
+        cleanup_timezone=cleanup_timezone.strip(),
+        cleanup_lock_path=cleanup_lock_path.strip(),
     )
 
 
