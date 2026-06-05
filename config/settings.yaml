@@ -90,22 +90,59 @@ direct_path_cache:
   overlap_days: 1
 
 user_cache:
+  # 是否启用以 source/patient 为中心的本地缓存索引。
   enabled: true
+
+  # 用户缓存索引 SQLite 路径；缓存文件路径会记录在该索引中。
   sqlite_path: "data/user_cache/cache_index.sqlite"
+
+  # 患者路径 raw paths 的可复用天数；过期后需要重新构建患者路径。
   patient_raw_paths_valid_days: 30
+
+  # direct entity 路径 raw paths 的可复用天数。
   direct_raw_paths_valid_days: 60
+
+  # 患者路径打分结果 scored paths 的可复用天数；过期后需基于 raw paths 重新打分。
   patient_scored_paths_valid_days: 14
+
+  # direct entity 路径打分结果 scored paths 的可复用天数。
   direct_scored_paths_valid_days: 60
+
+  # topK 候选用户结果的可复用天数；两条候选链路共用该有效期。
   topk_candidates_valid_days: 7
+
+  # profile candidate tasks 缓存的可复用天数。
   profile_candidate_tasks_valid_days: 7
+
+  # 命中候选缓存时，是否刷新候选用户 disease-course base date 以适配本次请求日期。
   refresh_candidate_base_date_on_hit: true
+
+  # 构建 raw paths 时的并发 worker 数。
   raw_path_build_workers: 1
+
+  # raw paths 构建失败后的最大重试次数。
   raw_path_build_max_retries: 2
+
+  # raw paths 构建失败后每次重试前的等待秒数。
   raw_path_build_retry_sleep_seconds: 5
+
+  # 清理任务保留缓存的最大天数；应不小于仍可能被读取的缓存有效期。
   cleanup_max_age_days: 30
+
+  # 每个 source/cache/config 组合至少保留的最新缓存版本数。
   keep_latest_per_source: 2
+
+  # 是否启用后台清理任务。
   cleanup_background_enabled: true
+
+  # 后台清理任务每天运行的小时，按 cleanup_timezone 解释。
   cleanup_run_hour: 1
+
+  # 后台清理任务每天运行的分钟，按 cleanup_timezone 解释。
   cleanup_run_minute: 0
+
+  # 后台清理任务使用的时区。
   cleanup_timezone: "Asia/Shanghai"
+
+  # 后台清理任务锁文件路径，用于避免重复清理进程并发运行。
   cleanup_lock_path: "data/user_cache/cleanup.lock"
