@@ -212,11 +212,13 @@ query:
 
 训练任务预测会优先走正常候选链路：患者 path 先生成 topK 相似用户并汇总候选训练任务，非患者 direct entity path 先用疾病、症状、未知实体和画像字段生成 direct entity topK 候选，再构造候选训练任务。正常链路可使用 LLM，也可在 `use_llm=false` 时直接按候选任务排序输出。
 
-兜底主要处理“候选或推荐证据已经进入预测流程，但无法产出可靠任务”的情况，常见触发原因包括：
+兜底主要处理“候选或推荐证据不足，无法产出可靠任务”的情况，常见触发原因包括：
 
-- `no_candidates`：患者 path 没有可用相似用户。
+- `no_candidates`：候选用户为空；患者 path 中通常表示没有可用相似用户。
+- `missing_entity_input`：非患者 direct entity path 只提供画像字段，没有疾病、症状、未知实体或疾病名称，此时跳过 direct entity path 评分，直接按画像兜底。
 - `no_candidate_training_tasks`：有候选用户，但候选训练任务为空。
 - `no_direct_entity_candidates`：非患者 direct entity path 的 topK 候选为空。
+- `no_resolved_entity_names`：非患者 direct entity path 提供了疾病名称，但没有解析到可用 Disease/Symptom/Unknown 实体。
 - `llm_error` 或 LLM 输出无法解析。
 - LLM/排序结果为空。
 
@@ -252,7 +254,7 @@ Completed fallback task prediction: patient_id=..., fallback_used=True, fallback
 }
 ```
 
-兜底不覆盖输入字段校验失败。比如非患者 direct entity path 需要可用的 `age`、`education`、`gender` 以及至少一个疾病、症状或未知实体；如果缺少学历，会在进入候选查询前失败：
+兜底不覆盖核心画像字段校验失败。非患者 direct entity path 可以只提供 `age`、`education`、`gender` 走画像兜底，但这三个字段本身仍然需要可用；如果缺少学历，会在进入候选查询前失败：
 
 ```text
 Non-patient direct entity prediction requires: education

@@ -82,6 +82,42 @@ class PredictTrainingTasksUnifiedTest(unittest.TestCase):
                 use_llm=False,
             )
 
+    @patch("scripts.predict_training_tasks_unified.predict_training_tasks_from_direct_entity")
+    @patch("scripts.predict_training_tasks_unified._patient_exists")
+    def test_missing_patient_allows_profile_only_fallback(
+        self,
+        mock_patient_exists: Mock,
+        mock_direct_prediction: Mock,
+    ) -> None:
+        mock_patient_exists.return_value = False
+        mock_direct_prediction.return_value = {
+            "patient_id": "non_patient_1",
+            "training_task_prediction": {
+                "fallback_used": True,
+                "fallback_reason": "missing_entity_input",
+                "predicted_training_tasks": [{"game_id": "312"}],
+            },
+        }
+
+        result = predict_training_tasks_unified(
+            patient_id="non_patient_1",
+            base_date="2026-05-25",
+            age=66,
+            education="本科",
+            gender="男",
+            config_path="config/settings.yaml",
+            use_llm=False,
+        )
+
+        self.assertEqual(result["route"], "direct_entity_path")
+        self.assertEqual(result["patient_exists"], False)
+        mock_direct_prediction.assert_called_once()
+        call_kwargs = mock_direct_prediction.call_args.kwargs
+        self.assertEqual(call_kwargs["disease_ids"], [])
+        self.assertEqual(call_kwargs["disease_names"], [])
+        self.assertEqual(call_kwargs["symptom_ids"], [])
+        self.assertEqual(call_kwargs["unknown_ids"], [])
+
     def test_patient_path_ids_summary_includes_route(self) -> None:
         summary = summarize_unified_prediction_result(
             {

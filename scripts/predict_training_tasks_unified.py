@@ -269,16 +269,6 @@ def _validate_direct_entity_inputs(
             "Non-patient direct entity prediction requires: "
             + ", ".join(missing_fields)
         )
-    if not (
-        _dedupe_texts(disease_ids)
-        or _dedupe_texts(disease_names)
-        or _dedupe_texts(symptom_ids)
-        or _dedupe_texts(unknown_ids)
-    ):
-        raise ValueError(
-            "Non-patient direct entity prediction requires at least one disease, "
-            "symptom, unknown entity ID, or disease name."
-        )
 
 
 def _flatten(values: list[list[str]] | None) -> list[str]:
