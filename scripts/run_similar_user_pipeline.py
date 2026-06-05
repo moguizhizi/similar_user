@@ -38,8 +38,11 @@ from similar_user.utils.logger import get_logger
 from config.settings import load_query_settings, load_user_cache_settings
 
 from scripts.build_similar_user_candidates import (
+    build_candidate_cache_context,
     build_empty_candidate_result,
+    build_expected_scored_key,
     build_similar_user_candidates,
+    build_topk_candidate_user_cache_context,
     save_similar_user_candidates_result,
 )
 from scripts.build_pattern_paths import run_configured_pattern_path_flows
@@ -404,6 +407,7 @@ def _build_patient_candidates_with_auto_refresh(
                     patient_id,
                     config_path=config_path,
                     base_date=base_date,
+                    query_family=query_family,
                 ),
                 None,
             )
@@ -428,17 +432,41 @@ def _build_empty_patient_candidate_result(
     *,
     config_path: str | Path,
     base_date: str,
+    query_family: str,
 ) -> dict[str, Any]:
     query_settings = load_query_settings(config_path)
-    return build_empty_candidate_result(
+    disease_course_window_days = (
+        query_settings.candidate_ranking.disease_course_window_days
+    )
+    scored_key = build_expected_scored_key(
+        config_path,
+        base_date=base_date,
+        query_family=query_family,
+    )
+    candidate_cache_context = build_candidate_cache_context(
+        config_path,
+        scored_key=scored_key,
+        disease_course_window_days=disease_course_window_days,
+    )
+    user_cache_context = build_topk_candidate_user_cache_context(
+        config_path,
+        patient_id=patient_id,
+        base_date=base_date,
+        query_family=query_family,
+        scored_key=scored_key,
+        candidate_cache_context=candidate_cache_context,
+    )
+    result = build_empty_candidate_result(
         patient_id=patient_id,
         selected_patterns=query_settings.candidate_ranking.patterns,
         candidate_top_k=query_settings.candidate_ranking.candidate_top_k,
         base_date=base_date,
-        disease_course_window_days=(
-            query_settings.candidate_ranking.disease_course_window_days
-        ),
+        disease_course_window_days=disease_course_window_days,
     )
+    result["cache_context"] = candidate_cache_context
+    result["user_cache_context"] = user_cache_context
+    result["user_cache_hit"] = False
+    return result
 
 
 def _score_direct_entity_paths_if_enabled(

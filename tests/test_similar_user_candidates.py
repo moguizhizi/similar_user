@@ -2654,6 +2654,12 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertEqual(result["candidate_result"]["patient_id"], "30010096")
         self.assertEqual(result["candidate_result"]["source_id"], "30010096")
         self.assertEqual(result["candidate_result"]["source_parameter"], "patient_id")
+        self.assertIn("candidate_key", result["candidate_result"]["cache_context"])
+        self.assertEqual(
+            result["candidate_result"]["user_cache_context"]["patient_id"],
+            "30010096",
+        )
+        self.assertFalse(result["candidate_result"]["user_cache_hit"])
         mock_save_candidates.assert_called_once_with(result["candidate_result"])
 
     @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
