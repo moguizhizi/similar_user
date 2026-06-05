@@ -1,73 +1,77 @@
 # similar_user
 
-这是一个基于 Neo4j 知识图谱实现相似用户检索的项目骨架。
+这是一个基于 Neo4j 知识图谱实现相似用户检索和训练任务推荐的项目。
 
-当前仓库已经包含最小可运行的 Neo4j 连接脚本和 HTTP 调试接口，便于后续继续补充相似用户检索逻辑。
+当前仓库包含患者 path 相似用户候选生成、非患者 direct entity 候选生成、训练任务预测、批量评估、实验网格、用户中心缓存和 HTTP/API 调试入口。
 
 ## 代码目录
 
 ```text
 similar_user/
 ├── config/
-│   ├── settings.yaml           # 统一配置：Neo4j、查询、候选排序和相似度
-│   └── settings.py             # YAML 配置加载入口
+│   ├── settings.yaml                 # 统一配置：Neo4j、查询、候选、预测和缓存
+│   ├── settings.py                   # YAML 配置加载入口
+│   └── experiments/                  # 评估实验 YAML
 ├── data/
-│   └── pattern_paths/          # 固定模式路径离线结果存储
+│   ├── pattern_paths/                # raw path 离线结果
+│   ├── scored_pattern_paths/         # scored path 结果
+│   ├── similar_user_candidates/      # topK 候选相似用户结果
+│   └── user_cache/                   # 用户中心缓存索引和文件
+├── experiments/
+│   └── neural_sequence_baseline/     # 独立神经序列 baseline 实验
 ├── logs/
-│   └── similar_user.log        # 默认日志文件
+│   └── similar_user.log              # 默认日志文件
 ├── scripts/
-│   ├── build_similar_user_candidates.py  # 从已评分路径构建 top-k 候选相似用户
-│   ├── build_pattern_paths.py            # 构建并保存固定模式路径
-│   ├── debug_query.py                    # 直接连接 Neo4j 并执行验证查询
-│   ├── read_patient_pattern_result.py    # 读取本地离线保存的路径结果
-│   ├── run_api.py                        # 启动本地 HTTP 调试服务
-│   └── score_pattern_paths.py            # 对离线保存的 pattern paths 打分
+│   ├── build_pattern_paths.py        # 构建并保存患者固定模式 raw paths
+│   ├── score_pattern_paths.py        # 对患者 fixed-pattern paths 打分
+│   ├── build_similar_user_candidates.py
+│   ├── sync_direct_path_cache.py     # 同步 direct path SQLite 缓存
+│   ├── build_direct_entity_paths.py  # 构建 disease/symptom/unknown raw paths
+│   ├── score_direct_entity_paths.py  # 对 direct entity paths 打分
+│   ├── predict_training_tasks.py     # 患者路径训练任务预测
+│   ├── predict_training_tasks_from_direct_entity.py
+│   ├── predict_training_tasks_unified.py
+│   ├── evaluate_predict_training_tasks.py
+│   ├── evaluate_direct_entity_profiles.py
+│   ├── run_evaluation_grid.py
+│   ├── cleanup_user_cache.py
+│   ├── run_api.py                    # http.server 调试接口
+│   └── run_fastapi.py                # FastAPI 外部预测接口
 ├── src/similar_user/
 │   ├── api/
-│   │   ├── app.py              # 最小 HTTP 服务，提供 /health/neo4j 和 /query
+│   │   ├── app.py                    # http.server 调试接口，提供 /health/neo4j 和 /query
+│   │   ├── fastapi_app.py            # FastAPI 入口，提供 /training-task/predict
+│   │   ├── external_task_prediction.py
+│   │   ├── cache_cleanup_scheduler.py
 │   │   ├── routes/
-│   │   │   └── user_routes.py  # 用户查询路由
-│   │   └── schemas.py          # 请求与响应结构
+│   │   └── schemas.py
 │   ├── data_access/
-│   │   ├── cypher_queries/              # 按主题拆分的 Cypher 查询定义
-│   │   │   ├── __init__.py              # 查询常量导出入口
-│   │   │   ├── patient_dates.py         # 患者训练日期、游戏与常模分查询
-│   │   │   ├── pattern_paths.py         # 固定模式路径查询
-│   │   │   └── pattern_statistics.py    # 固定模式路径统计查询
-│   │   ├── kg_repository.py             # 图谱读取仓储
-│   │   └── neo4j_client.py              # Neo4j 驱动封装
+│   │   ├── cypher_queries/            # 按主题拆分的 Cypher 查询定义
+│   │   ├── kg_repository.py           # 图谱读取仓储
+│   │   ├── direct_path_cache_store.py # direct path SQLite 缓存
+│   │   ├── user_cache_index.py        # 用户中心缓存索引
+│   │   └── neo4j_client.py            # Neo4j 驱动封装
 │   ├── domain/
-│   │   ├── graph_schema.py     # 固定路径模式定义
-│   │   ├── item.py             # TaskInstanceSet / TaskInstance / Game 节点模型
-│   │   ├── path_models.py      # 固定模式路径领域对象
-│   │   └── user.py             # 患者领域模型
-│   ├── pipelines/              # 构图、同步、相似度计算等批处理入口
+│   │   ├── graph_schema.py           # 固定路径模式定义
+│   │   ├── item.py                   # TaskInstanceSet / TaskInstance / Game 等节点模型
+│   │   ├── path_models.py            # 固定模式路径领域对象
+│   │   └── user.py                   # 患者领域模型
+│   ├── pipelines/                    # 构图、同步、相似度计算等批处理入口
 │   ├── services/
-│   │   ├── path_scoring.py     # 固定模式路径规则打分
-│   │   ├── similarity/         # 相似度服务实现
-│   │   │   ├── base.py         # 相似度计算基础接口
-│   │   │   ├── embedding.py    # Embedding 相似度方法占位
-│   │   │   ├── graph_similarity.py      # 图谱相似度方法占位
-│   │   │   └── utils.py        # 相似度辅助计算
-│   │   └── user_service.py     # 用户查询服务
+│   │   ├── path_scoring.py           # 固定模式路径规则打分
+│   │   ├── task_prediction.py        # 患者路径训练任务预测
+│   │   ├── task_prediction_fallback.py
+│   │   ├── direct_entity_fallback_prediction.py
+│   │   ├── task_recommendation_validation.py
+│   │   ├── similarity/               # 相似度候选聚合
+│   │   └── user_service.py
 │   └── utils/
-│       ├── logger.py           # 日志工具
-│       ├── metrics.py          # 指标工具
-│       ├── helpers.py          # 辅助函数
-│       └── pattern_storage.py  # 固定模式路径离线存取
-├── tests/
-│   ├── test_api_app.py         # HTTP 健康检查与查询接口测试
-│   ├── test_domain_models.py   # 领域模型测试
-│   ├── test_kg_repository.py   # 图谱仓储测试
-│   ├── test_logger.py          # 日志工具测试
-│   ├── test_neo4j_client.py    # Neo4j 客户端测试
-│   ├── test_path_scoring.py              # 路径打分测试
-│   ├── test_pattern_storage.py           # 离线存储测试
-│   ├── test_read_patient_pattern_result.py # 离线读取脚本测试
-│   ├── test_similar_user_candidates.py   # 候选相似用户构建测试
-│   ├── test_similarity_utils.py          # 相似度辅助计算测试
-│   └── test_user_service.py              # 用户服务测试
-├── pyproject.toml              # 项目依赖声明与打包配置
+│       ├── logger.py                 # 日志工具
+│       ├── metrics.py                # 指标工具
+│       ├── pattern_storage.py        # path 离线存取
+│       └── user_cache_paths.py       # 用户缓存路径工具
+├── tests/                            # 针对脚本、服务、缓存和数据访问的测试
+├── pyproject.toml                    # 项目依赖声明与打包配置
 └── README.md
 ```
 
@@ -76,19 +80,29 @@ similar_user/
 - `python scripts/debug_query.py`
   用于直接验证 `config/settings.yaml` 中的 Neo4j 连接是否可用。
 - `python scripts/run_api.py --host 127.0.0.1 --port 8010`
-  启动本地 HTTP 服务。
+  启动本地 http.server 调试服务。
+- `python scripts/run_fastapi.py --host 127.0.0.1 --port 8000`
+  启动 FastAPI 外部预测服务。
 - `python scripts/run_similar_user_pipeline.py <patient_id> --base-date <YYYY-MM-DD>`
   一键执行固定模式 path 检索保存、path 打分和候选相似用户聚合排序。
 - `python scripts/predict_training_tasks.py <patient_id> --base-date <YYYY-MM-DD>`
-  一键执行相似用户候选生成并预测训练任务。
-- `python scripts/evaluate_predict_training_tasks.py [patient_ids_file] --base-date <YYYY-MM-DD>`
-  评估 `base_date` 当天训练任务预测表现；可传用户列表文件，也可不传并自动从 Neo4j 读取全量 Patient ID。
-- `python scripts/build_similar_user_candidates.py <patient_id>`
+  从患者 path 候选生成训练任务预测。
+- `python scripts/predict_training_tasks_from_direct_entity.py --patient-id <patient_id> --base-date <YYYY-MM-DD> --age <age> --education <education> --gender <gender> --disease-id <disease_id>`
+  从非患者 direct entity 画像生成训练任务预测。
+- `python scripts/predict_training_tasks_unified.py --patient-id <patient_id> --base-date <YYYY-MM-DD>`
+  按患者是否存在自动路由到患者 path 或 direct entity 预测流程。
+- `python scripts/evaluate_predict_training_tasks.py --base-date <YYYY-MM-DD>`
+  评估 `base_date` 当天有训练记录的患者任务预测表现。
+- `python scripts/evaluate_direct_entity_profiles.py --profiles <profiles.jsonl>`
+  评估 direct entity 或 unified profile 输入。
+- `python scripts/build_similar_user_candidates.py <patient_id> --base-date <YYYY-MM-DD>`
   读取已保存的 scored paths，并按 `config/settings.yaml` 中的 `query.candidate_ranking.candidate_top_k` 返回排序后的候选相似用户。
 - `GET /health/neo4j`
   用于检查 Neo4j 是否可连接。
 - `POST /query`
   用于提交 Cypher 查询并返回结果，适合本地调试。
+- `POST /training-task/predict`
+  FastAPI 外部训练任务预测接口。
 
 ## 脚本用法
 
@@ -101,16 +115,15 @@ python scripts/debug_query.py
 # 从 path 生成到候选用户生成的一键主流程
 python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22
 python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --config config/settings.yaml
-python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --skip-path-build
 python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --output-level scores
 python scripts/run_similar_user_pipeline.py <patient_id> --base-date 2022-05-22 --output-level full
 
 # 运行固定模式路径检索并保存离线结果
 python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22
 python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --config config/settings.yaml
-python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order
-python scripts/build_pattern_paths.py --source-id <patient_id> --patterns-from-config --base-date 2022-05-22 --query-family training_order
-python scripts/run_monthly_pattern_paths.py --query-family training_order
+python scripts/build_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order_source_window
+python scripts/build_pattern_paths.py --source-id <patient_id> --patterns-from-config --base-date 2022-05-22 --query-family training_order_dual_window
+python scripts/run_monthly_pattern_paths.py --query-family training_order_source_window
 
 # 从 Neo4j 同步 disease/symptom/unknown direct path 到 SQLite
 python scripts/sync_direct_path_cache.py
@@ -126,49 +139,59 @@ python scripts/build_direct_entity_paths.py --symptom-id <symptom_id>
 python scripts/build_direct_entity_paths.py --unknown-id <unknown_id>
 
 # 对已保存的固定模式路径打分
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order --config config/settings.yaml
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order --path-index 0
-python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order --scored-paths-dir data/scored_pattern_paths
-python scripts/score_pattern_paths.py --source-id <patient_id> --patterns-from-config --base-date 2022-05-22 --query-family training_order
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order_source_window
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order_source_window --config config/settings.yaml
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order_source_window --path-index 0
+python scripts/score_pattern_paths.py --source-id <patient_id> --pattern patient_game_patient --base-date 2022-05-22 --query-family training_order_source_window --scored-paths-dir data/scored_pattern_paths
+python scripts/score_pattern_paths.py --source-id <patient_id> --patterns-from-config --base-date 2022-05-22 --query-family training_order_dual_window
 
 # 读取已保存的固定模式路径结果
-python scripts/read_patient_pattern_result.py <patient_id>
-python scripts/read_patient_pattern_result.py <patient_id> --config config/settings.yaml
+python scripts/read_patient_pattern_result.py <patient_id> --base-date 2022-05-22
+python scripts/read_patient_pattern_result.py <patient_id> --base-date 2022-05-22 --config config/settings.yaml --query-family training_order_source_window
 
 # 从已保存 scored paths 构建候选相似用户
-python scripts/build_similar_user_candidates.py <patient_id>
-python scripts/build_similar_user_candidates.py <patient_id> --config config/settings.yaml
-python scripts/build_similar_user_candidates.py <patient_id> --scored-paths-dir data/scored_pattern_paths
-python scripts/build_similar_user_candidates.py <patient_id> --candidates-dir data/similar_user_candidates
+python scripts/build_similar_user_candidates.py <patient_id> --base-date 2022-05-22
+python scripts/build_similar_user_candidates.py <patient_id> --base-date 2022-05-22 --config config/settings.yaml
+python scripts/build_similar_user_candidates.py <patient_id> --base-date 2022-05-22 --scored-paths-dir data/scored_pattern_paths
+python scripts/build_similar_user_candidates.py <patient_id> --base-date 2022-05-22 --candidates-dir data/similar_user_candidates
 
-# 单用户训练任务预测
+# 患者路径单用户训练任务预测
 python scripts/predict_training_tasks.py <patient_id> --base-date 2022-05-22
-python scripts/predict_training_tasks.py <patient_id> --base-date 2022-05-22 --skip-path-build
 python scripts/predict_training_tasks.py <patient_id> --base-date 2022-05-22 --dry-run --output-level full
 
-# 批量评估（传用户列表文件）
-python scripts/evaluate_predict_training_tasks.py data/patient_ids.txt --base-date 2022-05-22 --skip-path-build
+# 非患者 direct entity 训练任务预测
+python scripts/predict_training_tasks_from_direct_entity.py --patient-id <patient_id> --base-date 2022-05-22 --age 68 --education 初中 --gender 女 --disease-id AU_DIS_0029
+python scripts/predict_training_tasks_from_direct_entity.py --patient-id <patient_id> --base-date 2022-05-22 --age 68 --education 初中 --gender 女 --disease-name 认知障碍 --dry-run --output-level full
 
-# 批量评估（不传用户列表，自动从 Neo4j 读取全量 Patient ID）
-python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --skip-path-build
+# 统一入口训练任务预测
+python scripts/predict_training_tasks_unified.py --patient-id <patient_id> --base-date 2022-05-22
+python scripts/predict_training_tasks_unified.py --patient-id <patient_id> --base-date 2022-05-22 --age 68 --education 初中 --gender 女 --disease-name 认知障碍 --dry-run --output-level full
 
-# 批量评估（不传用户列表，只评估 base_date 当天有训练记录的用户）
-python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --active-on-base-date --limit 40 --dry-run
+# 批量评估（默认生成并读取 base_date 当天有训练记录的患者列表）
+python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22
 
-# 小样本冒烟：限制评估前 N 个用户，并跳过 LLM 调用
+# 批量评估（单个患者或小样本冒烟）
+python scripts/evaluate_predict_training_tasks.py --patient-id <patient_id> --base-date 2022-05-22 --dry-run
 python scripts/evaluate_predict_training_tasks.py --base-date 2022-05-22 --limit 10 --dry-run
+
+# direct entity / unified profile 批量评估
+python scripts/evaluate_direct_entity_profiles.py --profiles data/profiles.jsonl --dry-run
+python scripts/evaluate_direct_entity_profiles.py --profiles data/profiles.jsonl --prediction-mode unified --dry-run
 
 # 调参实验：按实验 YAML 批量运行，并按 stage 隔离输出目录
 python scripts/run_evaluation_grid.py --experiment-config config/experiments/evaluation_grid.yaml
 python scripts/run_evaluation_grid.py --experiment-config config/experiments/evaluation_grid.yaml --dry-run
 python scripts/run_evaluation_grid.py --experiment-config config/experiments/evaluation_grid.yaml --force
-python scripts/run_evaluation_grid.py --experiment-config config/experiments/evaluation_grid.yaml --write-promoted-baseline
+python scripts/run_evaluation_grid.py --experiment-config config/experiments/evaluation_grid.yaml --no-write-promoted-baseline
+
+# HTTP 服务
+python scripts/run_api.py --host 127.0.0.1 --port 8010
+python scripts/run_fastapi.py --host 127.0.0.1 --port 8000
 ```
 
-`run_similar_user_pipeline.py` 默认会先重新生成并保存固定模式 path，再读取保存结果打分并生成候选用户。如果已经有可用的离线路径结果，可以使用 `--skip-path-build` 跳过 path 检索。脚本默认使用 `--output-level ids`，候选用户仅以 `candidate_ids` 列出全部 `patient_id`；使用 `--output-level scores` 时输出 `patient_id` 和 `candidate_score`；使用 `--output-level full` 时输出完整 `candidate_result` 和候选明细。
+`run_similar_user_pipeline.py` 的 CLI 会按当前配置自动补齐 raw paths、scored paths 和候选用户缓存。脚本默认使用 `--output-level ids`，候选用户仅以 `candidate_ids` 列出全部 `patient_id`；使用 `--output-level scores` 时输出 `patient_id` 和 `candidate_score`；使用 `--output-level full` 时输出完整 `candidate_result` 和候选明细。
 
-`build_pattern_paths.py --patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次构建这些 patient 起点模式的离线 path；如果 YAML 中配置了 `disease_patient`、`symptom_patient`、`unknown_patient` 这类 direct 模式，脚本会报错，避免把 patient_id 与 disease_id/symptom_id/unknown_id 混用。建议显式传入 `--query-family training_order`，这样生成的 `data/pattern_paths/{path_key}/...` 与后续评分命令使用的缓存上下文完全一致。
+`build_pattern_paths.py --patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次构建这些 patient 起点模式的离线 path；如果 YAML 中配置了 `disease_patient`、`symptom_patient`、`unknown_patient` 这类 direct 模式，脚本会报错，避免把 patient_id 与 disease_id/symptom_id/unknown_id 混用。建议显式传入当前配置使用的 `--query-family`，例如 `training_order_source_window` 或 `training_order_dual_window`，这样生成的 `data/pattern_paths/{path_key}/...` 与后续评分命令使用的缓存上下文完全一致。
 
 `score_pattern_paths.py` 默认会保存评分明细和摘要。`--patterns-from-config` 会读取 `query.candidate_ranking.patterns` 并依次评分这些 patient 起点模式；`--path-index` 仅用于单条 path 调试，不会保存评分文件。评分复用已保存 path 时，应传入与构建 path 相同的 `--base-date` 和 `--query-family`；患者 path 窗口来自 `query.patient_path.window_days`，脚本会用这些参数定位并校验对应的 `path_key`。
 
@@ -467,7 +490,7 @@ query:
     candidate_top_k: 10  # 最终返回多少个候选相似用户
 ```
 
-`predict_training_tasks.py` 支持 `--dry-run`（跳过 LLM，仅验证链路）和 `--skip-path-build`（复用已保存 path 结果）。
+`predict_training_tasks.py` 支持 `--dry-run`（跳过 LLM，仅验证链路）和 `--include-prompt`（在 full 输出中包含生成的 prompt）。患者 path、scored path 和 topK candidates 会按配置自动读取或补算。
 
 ### 完成度与活跃度证据解释
 
@@ -500,7 +523,7 @@ query:
 
 一句话综述：相似用户的完成度/活跃度用于评估“证据质量”；目标用户的完成度/活跃度用于评估“个体适配风险”。
 
-`evaluate_predict_training_tasks.py` 评估的是 `base_date` 当天真实训练任务与预测任务集合的命中情况；`patient_ids_file` 可选，不传时会通过 Neo4j 查询全量 Patient ID。`--active-on-base-date` 会在不传 `patient_ids_file` 时只读取 `base_date` 当天有训练记录的用户，适合减少 `actual_game_ids` 为空的不可评估样本。`--limit` 可用于小样本冒烟。
+`evaluate_predict_training_tasks.py` 评估的是 `base_date` 当天真实训练任务与预测任务集合的命中情况。不传 `--patient-id` 时，脚本会在 `--patient-list-dir` 下查找或生成 `base_date` 当天有训练记录的患者列表；`--patient-id` 可用于只评估单个患者，`--limit` 可用于小样本冒烟。
 
 评估脚本默认会输出两个文件：
 
@@ -530,13 +553,12 @@ stage: "coarse_10_users"
 
 base:
   base_date: "2023-10-15"
-  window_days: 14
-  task_top_k: 7
   use_llm: true
-  skip_path_build: true
   limit: 10
 
 baseline_overrides:
+  query.patient_path.window_days: 14
+  query.training_task_prediction.task_top_k: 7
   query.candidate_ranking.disease_course_window_days: 14
   query.candidate_ranking.total_score_match_top_k: 1
 
@@ -556,6 +578,14 @@ settings.yaml + baseline_overrides + 当前 experiment.overrides
 ```
 
 如果 `experiment.overrides` 和 `baseline_overrides` 有相同参数，以 `experiment.overrides` 为准。
+
+`base.evaluation_script` 控制每组实验调用哪个评估入口：
+
+| 取值 | 调用脚本 | 适用场景 |
+| --- | --- | --- |
+| `evaluate_predict_training_tasks` 或不填 | `scripts/evaluate_predict_training_tasks.py` | 已存在患者 ID 的 patient path 评估 |
+| `direct_entity_profiles` | `scripts/evaluate_direct_entity_profiles.py --prediction-mode direct_entity` | 非患者 direct entity profile 评估 |
+| `unified_prediction` | `scripts/evaluate_direct_entity_profiles.py --prediction-mode unified` | 先判断患者是否存在，再自动路由的统一评估 |
 
 执行 10 用户粗筛：
 
@@ -600,15 +630,15 @@ grid_summary.json
 
 如果某组实验目录下已经存在 `predict_training_tasks_summary.json`，默认会跳过；需要强制重跑时加 `--force`。
 
-回写推荐基准参数时使用：
+`run_evaluation_grid.py` 默认会在完成排行榜后回写 `promoted_baseline_overrides` 和 `promoted_candidate_overrides`；如只想跑实验、不改实验 YAML，可使用：
 
 ```bash
 python scripts/run_evaluation_grid.py \
   --experiment-config config/experiments/evaluation_grid_coarse_10_users.yaml \
-  --write-promoted-baseline
+  --no-write-promoted-baseline
 ```
 
-该命令会把 leaderboard 第一名写入当前 `--experiment-config` 指定的 YAML 文件的 `promoted_baseline_overrides`，但不会修改正在生效的 `baseline_overrides`。如果文件中已经存在 `promoted_baseline_overrides`，旧块会被注释保留，新块写在后面。确认后可人工将 `promoted_baseline_overrides.overrides` 提升到 `baseline_overrides`。
+默认回写时，脚本会把 leaderboard 第一名写入当前 `--experiment-config` 指定的 YAML 文件的 `promoted_baseline_overrides`，并写入若干 `promoted_candidate_overrides`，但不会修改正在生效的 `baseline_overrides`。如果文件中已经存在推荐块，旧块会被注释保留，新块写在后面。确认后可人工将 `promoted_baseline_overrides.overrides` 提升到 `baseline_overrides`。
 
 ## 特定模式路径主流程
 
