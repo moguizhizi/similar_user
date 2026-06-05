@@ -124,6 +124,24 @@ class TrainingTaskScoreValidationTest(unittest.TestCase):
             self.assertEqual(result["csv_avg_score"], 60.0)
             self.assertEqual(result["score_delta"], 5.0)
             self.assertEqual(result["kg_better_than_csv_avg_count"], 1)
+            self.assertEqual(
+                result["kg_score_exchange"]["request_payload"]["tt_list"],
+                ["299", "306"],
+            )
+            self.assertEqual(
+                result["csv_score_exchange"]["request_payload"]["tt_list"],
+                ["306", "686"],
+            )
+            self.assertEqual(
+                result["kg_score_exchange"]["response_payload"],
+                {"score": [60.0, 70.0]},
+            )
+            self.assertEqual(
+                result["csv_score_exchange"]["response_payload"],
+                {"score": [70.0, 50.0]},
+            )
+            self.assertIn("curl -X POST", result["kg_score_exchange"]["request_curl"])
+            self.assertIn("curl -X POST", result["csv_score_exchange"]["request_curl"])
 
     def test_build_validation_skips_missing_csv_record(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -177,13 +195,40 @@ class _FakeScoreClient:
         *,
         ai_params: dict[str, object],
     ) -> list[dict[str, object]]:
-        return [
+        return self.score_tasks_with_exchange(
+            task_ids,
+            ai_params=ai_params,
+        )["scored_tasks"]
+
+    def score_tasks_with_exchange(
+        self,
+        task_ids: list[str],
+        *,
+        ai_params: dict[str, object],
+    ) -> dict[str, object]:
+        scored_tasks = [
             {
                 "task_id": task_id,
                 "score": self.scores_by_task_id[task_id],
             }
             for task_id in task_ids
         ]
+        return {
+            "request_sent": bool(task_ids),
+            "request_payload": {
+                "tt_list": task_ids,
+                "pre_score_ba": ai_params.get("pre_score_ba", ai_params.get("ba")),
+                "sex": ai_params.get("sex"),
+                "education": ai_params.get("education"),
+                "age": ai_params.get("age"),
+                "sicksName": ai_params.get("sicksName") or [],
+            },
+            "request_curl": "curl -X POST http://score.test/training_task_score",
+            "response_payload": {
+                "score": [item["score"] for item in scored_tasks],
+            },
+            "scored_tasks": scored_tasks,
+        }
 
 
 if __name__ == "__main__":

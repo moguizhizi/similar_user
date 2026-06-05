@@ -35,6 +35,11 @@ class UserCacheSettingsTest(unittest.TestCase):
                         "  raw_path_build_retry_sleep_seconds: 1.5",
                         "  cleanup_max_age_days: 21",
                         "  keep_latest_per_source: 3",
+                        "  cleanup_background_enabled: true",
+                        "  cleanup_run_hour: 1",
+                        "  cleanup_run_minute: 0",
+                        '  cleanup_timezone: "Asia/Shanghai"',
+                        f'  cleanup_lock_path: "{Path(temp_dir) / "cleanup.lock"}"',
                     ]
                 ),
                 encoding="utf-8",
@@ -56,6 +61,14 @@ class UserCacheSettingsTest(unittest.TestCase):
             self.assertEqual(settings.cleanup_max_age_days, 21)
             self.assertEqual(settings.keep_latest_per_source, 3)
             self.assertEqual(settings.keep_latest_per_user, 3)
+            self.assertTrue(settings.cleanup_background_enabled)
+            self.assertEqual(settings.cleanup_run_hour, 1)
+            self.assertEqual(settings.cleanup_run_minute, 0)
+            self.assertEqual(settings.cleanup_timezone, "Asia/Shanghai")
+            self.assertEqual(
+                settings.cleanup_lock_path,
+                str(Path(temp_dir) / "cleanup.lock"),
+            )
 
     def test_load_user_cache_settings_rejects_invalid_topk_valid_days(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
