@@ -185,6 +185,61 @@ query:
     candidate_top_k: 10
 ```
 
+### 训练任务预测兜底流程
+
+训练任务预测会优先走正常候选链路：患者 path 先生成 topK 相似用户并汇总候选训练任务，非患者 direct entity path 先用疾病、症状、未知实体和画像字段生成 direct entity topK 候选，再构造候选训练任务。正常链路可使用 LLM，也可在 `use_llm=false` 时直接按候选任务排序输出。
+
+兜底主要处理“候选或推荐证据已经进入预测流程，但无法产出可靠任务”的情况，常见触发原因包括：
+
+- `no_candidates`：患者 path 没有可用相似用户。
+- `no_candidate_training_tasks`：有候选用户，但候选训练任务为空。
+- `no_direct_entity_candidates`：非患者 direct entity path 的 topK 候选为空。
+- `llm_error` 或 LLM 输出无法解析。
+- LLM/排序结果为空。
+
+非患者 direct entity path 中，如果 topK 候选为空，会记录类似日志：
+
+```text
+Completed fallback task prediction: patient_id=..., fallback_used=True, fallback_reason=no_direct_entity_candidates, fallback_level=profile_matched_tasks, predicted_task_count=7
+```
+
+兜底层级按证据强弱依次放宽：
+
+- `candidate_training_tasks`：候选任务已经构造出来，但 LLM 或推荐排序失败时，直接对候选任务做确定性排序。
+- `profile_matched_tasks`：按年龄、性别、学历等画像条件查询相近用户历史专属任务。
+- `relaxed_age_gender_tasks`：放宽学历，仅保留年龄窗口和性别。
+- `relaxed_age_education_tasks`：放宽性别，仅保留年龄窗口和学历。
+- `relaxed_age_tasks`：继续放宽到更大的年龄窗口。
+- `global_popular_tasks`：使用全局历史中更常见的专属任务。
+- `deterministic_random_tasks`：仍然没有足够证据时，按 `patient_id`、`base_date` 和任务稳定哈希排序，给出可复现的兜底任务。
+
+预测结果和评估明细里可以通过以下字段判断是否走了兜底：
+
+```json
+{
+  "fallback_used": true,
+  "fallback_reason": "no_direct_entity_candidates",
+  "fallback_source": "profile_matched_tasks",
+  "fallback_candidates_count": 7,
+  "candidate_source": {
+    "source": "task_prediction_fallback",
+    "fallback_level": "profile_matched_tasks",
+    "levels_used": ["profile_matched_tasks"]
+  }
+}
+```
+
+兜底不覆盖输入字段校验失败。比如非患者 direct entity path 需要可用的 `age`、`education`、`gender` 以及至少一个疾病、症状或未知实体；如果缺少学历，会在进入候选查询前失败：
+
+```text
+Non-patient direct entity prediction requires: education
+prediction_failure_stage=input
+prediction_failure_reason=missing_education
+fallback_used=False
+```
+
+这类问题应通过清洗输入 profiles、补齐画像字段，或显式扩展输入缺失场景的兜底策略来处理。
+
 ### 缓存 key 与配置变更关系
 
 离线路径、路径评分和候选用户结果分别用不同 key 隔离缓存。写实验 YAML 时，可以先判断本次修改影响哪一层 key：未命中或过期时，pipeline 会按 raw paths -> scored paths -> topK candidates 的顺序自动补算。
