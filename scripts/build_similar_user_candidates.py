@@ -75,6 +75,10 @@ from similar_user.utils.user_cache_paths import (
 
 LOGGER = get_logger(__name__)
 DEFAULT_CANDIDATES_DIR = Path("data/similar_user_candidates")
+# direct entity topK 聚合不使用 disease_course_window_days。历史缓存已经以
+# window_days=14 写入 user_cache_entries，因此固定该缓存键维度以兼容旧缓存，
+# 并避免 candidate_ranking.disease_course_window_days 变化导致 direct topK 误失效。
+DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS = 14
 DIRECT_ENTITY_PATTERNS = (
     DISEASE_TASKSET_PATIENT,
     SYMPTOM_TASKSET_PATIENT,
@@ -999,7 +1003,12 @@ def build_direct_entity_candidate_cache_context(
     scored_result: dict[str, Any],
     disease_course_window_days: int | None,
 ) -> dict[str, Any]:
-    """Build cache metadata for direct-entity similar-user candidate results."""
+    """Build cache metadata for direct-entity similar-user candidate results.
+
+    direct entity topK 聚合不使用 disease_course_window_days。这里保留参数是
+    为了兼容调用方签名，但 direct entity 的 candidate cache key 固定使用
+    DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS，避免无关配置变化导致缓存失效。
+    """
     scored_cache_context = scored_result.get("cache_context")
     if not isinstance(scored_cache_context, dict):
         raise ValueError("direct entity candidate cache requires score cache_context.")
@@ -1022,7 +1031,7 @@ def build_direct_entity_candidate_cache_context(
     candidate_context = build_candidate_cache_context(
         config_path,
         scored_key=direct_scored_key,
-        disease_course_window_days=disease_course_window_days,
+        disease_course_window_days=DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS,
     )
     candidate_context["direct_entity_scored_source_hash"] = scored_source_hash
     candidate_context["direct_entity_scored_context"] = {
@@ -1030,6 +1039,9 @@ def build_direct_entity_candidate_cache_context(
         "pattern_source_keys": scored_cache_context.get("pattern_source_keys"),
         "source_entries": scored_cache_context.get("source_entries"),
     }
+    candidate_context["direct_entity_topk_cache_window_days"] = (
+        DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS
+    )
     return candidate_context
 
 
@@ -1094,7 +1106,6 @@ def build_direct_entity_topk_candidate_user_cache_context(
     settings = load_user_cache_settings(config_path)
     if not settings.enabled:
         return {"enabled": False, "cache_type": "topk_candidates"}
-    query_settings = load_query_settings(config_path)
     normalized_source_id = _normalize_required_string(source_id, "source_id")
     normalized_base_date = _normalize_required_string(base_date, "base_date")
     candidate_key = _normalize_required_string(
@@ -1112,11 +1123,6 @@ def build_direct_entity_topk_candidate_user_cache_context(
             "cache_key_without_base_date": _strip_base_date_from_key(candidate_key),
         }
     )
-    window_days = query_settings.candidate_ranking.disease_course_window_days
-    if window_days is None:
-        raise ValueError(
-            "candidate_ranking disease_course_window_days is required for direct entity topK candidate cache."
-        )
     return {
         "enabled": settings.enabled,
         "cache_type": "topk_candidates",
@@ -1125,7 +1131,9 @@ def build_direct_entity_topk_candidate_user_cache_context(
         "source_type": "direct_entity_profile",
         "source_id": normalized_source_id,
         "query_family": "direct_entity",
-        "window_days": window_days,
+        "window_days": DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS,
+        "window_days_source": "direct_entity_topk_cache_window_constant",
+        "window_days_semantics": "cache_key_compatibility_only",
         "config_hash": config_hash,
         "cached_base_date": normalized_base_date,
         "valid_days": settings.topk_candidates_valid_days,

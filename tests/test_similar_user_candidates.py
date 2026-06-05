@@ -2015,7 +2015,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             cache_context = build_direct_entity_candidate_cache_context(
                 config_path,
                 scored_result=scored_result,
-                disease_course_window_days=14,
+                disease_course_window_days=21,
             )
             user_cache_context = build_direct_entity_topk_candidate_user_cache_context(
                 config_path,
@@ -2071,6 +2071,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         assert found is not None
         self.assertEqual(found.data_path, str(output_paths["detail"]))
         self.assertEqual(found.source_type, "direct_entity_profile")
+        self.assertEqual(found.window_days, 14)
+        self.assertEqual(cache_context["candidate_config"]["disease_course_window_days"], 14)
+        self.assertEqual(cache_context["direct_entity_topk_cache_window_days"], 14)
+        self.assertEqual(user_cache_context["window_days"], 14)
+        self.assertEqual(
+            user_cache_context["window_days_source"],
+            "direct_entity_topk_cache_window_constant",
+        )
         self.assertIn(
             str(root / "user_cache" / "files" / "patient" / "20" / "201231885555"),
             str(output_paths["detail"]),
