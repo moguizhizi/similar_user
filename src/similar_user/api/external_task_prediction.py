@@ -28,6 +28,7 @@ class UnifiedPredictionInput:
     disease_names: list[str] = field(default_factory=list)
     symptom_ids: list[str] = field(default_factory=list)
     unknown_ids: list[str] = field(default_factory=list)
+    request_unlock_train: dict[str, int | float] = field(default_factory=dict)
     query_family: str | None = None
     task_top_k: int = DEFAULT_TASK_TOP_K
     use_llm: bool = True
@@ -71,6 +72,7 @@ def build_unified_prediction_input(
         disease_names=_resolve_disease_names(payload, behavior),
         symptom_ids=_normalize_text_list(payload.get("symptom_ids")),
         unknown_ids=_normalize_text_list(payload.get("unknown_ids")),
+        request_unlock_train=_normalize_unlock_train(payload.get("unlock_train")),
         query_family=_normalize_optional_text(payload.get("query_family")),
         task_top_k=task_top_k,
         use_llm=_normalize_bool(payload.get("use_llm", True), field_name="use_llm"),
@@ -186,6 +188,21 @@ def _normalize_text_list(value: object) -> list[str]:
             continue
         normalized.append(text)
         seen.add(text)
+    return normalized
+
+
+def _normalize_unlock_train(value: object) -> dict[str, int | float]:
+    if not isinstance(value, dict):
+        return {}
+
+    normalized: dict[str, int | float] = {}
+    for raw_key, raw_value in value.items():
+        key = _normalize_optional_text(raw_key)
+        if key is None:
+            continue
+        if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+            continue
+        normalized[key] = raw_value
     return normalized
 
 

@@ -124,6 +124,7 @@ def predict_training_tasks_unified(
     disease_names: list[str] | None = None,
     symptom_ids: list[str] | None = None,
     unknown_ids: list[str] | None = None,
+    request_unlock_train: dict[str, int | float] | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     include_prompt: bool = False,
@@ -149,6 +150,7 @@ def predict_training_tasks_unified(
             skip_path_scoring=skip_path_scoring,
             query_family=query_family,
             task_top_k=task_top_k,
+            request_unlock_train=request_unlock_train,
             use_llm=use_llm,
             include_prompt=include_prompt,
         )
@@ -181,6 +183,7 @@ def predict_training_tasks_unified(
         disease_names=disease_names or [],
         symptom_ids=symptom_ids or [],
         unknown_ids=unknown_ids or [],
+        request_unlock_train=request_unlock_train,
         config_path=resolved_config_path,
         use_llm=use_llm,
         include_prompt=include_prompt,

@@ -105,6 +105,7 @@ def run_end_to_end_training_task_prediction(
     skip_path_scoring: bool = False,
     query_family: str | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
+    request_unlock_train: dict[str, int | float] | None = None,
     use_llm: bool = True,
     include_prompt: bool = False,
 ) -> dict[str, Any]:
@@ -123,6 +124,7 @@ def run_end_to_end_training_task_prediction(
         base_date=base_date,
         config_path=config_path,
         task_top_k=task_top_k,
+        request_unlock_train=request_unlock_train,
         use_llm=use_llm,
         include_prompt=include_prompt,
     )
@@ -139,6 +141,7 @@ def run_training_task_prediction(
     base_date: str,
     config_path: str | Path = DEFAULT_CONFIG_PATH,
     task_top_k: int = DEFAULT_TASK_TOP_K,
+    request_unlock_train: dict[str, int | float] | None = None,
     use_llm: bool = True,
     include_prompt: bool = False,
 ) -> dict[str, Any]:
@@ -238,6 +241,7 @@ def run_training_task_prediction(
             prompt_template_name=prompt_template_name,
             profile_candidate_training_window_days=profile_candidate_training_window_days,
             unlock_train_candidate_tasks_enabled=unlock_train_candidate_tasks_enabled,
+            request_unlock_train=request_unlock_train,
             algorithm_request_results_csv=algorithm_request_results_csv,
             similar_user_game_counts_weighting_enabled=similar_user_game_counts_weighting_enabled,
             similar_user_game_counts_weighted_sort_enabled=similar_user_game_counts_weighted_sort_enabled,

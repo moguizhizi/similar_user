@@ -191,6 +191,7 @@ def predict_training_tasks_from_direct_entity(
     use_llm: bool = True,
     include_prompt: bool = False,
     task_top_k: int | None = None,
+    request_unlock_train: dict[str, int | float] | None = None,
 ) -> dict[str, Any]:
     """Run the direct-entity-only task prediction flow."""
     normalized_patient_id = _normalize_required_text(patient_id, "patient_id")
@@ -530,6 +531,7 @@ def predict_training_tasks_from_direct_entity(
             unlock_train_candidate_tasks_enabled=(
                 query_settings.training_task_prediction.unlock_train_candidate_tasks_enabled
             ),
+            request_unlock_train=request_unlock_train,
             algorithm_request_results_csv=(
                 query_settings.training_task_evaluation.algorithm_request_results_csv
             ),

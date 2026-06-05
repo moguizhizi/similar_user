@@ -216,6 +216,7 @@ class TrainingTaskPredictionService:
     prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
     profile_candidate_training_window_days: int | None = None
     unlock_train_candidate_tasks_enabled: bool = False
+    request_unlock_train: dict[str, int | float] | None = None
     algorithm_request_results_csv: str | None = None
     similar_user_game_counts_weighting_enabled: bool = False
     similar_user_game_counts_weighted_sort_enabled: bool = False
@@ -496,9 +497,11 @@ class TrainingTaskPredictionService:
         return result
 
     def _build_unlock_train_candidate_tasks(self, patient_id: str) -> list[dict[str, Any]]:
-        """Build candidate tasks from algorithm CSV unlock_train keys when enabled."""
+        """Build candidate tasks from request unlock_train or CSV when enabled."""
         if not self.unlock_train_candidate_tasks_enabled:
             return []
+        if self.request_unlock_train is not None:
+            return build_candidate_tasks_from_unlock_train(self.request_unlock_train)
         csv_path = (
             self.algorithm_request_results_csv.strip()
             if isinstance(self.algorithm_request_results_csv, str)
@@ -1082,6 +1085,13 @@ def load_unlock_train_candidate_tasks(
         _normalize_csv_patient_id(patient_id),
         {},
     )
+    return build_candidate_tasks_from_unlock_train(unlock_train)
+
+
+def build_candidate_tasks_from_unlock_train(
+    unlock_train: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build candidate task rows from unlock_train keys."""
     tasks: list[dict[str, Any]] = []
     seen_game_ids: set[str] = set()
     for raw_task_id in unlock_train:

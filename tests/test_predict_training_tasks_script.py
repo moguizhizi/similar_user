@@ -85,6 +85,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             base_date="2022-05-22",
             config_path="config/settings.yaml",
             task_top_k=3,
+            request_unlock_train=None,
             use_llm=False,
             include_prompt=True,
         )

@@ -124,6 +124,7 @@ def predict_training_task(
                 disease_names=prediction_input.disease_names,
                 symptom_ids=prediction_input.symptom_ids,
                 unknown_ids=prediction_input.unknown_ids,
+                request_unlock_train=prediction_input.request_unlock_train,
                 task_top_k=prediction_input.task_top_k,
                 use_llm=prediction_input.use_llm,
                 include_prompt=prediction_input.include_prompt,

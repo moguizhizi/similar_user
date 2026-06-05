@@ -159,6 +159,41 @@ class TaskPredictionTest(unittest.TestCase):
             ],
         )
 
+    def test_request_unlock_train_is_used_when_enabled(self) -> None:
+        service = TrainingTaskPredictionService(
+            user_service=Mock(),
+            unlock_train_candidate_tasks_enabled=True,
+            request_unlock_train={"300": 60, "301": 0},
+            algorithm_request_results_csv="/path/that/should/not/be/read.csv",
+        )
+
+        self.assertEqual(
+            service._build_unlock_train_candidate_tasks("40"),
+            [
+                {"game_id": "300", "game_name": None},
+                {"game_id": "301", "game_name": None},
+            ],
+        )
+
+    def test_request_unlock_train_is_ignored_when_disabled(self) -> None:
+        service = TrainingTaskPredictionService(
+            user_service=Mock(),
+            unlock_train_candidate_tasks_enabled=False,
+            request_unlock_train={"300": 60},
+        )
+
+        self.assertEqual(service._build_unlock_train_candidate_tasks("40"), [])
+
+    def test_empty_request_unlock_train_does_not_fall_back_to_csv(self) -> None:
+        service = TrainingTaskPredictionService(
+            user_service=Mock(),
+            unlock_train_candidate_tasks_enabled=True,
+            request_unlock_train={},
+            algorithm_request_results_csv="/path/that/should/not/be/read.csv",
+        )
+
+        self.assertEqual(service._build_unlock_train_candidate_tasks("40"), [])
+
     def test_build_task_prediction_prompt_v2_includes_task_evidence(self) -> None:
         prompt = build_task_prediction_prompt(
             patient_id="40",
