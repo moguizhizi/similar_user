@@ -197,5 +197,24 @@ experiments:
       query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
       query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
 
+  - name: dual_qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_no_validation_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_evaluation.validation_enabled: false
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
 
-  
+  - name: dual_qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_no_validation_unified_mixed_workers_6
+    base_overrides:
+      workers: 6
+    overrides:
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_evaluation.validation_enabled: false
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
