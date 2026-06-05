@@ -178,9 +178,9 @@ def predict_training_tasks_from_direct_entity(
     *,
     patient_id: str,
     base_date: str,
-    age: int | str,
-    education: str,
-    gender: str,
+    age: int | str | None,
+    education: str | None,
+    gender: str | None,
     disease_ids: list[str] | None = None,
     disease_names: list[str] | None = None,
     symptom_ids: list[str] | None = None,
@@ -194,10 +194,14 @@ def predict_training_tasks_from_direct_entity(
 ) -> dict[str, Any]:
     """Run the direct-entity-only task prediction flow."""
     normalized_patient_id = _normalize_required_text(patient_id, "patient_id")
-    normalized_gender = normalize_direct_entity_gender(gender)
-    normalized_education = normalize_direct_entity_education(education)
     resolved_config_path = Path(config_path)
     query_settings = load_query_settings(resolved_config_path)
+    profile_missing_fields = _missing_direct_entity_profile_fields(
+        age=age,
+        education=education,
+        gender=gender,
+    )
+    resolved_task_top_k = task_top_k or query_settings.training_task_prediction.task_top_k
     resolved_disease_ids = _dedupe_texts(disease_ids or [])
     resolved_symptom_ids = _dedupe_texts(symptom_ids or [])
     resolved_unknown_ids = _dedupe_texts(unknown_ids or [])
@@ -206,6 +210,36 @@ def predict_training_tasks_from_direct_entity(
         "resolved": [],
         "unresolved": [],
     }
+    if profile_missing_fields:
+        fallback_reason = _missing_profile_fallback_reason(profile_missing_fields)
+        normalized_gender = _normalize_optional_direct_entity_gender(gender)
+        normalized_education = _normalize_optional_direct_entity_education(education)
+        LOGGER.info(
+            "Skipping direct entity path scoring because profile fields are missing: "
+            "patient_id=%s, missing_fields=%s",
+            normalized_patient_id,
+            profile_missing_fields,
+        )
+        return _predict_direct_entity_fallback_result(
+            patient_id=normalized_patient_id,
+            base_date=base_date,
+            config_path=resolved_config_path,
+            age=age,
+            education=normalized_education,
+            gender=normalized_gender,
+            disease_names=resolved_disease_names,
+            disease_ids=resolved_disease_ids,
+            symptom_ids=resolved_symptom_ids,
+            unknown_ids=resolved_unknown_ids,
+            entity_name_resolution=entity_name_resolution,
+            task_top_k=resolved_task_top_k,
+            score_top_k=query_settings.score_pattern_paths.top_k,
+            candidate_top_k=query_settings.candidate_ranking.candidate_top_k,
+            reason=fallback_reason,
+        )
+
+    normalized_gender = normalize_direct_entity_gender(gender)
+    normalized_education = normalize_direct_entity_education(education)
     if resolved_disease_names:
         with Neo4jClient.from_config(resolved_config_path) as client:
             repository = KgRepository(
@@ -225,7 +259,6 @@ def predict_training_tasks_from_direct_entity(
         resolved_unknown_ids = _dedupe_texts(
             resolved_unknown_ids + _ids_by_type(entity_name_resolution, "unknown")
         )
-    resolved_task_top_k = task_top_k or query_settings.training_task_prediction.task_top_k
     candidate_top_k = query_settings.candidate_ranking.candidate_top_k
     candidate_window_days = query_settings.candidate_ranking.disease_course_window_days
     if candidate_window_days is None:
@@ -587,6 +620,126 @@ def summarize_prediction_result(
     return result
 
 
+def _predict_direct_entity_fallback_result(
+    *,
+    patient_id: str,
+    base_date: str,
+    config_path: Path,
+    age: object,
+    education: str | None,
+    gender: str | None,
+    disease_names: list[str],
+    disease_ids: list[str],
+    symptom_ids: list[str],
+    unknown_ids: list[str],
+    entity_name_resolution: dict[str, list[dict[str, Any]]],
+    task_top_k: int,
+    score_top_k: int,
+    candidate_top_k: int,
+    reason: str,
+) -> dict[str, Any]:
+    direct_score_result = {
+        "should_score": False,
+        "reason": reason,
+        "path_count": 0,
+        "scored_path_count": 0,
+        "top_k": score_top_k,
+        "missing_sources": [],
+    }
+    candidate_result = {
+        "source_id": patient_id,
+        "source_parameter": "manual_profile",
+        "candidate_top_k": candidate_top_k,
+        "path_count": 0,
+        "scored_path_count": 0,
+        "candidate_count": 0,
+        "pre_score_candidate_count": 0,
+        "ranking": "direct_entity_best_score_avg_score_match_count",
+        "candidates": [],
+    }
+
+    with Neo4jClient.from_config(config_path) as client:
+        user_service = UserService(
+            kg_repository=KgRepository(
+                client=client,
+                config_path=config_path,
+            )
+        )
+        prediction_result = DirectEntityFallbackPredictionService(
+            user_service=user_service,
+        ).predict(
+            patient_id=patient_id,
+            base_date=base_date,
+            age=age,
+            education=education,
+            gender=gender,
+            task_top_k=task_top_k,
+            reason=reason,
+        )
+
+    LOGGER.info(
+        "Completed fallback task prediction: patient_id=%s, "
+        "prediction_status=%s, fallback_used=%s, fallback_reason=%s, "
+        "prediction_failure_stage=%s, prediction_failure_reason=%s, "
+        "fallback_level=%s, predicted_task_count=%s",
+        patient_id,
+        prediction_result.get("prediction_status"),
+        prediction_result.get("fallback_used"),
+        prediction_result.get("fallback_reason"),
+        prediction_result.get("prediction_failure_stage"),
+        prediction_result.get("prediction_failure_reason"),
+        prediction_result.get("candidate_source", {}).get("fallback_level"),
+        len(prediction_result.get("predicted_training_tasks") or []),
+    )
+    return {
+        "patient_id": patient_id,
+        "source_parameter": "manual_profile",
+        "base_date": base_date,
+        "config_path": str(config_path),
+        "entity_name_resolution": entity_name_resolution,
+        "target_entities": {
+            "disease_ids": disease_ids,
+            "symptom_ids": symptom_ids,
+            "unknown_ids": unknown_ids,
+            "disease_names": disease_names,
+            "entity_name_resolution": entity_name_resolution,
+        },
+        "direct_entity_scoring": {
+            "should_score": direct_score_result.get("should_score"),
+            "reason": direct_score_result.get("reason"),
+            "path_count": direct_score_result.get("path_count"),
+            "scored_path_count": direct_score_result.get("scored_path_count"),
+            "top_k": direct_score_result.get("top_k"),
+            "output_paths": [],
+        },
+        "direct_entity_candidate_result": candidate_result,
+        "training_task_prediction": prediction_result,
+    }
+
+
+def _missing_direct_entity_profile_fields(
+    *,
+    age: object,
+    education: object,
+    gender: object,
+) -> list[str]:
+    return [
+        name
+        for name, value in (
+            ("age", age),
+            ("education", education),
+            ("gender", gender),
+        )
+        if _normalize_optional_text(value) is None
+    ]
+
+
+def _missing_profile_fallback_reason(missing_fields: list[str]) -> str:
+    if len(missing_fields) == 1:
+        return f"missing_{missing_fields[0]}"
+    return "missing_" + "_".join(missing_fields)
+
+
 def normalize_direct_entity_gender(value: object) -> str:
     """Normalize direct-entity CLI gender input into KG-facing text."""
     return normalize_algorithm_request_gender(value)
@@ -595,6 +748,18 @@ def normalize_direct_entity_gender(value: object) -> str:
 def normalize_direct_entity_education(value: object) -> str:
     """Normalize direct-entity CLI education input into KG-facing text."""
     return normalize_algorithm_request_education(value)
+
+
+def _normalize_optional_direct_entity_gender(value: object) -> str | None:
+    if _normalize_optional_text(value) is None:
+        return None
+    return normalize_direct_entity_gender(value)
+
+
+def _normalize_optional_direct_entity_education(value: object) -> str | None:
+    if _normalize_optional_text(value) is None:
+        return None
+    return normalize_direct_entity_education(value)
 
 
 def _score_direct_entity_paths_with_auto_refresh(

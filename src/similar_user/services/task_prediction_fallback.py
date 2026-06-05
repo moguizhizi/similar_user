@@ -414,7 +414,7 @@ def _extract_game(row: dict[str, Any]) -> dict[str, Any]:
 
 def _fallback_failure_stage(reason: str) -> str:
     normalized = str(reason or "").strip().lower()
-    if normalized in {"missing_entity_input"}:
+    if normalized in {"missing_entity_input"} or normalized.startswith("missing_"):
         return "input"
     if normalized in {"no_resolved_entity_names"}:
         return "entity_resolution"

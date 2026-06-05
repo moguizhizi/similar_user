@@ -124,6 +124,62 @@ class PredictTrainingTasksFromDirectEntityTest(unittest.TestCase):
             [" 注意缺陷多动障碍 ", "未知疾病", "注意缺陷多动障碍"]
         )
 
+    @patch("scripts.predict_training_tasks_from_direct_entity.DirectEntityFallbackPredictionService")
+    @patch("scripts.predict_training_tasks_from_direct_entity.UserService")
+    @patch("scripts.predict_training_tasks_from_direct_entity.KgRepository")
+    @patch("scripts.predict_training_tasks_from_direct_entity.Neo4jClient")
+    @patch("scripts.predict_training_tasks_from_direct_entity.resolve_direct_entity_names")
+    @patch("scripts.predict_training_tasks_from_direct_entity._score_direct_entity_paths_with_auto_refresh")
+    def test_predict_falls_back_when_profile_field_is_missing(
+        self,
+        mock_score_paths: Mock,
+        mock_resolve_names: Mock,
+        mock_neo4j_client: Mock,
+        mock_repository: Mock,
+        mock_user_service: Mock,
+        mock_fallback_service_class: Mock,
+    ) -> None:
+        mock_client_context = Mock()
+        mock_client_context.__enter__ = Mock(return_value=Mock())
+        mock_client_context.__exit__ = Mock(return_value=False)
+        mock_neo4j_client.from_config.return_value = mock_client_context
+        mock_fallback_service = Mock()
+        mock_fallback_service.predict.return_value = {
+            "prediction_status": "success",
+            "fallback_used": True,
+            "fallback_reason": "missing_education",
+            "fallback_source": "profile_matched_tasks",
+            "prediction_failure_stage": "input",
+            "prediction_failure_reason": "missing_education",
+            "candidate_source": {"fallback_level": "profile_matched_tasks"},
+            "predicted_training_tasks": [{"game_id": "433"}],
+        }
+        mock_fallback_service_class.return_value = mock_fallback_service
+
+        result = predict_training_tasks_from_direct_entity(
+            patient_id="non_patient_1",
+            base_date="2026-05-25",
+            age=66,
+            education=None,
+            gender="男",
+            disease_names=["认知-其他"],
+            config_path="config/settings.yaml",
+            use_llm=False,
+        )
+
+        self.assertEqual(
+            result["training_task_prediction"]["fallback_reason"],
+            "missing_education",
+        )
+        self.assertEqual(result["direct_entity_scoring"]["reason"], "missing_education")
+        self.assertFalse(result["direct_entity_scoring"]["should_score"])
+        mock_resolve_names.assert_not_called()
+        mock_score_paths.assert_not_called()
+        mock_repository.assert_called_once()
+        mock_user_service.assert_called_once()
+        mock_fallback_service.predict.assert_called_once()
+        self.assertIsNone(mock_fallback_service.predict.call_args.kwargs["education"])
+
     @patch("scripts.predict_training_tasks_from_direct_entity.TrainingTaskPredictionService")
     @patch("scripts.predict_training_tasks_from_direct_entity.UserService")
     @patch("scripts.predict_training_tasks_from_direct_entity.KgRepository")

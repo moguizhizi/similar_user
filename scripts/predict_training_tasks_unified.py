@@ -255,20 +255,7 @@ def _validate_direct_entity_inputs(
     symptom_ids: list[str],
     unknown_ids: list[str],
 ) -> None:
-    missing_fields = [
-        name
-        for name, value in (
-            ("age", age),
-            ("education", education),
-            ("gender", gender),
-        )
-        if _normalize_optional_text(value) is None
-    ]
-    if missing_fields:
-        raise ValueError(
-            "Non-patient direct entity prediction requires: "
-            + ", ".join(missing_fields)
-        )
+    return None
 
 
 def _flatten(values: list[list[str]] | None) -> list[str]:

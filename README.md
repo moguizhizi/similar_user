@@ -216,6 +216,7 @@ query:
 
 - `no_candidates`：候选用户为空；患者 path 中通常表示没有可用相似用户。
 - `missing_entity_input`：非患者 direct entity path 只提供画像字段，没有疾病、症状、未知实体或疾病名称，此时跳过 direct entity path 评分，直接按画像兜底。
+- `missing_age` / `missing_education` / `missing_gender`：非患者 direct entity path 的核心画像字段缺失，此时跳过 direct entity path 评分，使用剩余画像字段、全局热门或稳定随机任务兜底。
 - `no_candidate_training_tasks`：有候选用户，但候选训练任务为空。
 - `no_direct_entity_candidates`：非患者 direct entity path 的 topK 候选为空。
 - `no_resolved_entity_names`：非患者 direct entity path 提供了疾病名称，但没有解析到可用 Disease/Symptom/Unknown 实体。
@@ -254,16 +255,15 @@ Completed fallback task prediction: patient_id=..., fallback_used=True, fallback
 }
 ```
 
-兜底不覆盖核心画像字段校验失败。非患者 direct entity path 可以只提供 `age`、`education`、`gender` 走画像兜底，但这三个字段本身仍然需要可用；如果缺少学历，会在进入候选查询前失败：
+非患者 direct entity path 如果缺少部分画像字段，会直接进入兜底，不再运行 direct entity path 评分。例如缺少学历时会记录：
 
 ```text
-Non-patient direct entity prediction requires: education
 prediction_failure_stage=input
 prediction_failure_reason=missing_education
-fallback_used=False
+fallback_used=True
 ```
 
-这类问题应通过清洗输入 profiles、补齐画像字段，或显式扩展输入缺失场景的兜底策略来处理。
+这类兜底会优先使用仍然可用的画像字段；如果画像证据不足，会继续降级到全局热门或稳定随机任务。
 
 ### 缓存 key 与配置变更关系
 
