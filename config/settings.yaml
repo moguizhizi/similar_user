@@ -61,7 +61,7 @@ query:
     similar_user_game_counts_weighted_sort_enabled: false
     fallback_enabled: true
   training_task_evaluation:
-    validation_enabled: true
+    validation_enabled: false
     validation_mode: "score"
     workers: 1
     score_validation_url: "http://172.21.133.142:5008/training_task_score"
