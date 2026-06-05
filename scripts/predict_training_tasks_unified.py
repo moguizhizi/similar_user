@@ -175,8 +175,8 @@ def predict_training_tasks_unified(
         patient_id=normalized_patient_id,
         base_date=base_date,
         age=age,
-        education=str(education),
-        gender=str(gender),
+        education=education,
+        gender=gender,
         disease_ids=disease_ids or [],
         disease_names=disease_names or [],
         symptom_ids=symptom_ids or [],
@@ -255,20 +255,7 @@ def _validate_direct_entity_inputs(
     symptom_ids: list[str],
     unknown_ids: list[str],
 ) -> None:
-    missing_fields = [
-        name
-        for name, value in (
-            ("age", age),
-            ("education", education),
-            ("gender", gender),
-        )
-        if _normalize_optional_text(value) is None
-    ]
-    if missing_fields:
-        raise ValueError(
-            "Non-patient direct entity prediction requires: "
-            + ", ".join(missing_fields)
-        )
+    return None
 
 
 def _flatten(values: list[list[str]] | None) -> list[str]:
@@ -304,6 +291,8 @@ def _normalize_optional_text(value: object) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
+    if text.lower() in {"none", "null"}:
+        return None
     return text or None
 
 
