@@ -16,6 +16,7 @@ SUPPORTED_USER_CACHE_TYPES = frozenset(
         "scored_paths",
         "scored_direct_entity_paths",
         "topk_candidates",
+        "profile_candidate_tasks",
     }
 )
 SQLITE_BUSY_TIMEOUT_SECONDS = 30.0

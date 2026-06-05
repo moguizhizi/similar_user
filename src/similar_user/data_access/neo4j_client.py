@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -54,6 +55,14 @@ class Neo4jClient:
             self.settings.uri,
             self.settings.database,
         )
+        if self.settings.log_connection_caller:
+            caller = _connection_caller()
+            LOGGER.info(
+                "Neo4j connection caller: caller=%s:%s:%s",
+                caller.filename,
+                caller.lineno,
+                caller.name,
+            )
 
     def close(self) -> None:
         """Close the underlying driver."""
@@ -108,3 +117,14 @@ class Neo4jClient:
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
         self.close()
+
+
+def _connection_caller() -> traceback.FrameSummary:
+    """Return the nearest stack frame outside this client module."""
+    current_file = Path(__file__).resolve()
+    stack = traceback.extract_stack()
+    for frame in reversed(stack[:-1]):
+        frame_path = Path(frame.filename).resolve()
+        if frame_path != current_file:
+            return frame
+    return stack[-2]

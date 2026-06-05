@@ -190,6 +190,9 @@ class PredictTrainingTasksFromDirectEntityTest(unittest.TestCase):
         mock_score_paths.assert_not_called()
         mock_repository.assert_called_once()
         mock_user_service.assert_called_once()
+        service_kwargs = mock_prediction_service_class.call_args.kwargs
+        self.assertIn("unlock_train_candidate_tasks_enabled", service_kwargs)
+        self.assertIn("algorithm_request_results_csv", service_kwargs)
         mock_prediction_service.predict_from_direct_entity_candidates.assert_called_once()
 
     @patch("scripts.predict_training_tasks_from_direct_entity.build_direct_entity_paths")

@@ -3,6 +3,7 @@ neo4j:
   username: "neo4j"
   password: "password"
   database: "neo4j"
+  log_connection_caller: false
 
 llm:
   base_url: "http://10.30.1.121:7999"
@@ -59,6 +60,7 @@ query:
     similar_user_game_counts_weighted_sort_enabled: false
     fallback_enabled: true
   training_task_evaluation:
+    validation_enabled: true
     validation_mode: "score"
     workers: 1
     score_validation_url: "http://172.21.133.142:5008/training_task_score"
@@ -95,6 +97,7 @@ user_cache:
   patient_scored_paths_valid_days: 14
   direct_scored_paths_valid_days: 60
   topk_candidates_valid_days: 7
+  profile_candidate_tasks_valid_days: 7
   refresh_candidate_base_date_on_hit: true
   raw_path_build_workers: 1
   raw_path_build_max_retries: 2

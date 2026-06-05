@@ -2,23 +2,39 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
 
-from config.settings import DEFAULT_CONFIG_PATH, load_query_settings
+from config.settings import (
+    DEFAULT_CONFIG_PATH,
+    load_query_settings,
+    load_user_cache_settings,
+)
 
 from ..domain.graph_schema import PathPattern
 from ..data_access.kg_repository import KgRepository, PatternQueryFamily
+from ..data_access.user_cache_index import UserCacheEntry, UserCacheIndexStore
 from ..data_access.pattern_registry import (
     PatternQueryMode,
     get_path_pattern_spec,
 )
 from .direct_path_provider import DirectPathProvider
 from ..utils.logger import get_logger
+from ..utils.user_cache_paths import files_root_from_sqlite_path, patient_cache_root
 
 
 LOGGER = get_logger(__name__)
+PROFILE_CANDIDATE_TASKS_CACHE_TYPE = "profile_candidate_tasks"
+PROFILE_CANDIDATE_TASKS_QUERY_NAME = (
+    "patient_profile_gender_education_age_windowed_exclusive_task_game"
+)
+PROFILE_CANDIDATE_TASKS_QUERY_NAME_UNWINDOWED = (
+    "patient_profile_gender_education_age_exclusive_task_game"
+)
 
 
 @dataclass
@@ -138,18 +154,210 @@ class UserService:
         profile_candidate_training_window_days: int | None = None,
     ) -> list[dict[str, object]]:
         """Return exclusive-task games matching patient profile filters."""
+        cached_rows = self._load_patient_profile_candidate_training_games_cache(
+            patient_id=patient_id,
+            base_date=base_date,
+            age_window=age_window,
+            profile_candidate_training_window_days=profile_candidate_training_window_days,
+        )
+        if cached_rows is not None:
+            return cached_rows
+
         if profile_candidate_training_window_days is not None:
-            return self.kg_repository.get_patient_profile_gender_education_age_windowed_exclusive_task_games(
+            rows = self.kg_repository.get_patient_profile_gender_education_age_windowed_exclusive_task_games(
                 patient_id,
                 base_date,
                 age_window,
                 profile_candidate_training_window_days,
             )
-        return self.get_patient_profile_gender_education_age_exclusive_task_games(
-            patient_id,
-            base_date,
-            age_window,
+        else:
+            rows = self.get_patient_profile_gender_education_age_exclusive_task_games(
+                patient_id,
+                base_date,
+                age_window,
+            )
+        self._save_patient_profile_candidate_training_games_cache(
+            rows,
+            patient_id=patient_id,
+            base_date=base_date,
+            age_window=age_window,
+            profile_candidate_training_window_days=profile_candidate_training_window_days,
         )
+        return rows
+
+    def _load_patient_profile_candidate_training_games_cache(
+        self,
+        *,
+        patient_id: str,
+        base_date: str,
+        age_window: int,
+        profile_candidate_training_window_days: int | None,
+    ) -> list[dict[str, object]] | None:
+        context = self._build_profile_candidate_tasks_cache_context(
+            patient_id=patient_id,
+            base_date=base_date,
+            age_window=age_window,
+            profile_candidate_training_window_days=profile_candidate_training_window_days,
+        )
+        if context is None:
+            return None
+        store = UserCacheIndexStore(context["sqlite_path"])
+        entry = store.find_latest_valid_source_entry(
+            cache_type=PROFILE_CANDIDATE_TASKS_CACHE_TYPE,
+            source_type="patient",
+            source_id=context["patient_id"],
+            query_family=context["query_family"],
+            window_days=context["window_days"],
+            config_hash=context["config_hash"],
+            request_base_date=context["cached_base_date"],
+        )
+        if entry is None:
+            return None
+        data_path = Path(entry.data_path)
+        if not data_path.exists():
+            store.delete_entry(entry)
+            LOGGER.warning(
+                "Deleted stale profile candidate task cache index entry because file is missing: patient_id=%s, data_path=%s",
+                entry.patient_id,
+                data_path,
+            )
+            return None
+        with data_path.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+        rows = payload.get("rows") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            store.delete_entry(entry)
+            LOGGER.warning(
+                "Deleted invalid profile candidate task cache index entry because rows are missing: patient_id=%s, data_path=%s",
+                entry.patient_id,
+                data_path,
+            )
+            return None
+        LOGGER.info(
+            "Profile candidate training games cache hit: patient_id=%s, base_date=%s, row_count=%s, data_path=%s",
+            context["patient_id"],
+            context["cached_base_date"],
+            len(rows),
+            data_path,
+        )
+        return [row for row in rows if isinstance(row, dict)]
+
+    def _save_patient_profile_candidate_training_games_cache(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        patient_id: str,
+        base_date: str,
+        age_window: int,
+        profile_candidate_training_window_days: int | None,
+    ) -> None:
+        context = self._build_profile_candidate_tasks_cache_context(
+            patient_id=patient_id,
+            base_date=base_date,
+            age_window=age_window,
+            profile_candidate_training_window_days=profile_candidate_training_window_days,
+        )
+        if context is None:
+            return
+        safe_rows = [_json_safe(row) for row in rows]
+        leaf_dir = _profile_candidate_tasks_cache_leaf_dir(
+            files_root_from_sqlite_path(context["sqlite_path"]),
+            patient_id=context["patient_id"],
+            query_family=context["query_family"],
+            profile_candidate_training_window_days=profile_candidate_training_window_days,
+            config_hash=context["config_hash"],
+            cached_base_date=context["cached_base_date"],
+        )
+        leaf_dir.mkdir(parents=True, exist_ok=True)
+        data_path = leaf_dir / "games.json"
+        payload = {
+            "cache_type": PROFILE_CANDIDATE_TASKS_CACHE_TYPE,
+            "query_name": context["query_family"],
+            "patient_id": context["patient_id"],
+            "base_date": context["cached_base_date"],
+            "age_window": age_window,
+            "profile_candidate_training_window_days": (
+                profile_candidate_training_window_days
+            ),
+            "row_count": len(safe_rows),
+            "rows": safe_rows,
+        }
+        data_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n",
+            encoding="utf-8",
+        )
+        entry = UserCacheEntry(
+            cache_type=PROFILE_CANDIDATE_TASKS_CACHE_TYPE,
+            patient_id=context["patient_id"],
+            query_family=context["query_family"],
+            window_days=context["window_days"],
+            config_hash=context["config_hash"],
+            cached_base_date=context["cached_base_date"],
+            valid_days=context["valid_days"],
+            data_path=str(data_path),
+            payload={
+                "age_window": age_window,
+                "profile_candidate_training_window_days": (
+                    profile_candidate_training_window_days
+                ),
+                "row_count": len(safe_rows),
+            },
+            source_type="patient",
+            source_id=context["patient_id"],
+        )
+        UserCacheIndexStore(context["sqlite_path"]).upsert_entry(entry)
+        LOGGER.info(
+            "Registered profile candidate training games in user cache: patient_id=%s, base_date=%s, row_count=%s, data_path=%s",
+            context["patient_id"],
+            context["cached_base_date"],
+            len(safe_rows),
+            data_path,
+        )
+
+    def _build_profile_candidate_tasks_cache_context(
+        self,
+        *,
+        patient_id: str,
+        base_date: str,
+        age_window: int,
+        profile_candidate_training_window_days: int | None,
+    ) -> dict[str, Any] | None:
+        settings = load_user_cache_settings(self.kg_repository.config_path)
+        if not settings.enabled:
+            return None
+        normalized_patient_id = str(patient_id).strip()
+        normalized_base_date = str(base_date).strip()
+        if not normalized_patient_id or not normalized_base_date:
+            return None
+        query_family = (
+            PROFILE_CANDIDATE_TASKS_QUERY_NAME
+            if profile_candidate_training_window_days is not None
+            else PROFILE_CANDIDATE_TASKS_QUERY_NAME_UNWINDOWED
+        )
+        window_days = _profile_candidate_cache_window_days(
+            profile_candidate_training_window_days
+        )
+        config_hash = _short_hash(
+            {
+                "cache_type": PROFILE_CANDIDATE_TASKS_CACHE_TYPE,
+                "patient_id": normalized_patient_id,
+                "age_window": age_window,
+                "profile_candidate_training_window_days": (
+                    profile_candidate_training_window_days
+                ),
+                "query_name": query_family,
+                "schema_version": 1,
+            }
+        )
+        return {
+            "sqlite_path": settings.sqlite_path,
+            "patient_id": normalized_patient_id,
+            "query_family": query_family,
+            "window_days": window_days,
+            "config_hash": config_hash,
+            "cached_base_date": normalized_base_date,
+            "valid_days": settings.profile_candidate_tasks_valid_days,
+        }
 
     @staticmethod
     def _extend_profile_candidate_games(
@@ -1368,6 +1576,86 @@ def _node_identifier(node: dict[str, object]) -> str:
     """Return a stable node identifier, falling back to name when id is missing."""
     raw_id = node.get("id") or node.get("name")
     return str(raw_id or "").strip()
+
+
+def _profile_candidate_cache_window_days(
+    profile_candidate_training_window_days: int | None,
+) -> int:
+    """Encode nullable profile window days into the positive SQLite index field."""
+    if profile_candidate_training_window_days is None:
+        return 1
+    if (
+        not isinstance(profile_candidate_training_window_days, int)
+        or isinstance(profile_candidate_training_window_days, bool)
+        or profile_candidate_training_window_days < 0
+    ):
+        raise ValueError(
+            "profile_candidate_training_window_days must be a non-negative integer or None."
+        )
+    return profile_candidate_training_window_days + 2
+
+
+def _profile_candidate_tasks_cache_leaf_dir(
+    files_root: str | Path,
+    *,
+    patient_id: object,
+    query_family: object,
+    profile_candidate_training_window_days: int | None,
+    config_hash: object,
+    cached_base_date: object,
+) -> Path:
+    return (
+        patient_cache_root(files_root, patient_id)
+        / PROFILE_CANDIDATE_TASKS_CACHE_TYPE
+        / _slug_part(query_family)
+        / _profile_window_dir_name(profile_candidate_training_window_days)
+        / f"config_{_slug_part(config_hash)}"
+        / f"base_{_slug_part(cached_base_date)}"
+    )
+
+
+def _profile_window_dir_name(
+    profile_candidate_training_window_days: int | None,
+) -> str:
+    if profile_candidate_training_window_days is None:
+        return "profile_window_all"
+    return f"profile_window_{profile_candidate_training_window_days}"
+
+
+def _slug_part(value: object) -> str:
+    text = str(value).strip().lower()
+    slug: list[str] = []
+    for char in text:
+        if char.isalnum():
+            slug.append(char)
+        elif char in ("-", "_"):
+            slug.append(char)
+        else:
+            slug.append("-")
+    return "".join(slug).strip("-") or "none"
+
+
+def _short_hash(payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:8]
+
+
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except TypeError:
+            pass
+    try:
+        return _json_safe(dict(value))
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _parse_optional_date_value(value: object) -> date | None:

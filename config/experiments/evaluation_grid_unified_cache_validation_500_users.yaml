@@ -1,0 +1,255 @@
+stage: "unified_cache_validation_500_users"
+
+base:
+  evaluation_script: "unified_prediction"
+  profiles: "data/unified_input/unified_patient_profiles_2026-05-25_shuffled.jsonl"
+  task_top_k: 7
+  use_llm: true
+  limit: 500
+  workers: 4
+  query_family: "training_order_dual_window"
+
+baseline_overrides:
+  # 使用独立 user cache，避免污染主缓存。
+  # SQLite: data/user_cache/unified_cache_validation_500/cache_index.sqlite
+  # Files:  data/user_cache/unified_cache_validation_500/files/...
+  user_cache.enabled: true
+  user_cache.sqlite_path: "data/user_cache/unified_cache_validation_500/cache_index.sqlite"
+  user_cache.raw_path_build_workers: 1
+  user_cache.raw_path_build_max_retries: 2
+  user_cache.raw_path_build_retry_sleep_seconds: 5
+  user_cache.patient_raw_paths_valid_days: 60
+  user_cache.direct_raw_paths_valid_days: 60
+  user_cache.patient_scored_paths_valid_days: 60
+  user_cache.direct_scored_paths_valid_days: 60
+  user_cache.topk_candidates_valid_days: 7
+  user_cache.refresh_candidate_base_date_on_hit: true
+
+  # direct path SQLite 关闭时，缺 direct entity raw path 会回源 Neo4j 构建后写入独立 user cache。
+  direct_path_cache.enabled: false
+  direct_path_cache.sqlite_path: "data/direct_path_cache/direct_paths.sqlite"
+
+  query.patient_path.window_days: 14
+  query.training_task_evaluation.workers: 1
+  query.score_pattern_paths.top_k: 150
+  query.candidate_ranking.candidate_top_k: 10
+  query.candidate_ranking.disease_course_window_days: 14
+  query.candidate_ranking.total_score_match_top_k: 1
+  query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
+  query.training_task_prediction.prompt_candidate_compression_enabled: false
+  query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1"
+  query.direct_entity_path.window_days: 180
+  query.direct_entity_path.direct_path_limit: 1000
+  query.direct_entity_path_scoring.use_when_patient_exists: false
+  query.candidate_ranking.scoring.game_similarity_with_diversity_score: true
+
+experiments:
+  - name: warmup_unified_mixed_workers_4
+    overrides: {}
+
+  - name: all_cache_hit_unified_mixed_workers_4
+    overrides: {}
+
+  - name: prompt_template_v5_unified_mixed_workers_4
+    overrides:
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V5"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V5"
+  
+  - name: llm_dflash_all_cache_hit_unified_mixed_workers_4
+    overrides: {}
+
+  - name: all_cache_hit_unified_mixed_workers_5
+    base_overrides:
+      workers: 5
+    overrides: {}
+
+  - name: no_llm_unified_mixed_workers_4
+    base_overrides:
+      use_llm: false
+      workers: 4
+    overrides: 
+      query.training_task_prediction.save_prompt_enabled: true
+
+  - name: qwen3_8B_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+
+  - name: qwen3_8B_prompt_template_name_v4_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V4"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4"
+
+  - name: unlock_train_candidate_tasks_on_qwen3_8B_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: unlock_train_candidate_tasks_on_qwen3_8B_prompt_template_name_v4_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V4"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V4"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: profile_candidate_tasks_cache_product_qwen3_8B_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.profile_candidate_training_window_days: null
+      user_cache.profile_candidate_tasks_valid_days: 7
+
+  - name: profile_candidate_tasks_cache_hit_qwen3_8B_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.profile_candidate_training_window_days: null
+      user_cache.profile_candidate_tasks_valid_days: 7
+
+  - name: qwen3_8B_prompt_template_name_v6_unified_mixed_workers_4
+    overrides: 
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+  
+  - name: dual_qwen3_8B_prompt_template_name_v6_unified_mixed_workers_4
+    overrides: 
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+
+  - name: dual_qwen3_8B_prompt_template_name_v6_unified_mixed_workers_6
+    base_overrides:
+      workers: 6
+    overrides: 
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+
+  - name: qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: dual_qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: dual_qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_unified_mixed_workers_6
+    base_overrides:
+      workers: 6
+    overrides:
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: qwen3_8B_prompt_template_name_v7_unified_mixed_workers_4
+    overrides: 
+      llm.model: "qwen3_8B"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V7"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V7"
+
+  - name: dual_qwen3_8B_prompt_template_name_v7_unified_mixed_workers_4
+    overrides: 
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V7"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V7"
+
+  - name: dual_qwen3_8B_prompt_template_name_v7_unified_mixed_workers_6
+    base_overrides:
+      workers: 6
+    overrides: 
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V7"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V7"
+
+  - name: repeat_dual_qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: dual_qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_no_validation_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_evaluation.validation_enabled: false
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: dual_qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_no_validation_unified_mixed_workers_6
+    base_overrides:
+      workers: 6
+    overrides:
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_evaluation.validation_enabled: false
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: dual_qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_no_validation_unified_mixed_workers_8
+    base_overrides:
+      workers: 8
+    overrides:
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_evaluation.validation_enabled: false
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_no_validation_unified_mixed_workers_4
+    overrides:
+      llm.model: "qwen3_8B"
+      query.training_task_evaluation.validation_enabled: false
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true
+
+  - name: dual_qwen3_8B_unlock_train_candidate_tasks_dual_on_prompt_template_name_v6_no_validation_500_plus_100_existing_no_raw_path_unified_mixed_workers_8
+    base_overrides:
+      profiles: "data/unified_input/unified_patient_profiles_2026-05-25_500_plus_100_existing_no_raw_path_shuffled.jsonl"
+      limit: 600
+      workers: 8
+    overrides:
+      llm.model: "qwen3_8B"
+      llm.base_url: "http://10.30.1.121:18000"
+      query.training_task_evaluation.validation_enabled: false
+      query.training_task_prediction.save_prompt_enabled: false
+      query.training_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
+      query.direct_entity_task_prediction.prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
+      query.training_task_prediction.unlock_train_candidate_tasks_enabled: true

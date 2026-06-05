@@ -21,6 +21,7 @@ class Neo4jSettings:
     username: str
     password: str
     database: str = "neo4j"
+    log_connection_caller: bool = False
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,7 @@ class TrainingTaskPredictionSettings:
 class TrainingTaskEvaluationSettings:
     """Configuration for evaluating predicted training tasks."""
 
+    validation_enabled: bool = True
     validation_mode: str = "set"
     workers: int = 1
     score_validation_url: str = "http://172.21.133.142:5008/training_task_score"
@@ -154,6 +156,7 @@ class UserCacheSettings:
     patient_scored_paths_valid_days: int = 14
     direct_scored_paths_valid_days: int = 60
     topk_candidates_valid_days: int = 7
+    profile_candidate_tasks_valid_days: int = 7
     refresh_candidate_base_date_on_hit: bool = True
     raw_path_build_workers: int = 1
     raw_path_build_max_retries: int = 2
@@ -246,11 +249,16 @@ def load_neo4j_settings(config_path: str | Path) -> Neo4jSettings:
         missing = ", ".join(missing_fields)
         raise ValueError(f"Missing required Neo4j settings: {missing}")
 
+    log_connection_caller = data.get("log_connection_caller", False)
+    if not isinstance(log_connection_caller, bool):
+        raise ValueError("neo4j log_connection_caller must be a boolean.")
+
     return Neo4jSettings(
         uri=str(data["uri"]),
         username=str(data["username"]),
         password=str(data["password"]),
         database=str(data.get("database", "neo4j")),
+        log_connection_caller=log_connection_caller,
     )
 
 
@@ -482,6 +490,11 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction fallback_enabled must be a boolean."
         )
+    validation_enabled = training_task_evaluation_data.get("validation_enabled", True)
+    if not isinstance(validation_enabled, bool):
+        raise ValueError(
+            "training_task_evaluation validation_enabled must be a boolean."
+        )
     validation_mode = training_task_evaluation_data.get("validation_mode", "set")
     if not isinstance(validation_mode, str) or validation_mode.strip() not in {
         "set",
@@ -611,6 +624,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             fallback_enabled=fallback_enabled,
         ),
         training_task_evaluation=TrainingTaskEvaluationSettings(
+            validation_enabled=validation_enabled,
             validation_mode=validation_mode.strip(),
             workers=evaluation_workers,
             score_validation_url=score_validation_url.strip(),
@@ -711,6 +725,11 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         "topk_candidates_valid_days",
         default=7,
     )
+    profile_candidate_tasks_valid_days = _parse_user_cache_valid_days(
+        data,
+        "profile_candidate_tasks_valid_days",
+        default=7,
+    )
     refresh_candidate_base_date_on_hit = data.get(
         "refresh_candidate_base_date_on_hit",
         True,
@@ -762,6 +781,7 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         patient_scored_paths_valid_days=patient_scored_paths_valid_days,
         direct_scored_paths_valid_days=direct_scored_paths_valid_days,
         topk_candidates_valid_days=topk_candidates_valid_days,
+        profile_candidate_tasks_valid_days=profile_candidate_tasks_valid_days,
         refresh_candidate_base_date_on_hit=refresh_candidate_base_date_on_hit,
         raw_path_build_workers=raw_path_build_workers,
         raw_path_build_max_retries=raw_path_build_max_retries,

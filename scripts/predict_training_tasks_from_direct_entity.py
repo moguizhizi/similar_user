@@ -490,6 +490,12 @@ def predict_training_tasks_from_direct_entity(
             fallback_enabled=(
                 query_settings.training_task_prediction.fallback_enabled
             ),
+            unlock_train_candidate_tasks_enabled=(
+                query_settings.training_task_prediction.unlock_train_candidate_tasks_enabled
+            ),
+            algorithm_request_results_csv=(
+                query_settings.training_task_evaluation.algorithm_request_results_csv
+            ),
         )
         prediction_result = prediction_service.predict_from_direct_entity_candidates(
             patient_id=normalized_patient_id,
