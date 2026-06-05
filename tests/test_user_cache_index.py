@@ -301,6 +301,103 @@ class UserCacheIndexStoreTest(unittest.TestCase):
 
             self.assertIsNone(found)
 
+    def test_find_latest_reusable_source_entry_returns_fresh_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.upsert_entry(_entry(cached_base_date="2026-05-25", valid_days=7))
+
+            found = store.find_latest_reusable_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-05-29",
+                stale_valid_days=14,
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.state, "fresh")
+        self.assertEqual(found.entry.cached_base_date, "2026-05-25")
+
+    def test_find_latest_reusable_source_entry_returns_stale_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.upsert_entry(_entry(cached_base_date="2026-05-25", valid_days=7))
+
+            found = store.find_latest_reusable_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                stale_valid_days=14,
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.state, "stale")
+        self.assertEqual(found.entry.cached_base_date, "2026-05-25")
+
+    def test_find_latest_reusable_source_entry_ignores_expired_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.upsert_entry(_entry(cached_base_date="2026-05-20", valid_days=7))
+
+            found = store.find_latest_reusable_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                stale_valid_days=14,
+            )
+
+        self.assertIsNone(found)
+
+    def test_find_latest_reusable_source_entry_prefers_newer_fresh_over_stale(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.upsert_entry(
+                _entry(
+                    cached_base_date="2026-05-25",
+                    valid_days=7,
+                    data_path="data/user_cache/30012345/stale.json",
+                )
+            )
+            store.upsert_entry(
+                _entry(
+                    cached_base_date="2026-06-03",
+                    valid_days=7,
+                    data_path="data/user_cache/30012345/fresh.json",
+                )
+            )
+
+            found = store.find_latest_reusable_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                stale_valid_days=14,
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.state, "fresh")
+        self.assertEqual(found.entry.cached_base_date, "2026-06-03")
+        self.assertEqual(found.entry.data_path, "data/user_cache/30012345/fresh.json")
+
     def test_find_latest_valid_source_entry_requires_matching_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")

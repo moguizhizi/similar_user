@@ -50,6 +50,14 @@ class UserCacheEntry:
         )
 
 
+@dataclass(frozen=True)
+class UserCacheLookupResult:
+    """One reusable cache lookup result and its freshness state."""
+
+    entry: UserCacheEntry
+    state: str
+
+
 class UserCacheIndexStore:
     """Read and write source-centered cache index entries."""
 
@@ -252,6 +260,71 @@ class UserCacheIndexStore:
             entry = _entry_from_row(row)
             if entry.is_valid_for(request_date.isoformat()):
                 return entry
+        return None
+
+    def find_latest_reusable_source_entry(
+        self,
+        *,
+        cache_type: str,
+        source_type: str,
+        source_id: str,
+        query_family: str,
+        window_days: int,
+        config_hash: str,
+        request_base_date: str,
+        stale_valid_days: int,
+    ) -> UserCacheLookupResult | None:
+        """Return the newest fresh or stale entry matching source and config."""
+        if not self.exists:
+            return None
+        self.initialize()
+        normalized_cache_type = _normalize_cache_type(cache_type)
+        normalized_source_type = _normalize_required_text(source_type, "source_type")
+        normalized_source_id = _normalize_required_text(source_id, "source_id")
+        normalized_query_family = _normalize_required_text(query_family, "query_family")
+        normalized_window_days = _normalize_positive_int(window_days, "window_days")
+        normalized_config_hash = _normalize_required_text(config_hash, "config_hash")
+        normalized_stale_valid_days = _normalize_non_negative_int(
+            stale_valid_days,
+            "stale_valid_days",
+        )
+        request_date = _parse_iso_date(request_base_date, "request_base_date")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM user_cache_entries
+                WHERE cache_type = ?
+                  AND source_type = ?
+                  AND source_id = ?
+                  AND query_family = ?
+                  AND window_days = ?
+                  AND config_hash = ?
+                  AND cached_base_date <= ?
+                ORDER BY cached_base_date DESC, updated_at DESC
+                """.strip(),
+                (
+                    normalized_cache_type,
+                    normalized_source_type,
+                    normalized_source_id,
+                    normalized_query_family,
+                    normalized_window_days,
+                    normalized_config_hash,
+                    request_date.isoformat(),
+                ),
+            ).fetchall()
+        for row in rows:
+            entry = _entry_from_row(row)
+            age = request_date - _parse_iso_date(
+                entry.cached_base_date,
+                "cached_base_date",
+            )
+            if age < timedelta(days=0):
+                continue
+            if age <= timedelta(days=entry.valid_days):
+                return UserCacheLookupResult(entry=entry, state="fresh")
+            if age <= timedelta(days=normalized_stale_valid_days):
+                return UserCacheLookupResult(entry=entry, state="stale")
         return None
 
     def list_entries(self) -> list[UserCacheEntry]:
