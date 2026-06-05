@@ -205,11 +205,14 @@ def build_similar_user_candidates(
             request_base_date=base_date,
         )
         LOGGER.info(
-            "Loaded topK similar-user candidates from user cache: patient_id=%s, query_family=%s, cached_base_date=%s, request_base_date=%s, data_path=%s",
+            "Loaded topK similar-user candidates from user cache: patient_id=%s, query_family=%s, lookup_state=%s, stale_hit=%s, cached_base_date=%s, request_base_date=%s, refresh_job_id=%s, data_path=%s",
             patient_id,
             user_cache_context.get("query_family"),
+            cached_result.get("user_cache_lookup_state"),
+            cached_result.get("user_cache_stale_hit"),
             user_cache_context.get("cached_base_date"),
             base_date,
+            cached_result.get("user_cache_refresh_job_id"),
             cached_result.get("user_cache_data_path"),
         )
         return cached_result

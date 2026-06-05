@@ -340,8 +340,11 @@ def predict_training_tasks_from_direct_entity(
         if cached_candidate_result is not None:
             candidate_result = cached_candidate_result
             LOGGER.info(
-                "Direct entity topK candidates cache hit: patient_id=%s, candidate_count=%s, data_path=%s",
+                "Direct entity topK candidates cache hit: patient_id=%s, lookup_state=%s, stale_hit=%s, refresh_job_id=%s, candidate_count=%s, data_path=%s",
                 normalized_patient_id,
+                candidate_result.get("user_cache_lookup_state"),
+                candidate_result.get("user_cache_stale_hit"),
+                candidate_result.get("user_cache_refresh_job_id"),
                 candidate_result.get("candidate_count"),
                 candidate_result.get("user_cache_data_path"),
             )
