@@ -17,6 +17,7 @@ def build_candidate_task_fallback_prediction(
     *,
     patient_id: str,
     candidate_training_tasks: list[dict[str, Any]],
+    unlock_train_candidate_tasks: list[dict[str, Any]] | None = None,
     task_top_k: int = DEFAULT_FALLBACK_TASK_TOP_K,
     reason: str,
     failure_stage: str,
@@ -27,12 +28,32 @@ def build_candidate_task_fallback_prediction(
     """Return deterministic predictions from already-built candidate tasks."""
     resolved_patient_id = _normalize_required_text(patient_id, "patient_id")
     resolved_top_k = _normalize_positive_int(task_top_k, "task_top_k")
-    candidates = [
-        dict(task)
-        for task in candidate_training_tasks
-        if isinstance(task, dict)
-        and (_normalize_optional_text(task.get("game_id")) is not None)
-    ]
+    candidates = _dedupe_candidate_tasks(
+        [
+            dict(task)
+            for task in candidate_training_tasks
+            if isinstance(task, dict)
+            and (_normalize_optional_text(task.get("game_id")) is not None)
+        ]
+    )
+    unlock_train_game_ids = _ordered_game_ids(unlock_train_candidate_tasks or [])
+    if unlock_train_game_ids:
+        allowed_game_ids = set(unlock_train_game_ids)
+        candidates = _dedupe_candidate_tasks(
+            [
+                task
+                for task in candidates
+                if _normalize_optional_text(task.get("game_id")) in allowed_game_ids
+            ]
+        )
+        _append_unlock_train_remaining_tasks(
+            candidates,
+            unlock_train_candidate_tasks or [],
+            _candidate_game_id_set(candidates),
+            top_k=resolved_top_k,
+            fallback_level="unlock_train_remaining_tasks",
+            reason="候选任务兜底结果不足，按 unlock_train 白名单顺序补齐。",
+        )
     predictions = _rank_candidate_tasks(candidates[:resolved_top_k])
     result: dict[str, Any] = {
         "patient_id": resolved_patient_id,
@@ -51,6 +72,7 @@ def build_candidate_task_fallback_prediction(
             "fallback_source": "candidate_training_tasks",
             "fallback_candidates_count": len(candidates),
             "reason": reason,
+            "unlock_train_limited": bool(unlock_train_game_ids),
         },
         "candidate_training_tasks": candidates,
         "predicted_training_tasks": predictions,
@@ -80,6 +102,7 @@ class TaskPredictionFallbackService:
         age: int | str | None,
         education: str | None,
         gender: str | None,
+        unlock_train_candidate_tasks: list[dict[str, Any]] | None = None,
         task_top_k: int = DEFAULT_FALLBACK_TASK_TOP_K,
         reason: str = "direct_entity_unavailable",
     ) -> dict[str, Any]:
@@ -90,6 +113,8 @@ class TaskPredictionFallbackService:
         resolved_age = _parse_optional_int(age, "age")
         resolved_education = _normalize_optional_text(education)
         resolved_gender = _normalize_optional_text(gender)
+        unlock_train_game_ids = _ordered_game_ids(unlock_train_candidate_tasks or [])
+        allowed_game_ids = set(unlock_train_game_ids) if unlock_train_game_ids else None
 
         selected: list[dict[str, Any]] = []
         seen_game_ids: set[str] = set()
@@ -116,6 +141,7 @@ class TaskPredictionFallbackService:
                 top_k=resolved_top_k,
                 fallback_level=attempt["level"],
                 reason="画像相近用户历史中该训练任务出现次数较高。",
+                allowed_game_ids=allowed_game_ids,
             ):
                 levels_used.append(attempt["level"])
             if len(selected) >= resolved_top_k:
@@ -133,10 +159,22 @@ class TaskPredictionFallbackService:
                 top_k=resolved_top_k,
                 fallback_level="global_popular_tasks",
                 reason="全局历史中该训练任务出现次数较高。",
+                allowed_game_ids=allowed_game_ids,
             ):
                 levels_used.append("global_popular_tasks")
 
-        if len(selected) < resolved_top_k:
+        if unlock_train_game_ids and len(selected) < resolved_top_k:
+            if _append_unlock_train_remaining_tasks(
+                selected,
+                unlock_train_candidate_tasks or [],
+                seen_game_ids,
+                top_k=resolved_top_k,
+                fallback_level="unlock_train_remaining_tasks",
+                reason="高频兜底结果不足，按 unlock_train 白名单顺序补齐。",
+            ):
+                levels_used.append("unlock_train_remaining_tasks")
+
+        if not unlock_train_game_ids and len(selected) < resolved_top_k:
             rows = self._deterministic_random_rows(
                 patient_id=resolved_patient_id,
                 base_date=resolved_base_date,
@@ -148,6 +186,7 @@ class TaskPredictionFallbackService:
                 top_k=resolved_top_k,
                 fallback_level="deterministic_random_tasks",
                 reason="缺少更强匹配证据，使用稳定随机兜底任务。",
+                allowed_game_ids=allowed_game_ids,
             ):
                 levels_used.append("deterministic_random_tasks")
 
@@ -170,6 +209,7 @@ class TaskPredictionFallbackService:
                 "levels_used": levels_used,
                 "fallback_candidates_count": len(selected),
                 "reason": reason,
+                "unlock_train_limited": bool(unlock_train_game_ids),
             },
             "target_profile": {
                 "age": resolved_age,
@@ -272,6 +312,7 @@ class DirectEntityFallbackPredictionService(TaskPredictionFallbackService):
         age: int | str | None,
         education: str | None,
         gender: str | None,
+        unlock_train_candidate_tasks: list[dict[str, Any]] | None = None,
         task_top_k: int = DEFAULT_FALLBACK_TASK_TOP_K,
         reason: str = "direct_entity_unavailable",
     ) -> dict[str, Any]:
@@ -282,6 +323,7 @@ class DirectEntityFallbackPredictionService(TaskPredictionFallbackService):
             age=age,
             education=education,
             gender=gender,
+            unlock_train_candidate_tasks=unlock_train_candidate_tasks,
             task_top_k=task_top_k,
             reason=reason,
         )
@@ -317,6 +359,7 @@ def _append_prediction_rows(
     top_k: int,
     fallback_level: str,
     reason: str,
+    allowed_game_ids: set[str] | None = None,
 ) -> bool:
     added = False
     max_support = max(
@@ -331,6 +374,8 @@ def _append_prediction_rows(
             game.get("name")
         )
         if game_id is None or game_id in seen_game_ids:
+            continue
+        if allowed_game_ids is not None and game_id not in allowed_game_ids:
             continue
         support_count = _parse_optional_int(row.get("support_count"), "support_count")
         confidence = (
@@ -363,6 +408,52 @@ def _append_prediction_rows(
     return added
 
 
+def _append_unlock_train_remaining_tasks(
+    selected: list[dict[str, Any]],
+    unlock_train_candidate_tasks: list[dict[str, Any]],
+    seen_game_ids: set[str],
+    *,
+    top_k: int,
+    fallback_level: str,
+    reason: str,
+) -> bool:
+    added = False
+    for task in unlock_train_candidate_tasks:
+        if len(selected) >= top_k:
+            break
+        if not isinstance(task, dict):
+            continue
+        game_id = _normalize_optional_text(task.get("game_id"))
+        if game_id is None or game_id in seen_game_ids:
+            continue
+        selected.append(
+            {
+                "game_id": game_id,
+                "game_name": _normalize_optional_text(task.get("game_name")),
+                "task_type": _normalize_optional_text(task.get("task_type")),
+                "weighted_score": float(task.get("weighted_score") or 0.0),
+                "support_count": _parse_optional_int(
+                    task.get("support_count"),
+                    "support_count",
+                ),
+                "patient_count": _parse_optional_int(
+                    task.get("patient_count"),
+                    "patient_count",
+                ),
+                "latest_training_date": _normalize_optional_text(
+                    task.get("latest_training_date")
+                ),
+                "fallback_level": fallback_level,
+                "confidence": 0.1,
+                "reason": reason,
+                "supporting_candidate_ids": [],
+            }
+        )
+        seen_game_ids.add(game_id)
+        added = True
+    return added
+
+
 def _rank_profile_predictions(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     predictions = []
     for index, task in enumerate(tasks, start=1):
@@ -379,6 +470,42 @@ def _rank_profile_predictions(tasks: list[dict[str, Any]]) -> list[dict[str, Any
             }
         )
     return predictions
+
+
+def _ordered_game_ids(tasks: list[dict[str, Any]]) -> list[str]:
+    game_ids: list[str] = []
+    seen: set[str] = set()
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        game_id = _normalize_optional_text(task.get("game_id"))
+        if game_id is None or game_id in seen:
+            continue
+        game_ids.append(game_id)
+        seen.add(game_id)
+    return game_ids
+
+
+def _dedupe_candidate_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for task in tasks:
+        game_id = _normalize_optional_text(task.get("game_id"))
+        if game_id is None or game_id in seen:
+            continue
+        deduped.append(task)
+        seen.add(game_id)
+    return deduped
+
+
+def _candidate_game_id_set(tasks: list[dict[str, Any]]) -> set[str]:
+    return {
+        game_id
+        for task in tasks
+        if isinstance(task, dict)
+        for game_id in [_normalize_optional_text(task.get("game_id"))]
+        if game_id is not None
+    }
 
 
 def _dedupe_attempts(attempts: list[dict[str, Any]]) -> list[dict[str, Any]]:

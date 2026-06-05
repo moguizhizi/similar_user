@@ -250,6 +250,9 @@ class TrainingTaskPredictionService:
             return self._predict_patient_empty_candidates_fallback(
                 patient_id=resolved_patient_id,
                 base_date=base_date,
+                unlock_train_candidate_tasks=self._build_unlock_train_candidate_tasks(
+                    resolved_patient_id
+                ),
                 task_top_k=task_top_k,
             )
 
@@ -419,6 +422,9 @@ class TrainingTaskPredictionService:
             fallback_result = build_candidate_task_fallback_prediction(
                 patient_id=resolved_patient_id,
                 candidate_training_tasks=prompt_candidate_tasks,
+                unlock_train_candidate_tasks=self._build_unlock_train_candidate_tasks(
+                    resolved_patient_id
+                ),
                 task_top_k=task_top_k,
                 reason=fallback_reason,
                 failure_stage="llm" if use_llm else "prediction",
@@ -529,6 +535,7 @@ class TrainingTaskPredictionService:
         *,
         patient_id: str,
         base_date: str,
+        unlock_train_candidate_tasks: list[dict[str, Any]] | None = None,
         task_top_k: int,
     ) -> dict[str, Any]:
         profile = _load_patient_fallback_profile(
@@ -542,6 +549,7 @@ class TrainingTaskPredictionService:
             age=profile.get("age"),
             education=profile.get("education"),
             gender=profile.get("gender"),
+            unlock_train_candidate_tasks=unlock_train_candidate_tasks,
             task_top_k=task_top_k,
             reason="empty_candidates",
         )
@@ -709,6 +717,9 @@ class TrainingTaskPredictionService:
             fallback_result = build_candidate_task_fallback_prediction(
                 patient_id=resolved_patient_id,
                 candidate_training_tasks=prompt_candidate_tasks,
+                unlock_train_candidate_tasks=self._build_unlock_train_candidate_tasks(
+                    resolved_patient_id
+                ),
                 task_top_k=task_top_k,
                 reason=fallback_reason,
                 failure_stage="llm" if use_llm else "prediction",

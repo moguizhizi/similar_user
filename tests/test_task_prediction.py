@@ -38,6 +38,9 @@ from src.similar_user.services.task_prediction import (
     select_prompt_candidate_game_ids,
     summarize_training_history,
 )
+from src.similar_user.services.task_prediction_fallback import (
+    build_candidate_task_fallback_prediction,
+)
 
 
 class TaskPredictionTest(unittest.TestCase):
@@ -1389,6 +1392,87 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertEqual(result["prediction_failure_stage"], "candidate")
         self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "G1")
         self.assertTrue(result["candidate_source"]["patient_profile_loaded"])
+
+    def test_empty_candidate_fallback_is_limited_to_unlock_train(self) -> None:
+        user_service = Mock()
+        user_service.get_patient_direct_entity_scoring_profile.return_value = [
+            {
+                "age_at_base_date": 66,
+                "education": "本科",
+                "gender": "男",
+            }
+        ]
+        user_service.get_profile_matched_exclusive_tasks.return_value = [
+            {
+                "g": {"id": "G1", "name": "非解锁高频任务", "任务类型": "专属"},
+                "support_count": 100,
+            },
+            {
+                "g": {"id": "G2", "name": "解锁画像任务", "任务类型": "专属"},
+                "support_count": 10,
+            },
+        ]
+        user_service.get_global_popular_exclusive_tasks.return_value = [
+            {
+                "g": {"id": "G4", "name": "解锁全局任务", "任务类型": "专属"},
+                "support_count": 20,
+            }
+        ]
+        user_service.get_distinct_training_games.return_value = [
+            {"g": {"id": "G1", "name": "非解锁任务"}},
+        ]
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            unlock_train_candidate_tasks_enabled=True,
+            request_unlock_train={"G2": 1, "G3": 1, "G4": 1},
+        )
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": []},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=3,
+        )
+
+        self.assertEqual(
+            [task["game_id"] for task in result["predicted_training_tasks"]],
+            ["G2", "G4", "G3"],
+        )
+        self.assertTrue(result["candidate_source"]["unlock_train_limited"])
+        self.assertNotIn(
+            "G1",
+            {task["game_id"] for task in result["predicted_training_tasks"]},
+        )
+
+    def test_candidate_task_fallback_deduplicates_unlock_train_limited_tasks(
+        self,
+    ) -> None:
+        result = build_candidate_task_fallback_prediction(
+            patient_id="40",
+            candidate_training_tasks=[
+                {"game_id": "G1", "weighted_score": 10.0},
+                {"game_id": "G1", "weighted_score": 9.0},
+                {"game_id": "G2", "weighted_score": 8.0},
+                {"game_id": "G9", "weighted_score": 7.0},
+            ],
+            unlock_train_candidate_tasks=[
+                {"game_id": "G1"},
+                {"game_id": "G2"},
+                {"game_id": "G3"},
+            ],
+            task_top_k=3,
+            reason="llm_failed",
+            failure_stage="llm",
+        )
+
+        game_ids = [task["game_id"] for task in result["predicted_training_tasks"]]
+        self.assertEqual(game_ids, ["G1", "G2", "G3"])
+        self.assertEqual(len(game_ids), len(set(game_ids)))
+        self.assertTrue(result["candidate_source"]["unlock_train_limited"])
 
     def test_predict_from_pipeline_result_falls_back_on_llm_errors(self) -> None:
         user_service = Mock()
