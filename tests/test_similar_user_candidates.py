@@ -2611,7 +2611,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
     @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
     @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
-    def test_run_similar_user_pipeline_rejects_empty_path_result(
+    def test_run_similar_user_pipeline_returns_empty_candidates_for_empty_path_result(
         self,
         mock_run_path_flows: Mock,
         mock_score_and_save: Mock,
@@ -2636,20 +2636,24 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         ]
         mock_build_candidates.side_effect = FileNotFoundError("missing scored paths")
         mock_score_and_save.side_effect = FileNotFoundError("missing raw paths")
+        mock_save_candidates.return_value = {
+            "detail": Path("data/similar_user_candidates/30/30010096.detail.json"),
+            "summary": Path("data/similar_user_candidates/30/30010096.summary.json"),
+        }
 
-        with self.assertRaisesRegex(
-            EmptyPathResultsError,
-            "path_result does not contain paths: patient_id=30010096, base_date=2022-01-17, window_days=14.",
-        ):
-            run_similar_user_pipeline(
-                "30010096",
-                base_date="2022-01-17",
-                config_path="config/settings.yaml",
-            )
+        result = run_similar_user_pipeline(
+            "30010096",
+            base_date="2022-01-17",
+            config_path="config/settings.yaml",
+        )
 
         mock_build_candidates.assert_called_once()
         mock_score_and_save.assert_called_once()
-        mock_save_candidates.assert_not_called()
+        self.assertEqual(result["candidate_result"]["candidate_count"], 0)
+        self.assertEqual(result["candidate_result"]["candidates"], [])
+        self.assertEqual(result["candidate_result"]["source_id"], "30010096")
+        self.assertEqual(result["candidate_result"]["source_parameter"], "patient_id")
+        mock_save_candidates.assert_called_once_with(result["candidate_result"])
 
     @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")

@@ -38,6 +38,7 @@ from similar_user.utils.logger import get_logger
 from config.settings import load_query_settings, load_user_cache_settings
 
 from scripts.build_similar_user_candidates import (
+    build_empty_candidate_result,
     build_similar_user_candidates,
     save_similar_user_candidates_result,
 )
@@ -179,25 +180,16 @@ def _resolve_patient_path_query_family(config_path: str | Path) -> str | None:
     return query_settings.patient_path.query_family
 
 
-def _raise_if_path_results_empty(
+def _path_results_are_empty(
     path_generation: list[dict[str, object]],
-    *,
-    patient_id: str,
-    base_date: str,
-    window_days: int,
-) -> None:
-    """Stop the pipeline when freshly built path data is empty."""
+) -> bool:
+    """Return whether freshly built path data contains no path rows."""
     path_count = sum(
         item.get("path_count")
         for item in path_generation
         if isinstance(item.get("path_count"), int)
     )
-    if path_count > 0:
-        return
-    raise EmptyPathResultsError(
-        "path_result does not contain paths: "
-        f"patient_id={patient_id}, base_date={base_date}, window_days={window_days}."
-    )
+    return path_count == 0
 
 
 def _resolve_patient_path_window_days(
@@ -212,7 +204,11 @@ def _score_patient_paths_with_auto_refresh(
     config_path: str | Path,
     base_date: str,
     query_family: str,
-) -> None:
+) -> bool:
+    """Score patient paths, rebuilding raw paths if needed.
+
+    Return True when rebuilt raw paths are known to be empty.
+    """
     try:
         score_and_save_configured_pattern_paths(
             patient_id,
@@ -220,6 +216,7 @@ def _score_patient_paths_with_auto_refresh(
             base_date=base_date,
             query_family=query_family,
         )
+        return False
     except FileNotFoundError:
         LOGGER.info(
             "Patient raw paths missing or expired; rebuilding before scoring: patient_id=%s, base_date=%s, query_family=%s",
@@ -233,18 +230,21 @@ def _score_patient_paths_with_auto_refresh(
             base_date=base_date,
             query_family=query_family,
         )
-        _raise_if_path_results_empty(
-            path_generation,
-            patient_id=patient_id,
-            base_date=base_date,
-            window_days=_resolve_patient_path_window_days(config_path),
-        )
+        if _path_results_are_empty(path_generation):
+            LOGGER.info(
+                "Patient raw paths are empty after rebuild; returning empty candidates: patient_id=%s, base_date=%s, query_family=%s",
+                patient_id,
+                base_date,
+                query_family,
+            )
+            return True
         score_and_save_configured_pattern_paths(
             patient_id,
             config_path=config_path,
             base_date=base_date,
             query_family=query_family,
         )
+        return False
 
 
 def _build_patient_raw_paths_with_limit(
@@ -392,12 +392,21 @@ def _build_patient_candidates_with_auto_refresh(
             base_date,
             query_family,
         )
-        _score_patient_paths_with_auto_refresh(
+        raw_paths_empty = _score_patient_paths_with_auto_refresh(
             patient_id,
             config_path=config_path,
             base_date=base_date,
             query_family=query_family,
         )
+        if raw_paths_empty:
+            return (
+                _build_empty_patient_candidate_result(
+                    patient_id,
+                    config_path=config_path,
+                    base_date=base_date,
+                ),
+                None,
+            )
         direct_entity_scoring = _score_direct_entity_paths_if_enabled(
             patient_id,
             config_path=config_path,
@@ -412,6 +421,24 @@ def _build_patient_candidates_with_auto_refresh(
             ),
             direct_entity_scoring,
         )
+
+
+def _build_empty_patient_candidate_result(
+    patient_id: str,
+    *,
+    config_path: str | Path,
+    base_date: str,
+) -> dict[str, Any]:
+    query_settings = load_query_settings(config_path)
+    return build_empty_candidate_result(
+        patient_id=patient_id,
+        selected_patterns=query_settings.candidate_ranking.patterns,
+        candidate_top_k=query_settings.candidate_ranking.candidate_top_k,
+        base_date=base_date,
+        disease_course_window_days=(
+            query_settings.candidate_ranking.disease_course_window_days
+        ),
+    )
 
 
 def _score_direct_entity_paths_if_enabled(

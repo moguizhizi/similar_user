@@ -34,6 +34,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, help="Only send the first N rows after --start.")
     parser.add_argument("--start", type=int, default=0, help="Skip the first N rows.")
     parser.add_argument(
+        "--rounds",
+        type=int,
+        default=1,
+        help="Send the selected payloads this many times sequentially.",
+    )
+    parser.add_argument(
         "--output",
         default="data/http_requests/unified_prediction_responses.jsonl",
         help="Output JSONL file for request results.",
@@ -87,6 +93,7 @@ def send_one(item: dict[str, Any], *, url: str, timeout: float, dry_run: bool) -
     started_at = time.perf_counter()
     if dry_run:
         return {
+            "round": item["round"],
             "row_index": item["row_index"],
             "patient_id": item.get("patient_id"),
             "status": "dry_run",
@@ -101,6 +108,7 @@ def send_one(item: dict[str, Any], *, url: str, timeout: float, dry_run: bool) -
         except ValueError:
             body = response.text
         return {
+            "round": item["round"],
             "row_index": item["row_index"],
             "patient_id": item.get("patient_id"),
             "status": "ok" if response.ok else "http_error",
@@ -110,6 +118,7 @@ def send_one(item: dict[str, Any], *, url: str, timeout: float, dry_run: bool) -
         }
     except Exception as exc:
         return {
+            "round": item["round"],
             "row_index": item["row_index"],
             "patient_id": item.get("patient_id"),
             "status": "request_error",
@@ -135,44 +144,57 @@ def main() -> int:
         raise ValueError("--start must be non-negative.")
     if args.limit is not None and args.limit <= 0:
         raise ValueError("--limit must be positive when supplied.")
+    if args.rounds <= 0:
+        raise ValueError("--rounds must be positive.")
 
-    items = list(iter_payloads(args.input, start=args.start, limit=args.limit))
+    base_items = list(iter_payloads(args.input, start=args.start, limit=args.limit))
     executor_cls = ThreadPoolExecutor if args.mode == "thread" else ProcessPoolExecutor
     results: list[dict[str, Any]] = []
     started_at = time.perf_counter()
 
-    with executor_cls(max_workers=args.workers) as executor:
-        futures = [
-            executor.submit(
-                send_one,
-                item,
-                url=args.url,
-                timeout=args.timeout,
-                dry_run=args.dry_run,
-            )
-            for item in items
+    for round_number in range(1, args.rounds + 1):
+        round_items = [
+            {
+                **item,
+                "round": round_number,
+            }
+            for item in base_items
         ]
-        for completed_count, future in enumerate(as_completed(futures), start=1):
-            result = future.result()
-            results.append(result)
-            print(
-                json.dumps(
-                    {
-                        "completed": completed_count,
-                        "total": len(items),
-                        "row_index": result.get("row_index"),
-                        "patient_id": result.get("patient_id"),
-                        "status": result.get("status"),
-                        "http_status": result.get("http_status"),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
+        with executor_cls(max_workers=args.workers) as executor:
+            futures = [
+                executor.submit(
+                    send_one,
+                    item,
+                    url=args.url,
+                    timeout=args.timeout,
+                    dry_run=args.dry_run,
+                )
+                for item in round_items
+            ]
+            for completed_count, future in enumerate(as_completed(futures), start=1):
+                result = future.result()
+                results.append(result)
+                print(
+                    json.dumps(
+                        {
+                            "round": round_number,
+                            "completed": completed_count,
+                            "total": len(round_items),
+                            "row_index": result.get("row_index"),
+                            "patient_id": result.get("patient_id"),
+                            "status": result.get("status"),
+                            "http_status": result.get("http_status"),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
 
     write_jsonl(args.output, results)
     summary = {
         "total": len(results),
+        "rounds": args.rounds,
+        "payloads_per_round": len(base_items),
         "ok": sum(1 for item in results if item.get("status") == "ok"),
         "failed": sum(1 for item in results if item.get("status") not in {"ok", "dry_run"}),
         "dry_run": sum(1 for item in results if item.get("status") == "dry_run"),
