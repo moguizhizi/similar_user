@@ -103,6 +103,7 @@ class TrainingTaskPredictionSettings:
     """Configuration for predicting training tasks from similar-user histories."""
 
     task_top_k: int = 7
+    use_llm: bool = True
     prompt_candidate_compression_enabled: bool = True
     prompt_template_name: str = "TASK_PREDICTION_PROMPT_TEMPLATE_V2"
     save_prompt_enabled: bool = False
@@ -438,6 +439,9 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         or task_top_k <= 0
     ):
         raise ValueError("training_task_prediction task_top_k must be a positive integer.")
+    use_llm = training_task_prediction_data.get("use_llm", True)
+    if not isinstance(use_llm, bool):
+        raise ValueError("training_task_prediction use_llm must be a boolean.")
     prompt_candidate_compression_enabled = training_task_prediction_data.get(
         "prompt_candidate_compression_enabled",
         True,
@@ -627,6 +631,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         ),
         training_task_prediction=TrainingTaskPredictionSettings(
             task_top_k=task_top_k,
+            use_llm=use_llm,
             prompt_candidate_compression_enabled=prompt_candidate_compression_enabled,
             prompt_template_name=prompt_template_name.strip(),
             save_prompt_enabled=save_prompt_enabled,

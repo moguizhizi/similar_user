@@ -21,6 +21,7 @@ class ExternalTaskPredictionAdapterTest(unittest.TestCase):
                 "education": 15,
                 "sicksName": ["良性遗忘"],
                 "unlock_train": {"300": 60, "": 1, "301": 0, "bad": "x"},
+                "use_llm": False,
                 "behavior_data": {
                     "current_day": "2026-05-24",
                     "gender": "女",
@@ -37,6 +38,8 @@ class ExternalTaskPredictionAdapterTest(unittest.TestCase):
         self.assertEqual(result.disease_names, ["良性遗忘"])
         self.assertEqual(result.request_unlock_train, {"300": 60, "301": 0})
         self.assertEqual(result.task_top_k, 7)
+        self.assertEqual(result.use_llm, True)
+        self.assertEqual(result.include_prompt, False)
         self.assertEqual(result.output_level, "scores")
 
     def test_normalize_user_id_only_removes_old_suffix(self) -> None:

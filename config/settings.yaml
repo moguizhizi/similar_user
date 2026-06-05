@@ -52,6 +52,7 @@ query:
         unknown: false
   training_task_prediction:
     task_top_k: 7
+    use_llm: true
     prompt_candidate_compression_enabled: false
     save_prompt_enabled: false
     prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"

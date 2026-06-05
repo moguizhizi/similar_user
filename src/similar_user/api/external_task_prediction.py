@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from config.settings import DEFAULT_CONFIG_PATH
+from config.settings import DEFAULT_CONFIG_PATH, load_query_settings
 from ..services.task_prediction import DEFAULT_TASK_TOP_K
 
 
@@ -53,13 +53,9 @@ def build_unified_prediction_input(
     if not patient_id:
         raise ValueError("Field 'user_id' must be a non-empty value.")
 
-    task_top_k = _normalize_positive_int(
-        payload.get("task_top_k", DEFAULT_TASK_TOP_K),
-        field_name="task_top_k",
-    )
-    output_level = _normalize_output_level(
-        payload.get("output_level", DEFAULT_OUTPUT_LEVEL),
-    )
+    query_settings = load_query_settings(config_path)
+    task_top_k = query_settings.training_task_prediction.task_top_k
+    use_llm = query_settings.training_task_prediction.use_llm
 
     return UnifiedPredictionInput(
         patient_id=patient_id,
@@ -75,12 +71,9 @@ def build_unified_prediction_input(
         request_unlock_train=_normalize_unlock_train(payload.get("unlock_train")),
         query_family=_normalize_optional_text(payload.get("query_family")),
         task_top_k=task_top_k,
-        use_llm=_normalize_bool(payload.get("use_llm", True), field_name="use_llm"),
-        include_prompt=_normalize_bool(
-            payload.get("include_prompt", False),
-            field_name="include_prompt",
-        ),
-        output_level=output_level,
+        use_llm=use_llm,
+        include_prompt=False,
+        output_level=DEFAULT_OUTPUT_LEVEL,
     )
 
 
@@ -211,25 +204,6 @@ def _normalize_optional_text(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
-
-
-def _normalize_positive_int(value: object, *, field_name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError(f"Field '{field_name}' must be a positive integer.")
-    return value
-
-
-def _normalize_bool(value: object, *, field_name: str) -> bool:
-    if not isinstance(value, bool):
-        raise ValueError(f"Field '{field_name}' must be a boolean.")
-    return value
-
-
-def _normalize_output_level(value: object) -> str:
-    text = _normalize_optional_text(value) or DEFAULT_OUTPUT_LEVEL
-    if text not in {"ids", "scores", "full"}:
-        raise ValueError("Field 'output_level' must be one of: ids, scores, full.")
-    return text
 
 
 def _resolve_ba_dalt_length(payload: dict[str, Any]) -> int:
