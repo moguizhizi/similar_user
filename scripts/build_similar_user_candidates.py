@@ -146,6 +146,7 @@ def build_similar_user_candidates(
     disease_course_window_days: int | None = None,
     base_date: str | None = None,
     query_family: str | None = None,
+    skip_topk_user_cache_read: bool = False,
 ) -> dict[str, Any]:
     """从 scored paths 聚合并返回 topK 候选用户。
 
@@ -189,12 +190,14 @@ def build_similar_user_candidates(
         scored_key=expected_scored_key,
         candidate_cache_context=candidate_cache_context,
     )
-    cached_result = load_cached_topk_candidate_result(
-        user_cache_context,
-        candidates_dir=candidates_dir,
-        request_base_date=base_date,
-        config_path=resolved_config_path,
-    )
+    cached_result = None
+    if not skip_topk_user_cache_read:
+        cached_result = load_cached_topk_candidate_result(
+            user_cache_context,
+            candidates_dir=candidates_dir,
+            request_base_date=base_date,
+            config_path=resolved_config_path,
+        )
     if cached_result is not None:
         cached_result = refresh_cached_candidate_base_dates_on_hit(
             cached_result,
@@ -210,6 +213,13 @@ def build_similar_user_candidates(
             cached_result.get("user_cache_data_path"),
         )
         return cached_result
+    if skip_topk_user_cache_read:
+        LOGGER.info(
+            "Skipping topK similar-user candidates cache read before rebuild: patient_id=%s, query_family=%s, request_base_date=%s",
+            patient_id,
+            user_cache_context.get("query_family"),
+            base_date,
+        )
 
     LOGGER.info(
         "TopK similar-user candidates cache miss: patient_id=%s, query_family=%s, cached_base_date=%s, request_base_date=%s, config_hash=%s, candidate_key=%s",
