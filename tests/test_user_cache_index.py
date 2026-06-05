@@ -433,6 +433,153 @@ class UserCacheIndexStoreTest(unittest.TestCase):
                 )
             )
 
+    def test_enqueue_refresh_job_deduplicates_by_job_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+
+            first = store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            second = store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            with store._connect() as connection:
+                count = connection.execute(
+                    "SELECT COUNT(*) FROM user_cache_refresh_jobs"
+                ).fetchone()[0]
+
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(first.job_key, second.job_key)
+        self.assertEqual(count, 1)
+        self.assertEqual(second.status, "pending")
+
+    def test_claim_pending_refresh_jobs_marks_jobs_running(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+
+            claimed = store.claim_pending_refresh_jobs(limit=1)
+            second_claim = store.claim_pending_refresh_jobs(limit=1)
+
+        self.assertEqual(len(claimed), 1)
+        self.assertEqual(claimed[0].status, "running")
+        self.assertEqual(claimed[0].attempt_count, 1)
+        self.assertIsNotNone(claimed[0].claimed_at)
+        self.assertEqual(second_claim, [])
+
+    def test_mark_refresh_job_completed_updates_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            claimed = store.claim_pending_refresh_jobs(limit=1)
+            assert claimed[0].id is not None
+
+            completed = store.mark_refresh_job_completed(claimed[0].id)
+
+        self.assertIsNotNone(completed)
+        assert completed is not None
+        self.assertEqual(completed.status, "completed")
+        self.assertIsNone(completed.error_message)
+        self.assertIsNotNone(completed.completed_at)
+
+    def test_mark_refresh_job_failed_updates_status_and_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            claimed = store.claim_pending_refresh_jobs(limit=1)
+            assert claimed[0].id is not None
+
+            failed = store.mark_refresh_job_failed(
+                claimed[0].id,
+                error_message="refresh failed",
+            )
+
+        self.assertIsNotNone(failed)
+        assert failed is not None
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(failed.error_message, "refresh failed")
+
+    def test_cleanup_refresh_jobs_removes_old_completed_and_failed_jobs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            first = store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            second = store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30067890",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            assert first.id is not None
+            assert second.id is not None
+            store.mark_refresh_job_completed(first.id)
+            store.mark_refresh_job_failed(second.id, error_message="refresh failed")
+
+            deleted = store.cleanup_refresh_jobs(
+                completed_before="9999-12-31T23:59:59+00:00",
+                failed_before="9999-12-31T23:59:59+00:00",
+            )
+            with store._connect() as connection:
+                count = connection.execute(
+                    "SELECT COUNT(*) FROM user_cache_refresh_jobs"
+                ).fetchone()[0]
+
+        self.assertEqual(deleted, 2)
+        self.assertEqual(count, 0)
+
 
 def _entry(
     *,

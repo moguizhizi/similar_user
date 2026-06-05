@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass
@@ -21,6 +22,14 @@ SUPPORTED_USER_CACHE_TYPES = frozenset(
 )
 SQLITE_BUSY_TIMEOUT_SECONDS = 30.0
 SQLITE_BUSY_TIMEOUT_MILLISECONDS = int(SQLITE_BUSY_TIMEOUT_SECONDS * 1000)
+SUPPORTED_REFRESH_JOB_STATUSES = frozenset(
+    {
+        "pending",
+        "running",
+        "completed",
+        "failed",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -56,6 +65,29 @@ class UserCacheLookupResult:
 
     entry: UserCacheEntry
     state: str
+
+
+@dataclass(frozen=True)
+class UserCacheRefreshJob:
+    """One background refresh job for a reusable cache entry."""
+
+    id: int | None
+    job_key: str
+    cache_type: str
+    source_type: str
+    source_id: str
+    query_family: str
+    window_days: int
+    config_hash: str
+    request_base_date: str
+    status: str
+    reason: str
+    attempt_count: int = 0
+    error_message: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    claimed_at: str | None = None
+    completed_at: str | None = None
 
 
 class UserCacheIndexStore:
@@ -126,6 +158,38 @@ class UserCacheIndexStore:
                     window_days,
                     config_hash,
                     cached_base_date
+                )
+                """.strip()
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_cache_refresh_jobs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_key TEXT NOT NULL UNIQUE,
+                    cache_type TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    query_family TEXT NOT NULL,
+                    window_days INTEGER NOT NULL,
+                    config_hash TEXT NOT NULL,
+                    request_base_date TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    error_message TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    claimed_at TEXT,
+                    completed_at TEXT
+                )
+                """.strip()
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_user_cache_refresh_jobs_status
+                ON user_cache_refresh_jobs (
+                    status,
+                    updated_at
                 )
                 """.strip()
             )
@@ -327,6 +391,228 @@ class UserCacheIndexStore:
                 return UserCacheLookupResult(entry=entry, state="stale")
         return None
 
+    def enqueue_refresh_job(
+        self,
+        *,
+        cache_type: str,
+        source_type: str,
+        source_id: str,
+        query_family: str,
+        window_days: int,
+        config_hash: str,
+        request_base_date: str,
+        reason: str,
+    ) -> UserCacheRefreshJob:
+        """Create or return one refresh job for a cache key."""
+        self.initialize()
+        normalized_cache_type = _normalize_cache_type(cache_type)
+        normalized_source_type = _normalize_required_text(source_type, "source_type")
+        normalized_source_id = _normalize_required_text(source_id, "source_id")
+        normalized_query_family = _normalize_required_text(query_family, "query_family")
+        normalized_window_days = _normalize_positive_int(window_days, "window_days")
+        normalized_config_hash = _normalize_required_text(config_hash, "config_hash")
+        normalized_request_base_date = _parse_iso_date(
+            request_base_date,
+            "request_base_date",
+        ).isoformat()
+        normalized_reason = _normalize_required_text(reason, "reason")
+        job_key = _build_refresh_job_key(
+            cache_type=normalized_cache_type,
+            source_type=normalized_source_type,
+            source_id=normalized_source_id,
+            query_family=normalized_query_family,
+            window_days=normalized_window_days,
+            config_hash=normalized_config_hash,
+            request_base_date=normalized_request_base_date,
+        )
+        now = _utc_now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO user_cache_refresh_jobs (
+                    job_key,
+                    cache_type,
+                    source_type,
+                    source_id,
+                    query_family,
+                    window_days,
+                    config_hash,
+                    request_base_date,
+                    status,
+                    reason,
+                    attempt_count,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0, ?, ?)
+                ON CONFLICT(job_key) DO UPDATE SET
+                    updated_at = excluded.updated_at
+                """.strip(),
+                (
+                    job_key,
+                    normalized_cache_type,
+                    normalized_source_type,
+                    normalized_source_id,
+                    normalized_query_family,
+                    normalized_window_days,
+                    normalized_config_hash,
+                    normalized_request_base_date,
+                    normalized_reason,
+                    now,
+                    now,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT *
+                FROM user_cache_refresh_jobs
+                WHERE job_key = ?
+                """.strip(),
+                (job_key,),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("Failed to enqueue user cache refresh job.")
+        return _refresh_job_from_row(row)
+
+    def claim_pending_refresh_jobs(self, *, limit: int) -> list[UserCacheRefreshJob]:
+        """Mark pending refresh jobs as running and return the claimed jobs."""
+        normalized_limit = _normalize_positive_int(limit, "limit")
+        if not self.exists:
+            return []
+        self.initialize()
+        now = _utc_now()
+        claimed: list[UserCacheRefreshJob] = []
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id
+                FROM user_cache_refresh_jobs
+                WHERE status = 'pending'
+                ORDER BY created_at ASC, id ASC
+                LIMIT ?
+                """.strip(),
+                (normalized_limit,),
+            ).fetchall()
+            for row in rows:
+                cursor = connection.execute(
+                    """
+                    UPDATE user_cache_refresh_jobs
+                    SET
+                        status = 'running',
+                        attempt_count = attempt_count + 1,
+                        error_message = NULL,
+                        claimed_at = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                      AND status = 'pending'
+                    """.strip(),
+                    (now, now, int(row["id"])),
+                )
+                if cursor.rowcount != 1:
+                    continue
+                claimed_row = connection.execute(
+                    """
+                    SELECT *
+                    FROM user_cache_refresh_jobs
+                    WHERE id = ?
+                    """.strip(),
+                    (int(row["id"]),),
+                ).fetchone()
+                if claimed_row is not None:
+                    claimed.append(_refresh_job_from_row(claimed_row))
+        return claimed
+
+    def mark_refresh_job_completed(self, job_id: int) -> UserCacheRefreshJob | None:
+        """Mark one refresh job as completed and return the updated job."""
+        normalized_job_id = _normalize_positive_int(job_id, "job_id")
+        if not self.exists:
+            return None
+        now = _utc_now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE user_cache_refresh_jobs
+                SET
+                    status = 'completed',
+                    error_message = NULL,
+                    completed_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """.strip(),
+                (now, now, normalized_job_id),
+            )
+            row = connection.execute(
+                """
+                SELECT *
+                FROM user_cache_refresh_jobs
+                WHERE id = ?
+                """.strip(),
+                (normalized_job_id,),
+            ).fetchone()
+        return _refresh_job_from_row(row) if row is not None else None
+
+    def mark_refresh_job_failed(
+        self,
+        job_id: int,
+        *,
+        error_message: str,
+    ) -> UserCacheRefreshJob | None:
+        """Mark one refresh job as failed and return the updated job."""
+        normalized_job_id = _normalize_positive_int(job_id, "job_id")
+        normalized_error_message = _normalize_required_text(
+            error_message,
+            "error_message",
+        )
+        if not self.exists:
+            return None
+        now = _utc_now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE user_cache_refresh_jobs
+                SET
+                    status = 'failed',
+                    error_message = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """.strip(),
+                (normalized_error_message, now, normalized_job_id),
+            )
+            row = connection.execute(
+                """
+                SELECT *
+                FROM user_cache_refresh_jobs
+                WHERE id = ?
+                """.strip(),
+                (normalized_job_id,),
+            ).fetchone()
+        return _refresh_job_from_row(row) if row is not None else None
+
+    def cleanup_refresh_jobs(
+        self,
+        *,
+        completed_before: str,
+        failed_before: str,
+    ) -> int:
+        """Delete old completed and failed refresh jobs and return affected rows."""
+        if not self.exists:
+            return 0
+        completed_cutoff = _normalize_required_text(
+            completed_before,
+            "completed_before",
+        )
+        failed_cutoff = _normalize_required_text(failed_before, "failed_before")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM user_cache_refresh_jobs
+                WHERE (status = 'completed' AND updated_at < ?)
+                   OR (status = 'failed' AND updated_at < ?)
+                """.strip(),
+                (completed_cutoff, failed_cutoff),
+            )
+            return int(cursor.rowcount)
+
     def list_entries(self) -> list[UserCacheEntry]:
         """Return all indexed cache entries ordered by source and cached date."""
         if not self.exists:
@@ -457,11 +743,71 @@ def _entry_from_row(row: sqlite3.Row) -> UserCacheEntry:
     )
 
 
+def _refresh_job_from_row(row: sqlite3.Row) -> UserCacheRefreshJob:
+    return UserCacheRefreshJob(
+        id=int(row["id"]),
+        job_key=str(row["job_key"]),
+        cache_type=_normalize_cache_type(str(row["cache_type"])),
+        source_type=_normalize_required_text(str(row["source_type"]), "source_type"),
+        source_id=_normalize_required_text(str(row["source_id"]), "source_id"),
+        query_family=_normalize_required_text(
+            str(row["query_family"]),
+            "query_family",
+        ),
+        window_days=int(row["window_days"]),
+        config_hash=_normalize_required_text(str(row["config_hash"]), "config_hash"),
+        request_base_date=str(row["request_base_date"]),
+        status=_normalize_refresh_job_status(str(row["status"])),
+        reason=_normalize_required_text(str(row["reason"]), "reason"),
+        attempt_count=int(row["attempt_count"]),
+        error_message=(
+            str(row["error_message"]) if row["error_message"] is not None else None
+        ),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+        claimed_at=str(row["claimed_at"]) if row["claimed_at"] is not None else None,
+        completed_at=(
+            str(row["completed_at"]) if row["completed_at"] is not None else None
+        ),
+    )
+
+
+def _build_refresh_job_key(
+    *,
+    cache_type: str,
+    source_type: str,
+    source_id: str,
+    query_family: str,
+    window_days: int,
+    config_hash: str,
+    request_base_date: str,
+) -> str:
+    payload = {
+        "cache_type": cache_type,
+        "source_type": source_type,
+        "source_id": source_id,
+        "query_family": query_family,
+        "window_days": window_days,
+        "config_hash": config_hash,
+        "request_base_date": request_base_date,
+    }
+    encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _normalize_cache_type(value: str) -> str:
     normalized = _normalize_required_text(value, "cache_type")
     if normalized not in SUPPORTED_USER_CACHE_TYPES:
         supported = ", ".join(sorted(SUPPORTED_USER_CACHE_TYPES))
         raise ValueError(f"cache_type must be one of: {supported}.")
+    return normalized
+
+
+def _normalize_refresh_job_status(value: str) -> str:
+    normalized = _normalize_required_text(value, "status")
+    if normalized not in SUPPORTED_REFRESH_JOB_STATUSES:
+        supported = ", ".join(sorted(SUPPORTED_REFRESH_JOB_STATUSES))
+        raise ValueError(f"status must be one of: {supported}.")
     return normalized
 
 
