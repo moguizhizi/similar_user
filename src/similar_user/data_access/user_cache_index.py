@@ -403,7 +403,12 @@ class UserCacheIndexStore:
         request_base_date: str,
         reason: str,
     ) -> UserCacheRefreshJob:
-        """Create or return one refresh job for a cache key."""
+        """登记一个缓存键的后台刷新请求。
+
+        该方法用于在线请求命中 stale 缓存时：调用方可以先登记刷新任务，
+        同时立即返回旧缓存。生成的 job_key 会按缓存键和 request_base_date
+        去重，因此并发请求会复用同一条 job 记录，而不是创建重复的 pending 任务。
+        """
         self.initialize()
         normalized_cache_type = _normalize_cache_type(cache_type)
         normalized_source_type = _normalize_required_text(source_type, "source_type")
@@ -475,7 +480,12 @@ class UserCacheIndexStore:
         return _refresh_job_from_row(row)
 
     def claim_pending_refresh_jobs(self, *, limit: int) -> list[UserCacheRefreshJob]:
-        """Mark pending refresh jobs as running and return the claimed jobs."""
+        """为后台 worker 领取 pending 刷新任务。
+
+        任务按创建时间从旧到新领取，并在领取时从 pending 改为 running，
+        同时递增 attempt_count。UPDATE 中的 status 条件用于避免多个并发
+        worker 领取到同一条任务。
+        """
         normalized_limit = _normalize_positive_int(limit, "limit")
         if not self.exists:
             return []
@@ -523,7 +533,11 @@ class UserCacheIndexStore:
         return claimed
 
     def mark_refresh_job_completed(self, job_id: int) -> UserCacheRefreshJob | None:
-        """Mark one refresh job as completed and return the updated job."""
+        """将一条已领取的刷新任务标记为 completed。
+
+        后台刷新成功写入新缓存后调用该方法。任务记录会作为刷新历史保留，
+        直到后续 cleanup 清理过旧的 completed 记录。
+        """
         normalized_job_id = _normalize_positive_int(job_id, "job_id")
         if not self.exists:
             return None
@@ -557,7 +571,11 @@ class UserCacheIndexStore:
         *,
         error_message: str,
     ) -> UserCacheRefreshJob | None:
-        """Mark one refresh job as failed and return the updated job."""
+        """将一条刷新任务标记为 failed，并记录失败原因。
+
+        failed 记录会保留在任务表中，便于排查问题或制定重试策略，
+        直到后续 cleanup 清理过旧的 failed 记录。
+        """
         normalized_job_id = _normalize_positive_int(job_id, "job_id")
         normalized_error_message = _normalize_required_text(
             error_message,
@@ -594,7 +612,12 @@ class UserCacheIndexStore:
         completed_before: str,
         failed_before: str,
     ) -> int:
-        """Delete old completed and failed refresh jobs and return affected rows."""
+        """删除过旧的终态刷新任务，并返回删除行数。
+
+        completed_before 和 failed_before 是时间戳截止点，用于让成功任务
+        和失败任务采用不同的保留周期。该清理方法不会删除 pending 或
+        running 状态的任务。
+        """
         if not self.exists:
             return 0
         completed_cutoff = _normalize_required_text(
