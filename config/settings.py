@@ -117,6 +117,7 @@ class TrainingTaskPredictionSettings:
 class TrainingTaskEvaluationSettings:
     """Configuration for evaluating predicted training tasks."""
 
+    validation_enabled: bool = True
     validation_mode: str = "set"
     workers: int = 1
     score_validation_url: str = "http://172.21.133.142:5008/training_task_score"
@@ -489,6 +490,11 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
         raise ValueError(
             "training_task_prediction fallback_enabled must be a boolean."
         )
+    validation_enabled = training_task_evaluation_data.get("validation_enabled", True)
+    if not isinstance(validation_enabled, bool):
+        raise ValueError(
+            "training_task_evaluation validation_enabled must be a boolean."
+        )
     validation_mode = training_task_evaluation_data.get("validation_mode", "set")
     if not isinstance(validation_mode, str) or validation_mode.strip() not in {
         "set",
@@ -618,6 +624,7 @@ def load_query_settings(config_path: str | Path) -> QuerySettings:
             fallback_enabled=fallback_enabled,
         ),
         training_task_evaluation=TrainingTaskEvaluationSettings(
+            validation_enabled=validation_enabled,
             validation_mode=validation_mode.strip(),
             workers=evaluation_workers,
             score_validation_url=score_validation_url.strip(),

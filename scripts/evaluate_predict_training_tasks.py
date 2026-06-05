@@ -180,9 +180,14 @@ def evaluate_patient(
     query_settings = load_query_settings(config_path)
     evaluation_settings = query_settings.training_task_evaluation
     save_prompt = query_settings.training_task_prediction.save_prompt_enabled
+    validation_enabled = getattr(evaluation_settings, "validation_enabled", True)
+    if not isinstance(validation_enabled, bool):
+        validation_enabled = True
     validation_mode = evaluation_settings.validation_mode
     try:
-        if validation_mode == "set":
+        if not validation_enabled:
+            actual_game_ids = []
+        elif validation_mode == "set":
             actual_game_ids = get_actual_game_ids_on_base_date(
                 user_service,
                 patient_id,
@@ -245,21 +250,47 @@ def evaluate_patient(
         prediction_finished_at = time.perf_counter()
         prediction_elapsed_seconds = round(prediction_finished_at - started_at, 3)
         validation_started_at = time.perf_counter()
-        validation_result = validate_training_task_recommendation(
-            validation_mode=validation_mode,
-            prediction_result=prediction_result,
-            patient_id=patient_id,
-            predicted_game_ids=predicted_game_ids,
-            actual_game_ids=actual_game_ids,
-            score_url=evaluation_settings.score_validation_url,
-            csv_path=evaluation_settings.algorithm_request_results_csv,
-            timeout_seconds=evaluation_settings.score_validation_timeout,
-        )
-        validation_finished_at = time.perf_counter()
-        validation_elapsed_seconds = round(
-            validation_finished_at - validation_started_at,
-            3,
-        )
+        if validation_enabled:
+            validation_result = validate_training_task_recommendation(
+                validation_mode=validation_mode,
+                prediction_result=prediction_result,
+                patient_id=patient_id,
+                predicted_game_ids=predicted_game_ids,
+                actual_game_ids=actual_game_ids,
+                score_url=evaluation_settings.score_validation_url,
+                csv_path=evaluation_settings.algorithm_request_results_csv,
+                timeout_seconds=evaluation_settings.score_validation_timeout,
+            )
+            validation_finished_at = time.perf_counter()
+            validation_elapsed_seconds = round(
+                validation_finished_at - validation_started_at,
+                3,
+            )
+        else:
+            validation_finished_at = validation_started_at
+            validation_elapsed_seconds = 0.0
+            validation_result = {
+                "status": "success_not_validated",
+                "validation_mode": validation_mode,
+                "reason": "validation_disabled",
+                "matched_game_ids": [],
+                "task_hit": None,
+                "precision": None,
+                "recall": None,
+                "f1": None,
+                "training_task_score_validation": None,
+                "kg_avg_score": None,
+                "csv_avg_score": None,
+                "score_delta": None,
+                "actual_task_count": 0,
+                "matched_task_count": 0,
+            }
+            LOGGER.info(
+                "Skipped training task validation: patient_id=%s, "
+                "validation_enabled=False, validation_mode=%s",
+                patient_id,
+                validation_mode,
+            )
     except EmptyPathResultsError as exc:
         detail = build_not_evaluable_detail(
             patient_id=patient_id,
@@ -308,6 +339,7 @@ def evaluate_patient(
             "patient_id": patient_id,
             "base_date": base_date,
             "status": "failed",
+            "validation_enabled": validation_enabled,
             "validation_mode": validation_mode,
             **build_prediction_failure_metadata(exc),
             "error_type": type(exc).__name__,
@@ -322,6 +354,7 @@ def evaluate_patient(
         **prediction_metadata_from_nested_result(prediction_result),
         **build_validation_success_metadata(),
         "status": validation_result["status"],
+        "validation_enabled": validation_enabled,
         "validation_mode": validation_result["validation_mode"],
         "reason": validation_result.get("reason"),
         "predicted_game_ids": predicted_game_ids,
@@ -639,7 +672,16 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         for detail in details
         if detail.get("status") == "success_not_evaluable"
     ]
-    success_count = len(evaluated_details) + len(not_evaluable_details)
+    not_validated_details = [
+        detail
+        for detail in details
+        if detail.get("status") == "success_not_validated"
+    ]
+    success_count = (
+        len(evaluated_details)
+        + len(not_evaluable_details)
+        + len(not_validated_details)
+    )
     task_hit_count = sum(1 for detail in evaluated_details if detail.get("task_hit"))
     total_predicted_tasks = sum(
         int(detail.get("predicted_task_count") or 0) for detail in evaluated_details
@@ -704,6 +746,7 @@ def summarize_evaluation_details(details: list[dict[str, Any]]) -> dict[str, Any
         "failed_count": len(failed_details),
         **prediction_visibility,
         "not_evaluable_count": len(not_evaluable_details),
+        "validation_skipped_count": len(not_validated_details),
         "evaluated_count": len(evaluated_details),
         "coverage_rate": round(safe_divide(success_count, total_count), 4),
         "evaluable_rate": round(safe_divide(len(evaluated_details), total_count), 4),

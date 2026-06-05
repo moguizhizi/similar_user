@@ -2499,6 +2499,7 @@ class KgRepositoryTest(unittest.TestCase):
                         "  bands:",
                         "    - per_g: 5",
                         "training_task_evaluation:",
+                        "  validation_enabled: false",
                         "  validation_mode: score",
                         "  workers: 4",
                         "  score_validation_url: http://score.test/training_task_score",
@@ -2511,6 +2512,7 @@ class KgRepositoryTest(unittest.TestCase):
 
             settings = load_query_settings(config_path)
 
+        self.assertFalse(settings.training_task_evaluation.validation_enabled)
         self.assertEqual(settings.training_task_evaluation.validation_mode, "score")
         self.assertEqual(settings.training_task_evaluation.workers, 4)
         self.assertEqual(

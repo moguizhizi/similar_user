@@ -125,6 +125,9 @@ def evaluate_direct_entity_profiles(
     )
     query_settings = load_query_settings(config_path)
     evaluation_settings = query_settings.training_task_evaluation
+    validation_enabled = getattr(evaluation_settings, "validation_enabled", True)
+    if not isinstance(validation_enabled, bool):
+        validation_enabled = True
     resolved_task_top_k = task_top_k or query_settings.training_task_prediction.task_top_k
     resolved_workers = workers or evaluation_settings.workers or 1
     save_prompt = query_settings.training_task_prediction.save_prompt_enabled
@@ -142,6 +145,7 @@ def evaluate_direct_entity_profiles(
         query_family=query_family,
         skip_path_build=skip_path_build,
         skip_path_scoring=skip_path_scoring,
+        validation_enabled=validation_enabled,
         validation_mode=evaluation_settings.validation_mode,
         score_url=evaluation_settings.score_validation_url,
         csv_path=evaluation_settings.algorithm_request_results_csv,
@@ -159,6 +163,7 @@ def evaluate_direct_entity_profiles(
             "task_top_k": resolved_task_top_k,
             "use_llm": use_llm,
             "prediction_mode": prediction_mode,
+            "validation_enabled": validation_enabled,
             "save_prompt_enabled": save_prompt,
             "prompt_output_dir": str(prompt_output_dir) if save_prompt else None,
             "query_family": query_family,
@@ -191,6 +196,7 @@ def run_profile_evaluations(
     query_family: str | None,
     skip_path_build: bool,
     skip_path_scoring: bool,
+    validation_enabled: bool,
     validation_mode: str,
     score_url: str,
     csv_path: str | Path,
@@ -213,6 +219,7 @@ def run_profile_evaluations(
                 query_family=query_family,
                 skip_path_build=skip_path_build,
                 skip_path_scoring=skip_path_scoring,
+                validation_enabled=validation_enabled,
                 validation_mode=validation_mode,
                 score_url=score_url,
                 csv_path=csv_path,
@@ -245,6 +252,7 @@ def run_profile_evaluations(
                 query_family=query_family,
                 skip_path_build=skip_path_build,
                 skip_path_scoring=skip_path_scoring,
+                validation_enabled=validation_enabled,
                 validation_mode=validation_mode,
                 score_url=score_url,
                 csv_path=csv_path,
@@ -280,6 +288,7 @@ def evaluate_profile(
     query_family: str | None,
     skip_path_build: bool,
     skip_path_scoring: bool,
+    validation_enabled: bool,
     validation_mode: str,
     score_url: str,
     csv_path: str | Path,
@@ -330,21 +339,48 @@ def evaluate_profile(
         )
         current_stage = "validation"
         validation_started_at = time.perf_counter()
-        validation_result = validate_training_task_recommendation(
-            validation_mode=validation_mode,
-            prediction_result=result,
-            patient_id=patient_id,
-            predicted_game_ids=predicted_game_ids,
-            actual_game_ids=[],
-            score_url=score_url,
-            csv_path=csv_path,
-            timeout_seconds=timeout_seconds,
-        )
-        validation_finished_at = time.perf_counter()
-        validation_elapsed_seconds = round(
-            validation_finished_at - validation_started_at,
-            3,
-        )
+        if validation_enabled:
+            validation_result = validate_training_task_recommendation(
+                validation_mode=validation_mode,
+                prediction_result=result,
+                patient_id=patient_id,
+                predicted_game_ids=predicted_game_ids,
+                actual_game_ids=[],
+                score_url=score_url,
+                csv_path=csv_path,
+                timeout_seconds=timeout_seconds,
+            )
+            validation_finished_at = time.perf_counter()
+            validation_elapsed_seconds = round(
+                validation_finished_at - validation_started_at,
+                3,
+            )
+        else:
+            validation_finished_at = validation_started_at
+            validation_elapsed_seconds = 0.0
+            validation_result = {
+                "status": "success_not_validated",
+                "validation_mode": validation_mode,
+                "reason": "validation_disabled",
+                "matched_game_ids": [],
+                "task_hit": None,
+                "precision": None,
+                "recall": None,
+                "f1": None,
+                "training_task_score_validation": None,
+                "kg_avg_score": None,
+                "csv_avg_score": None,
+                "score_delta": None,
+                "actual_task_count": 0,
+                "matched_task_count": 0,
+            }
+            LOGGER.info(
+                "Skipped training task validation: patient_id=%s, "
+                "prediction_mode=%s, validation_enabled=False, validation_mode=%s",
+                patient_id,
+                prediction_mode,
+                validation_mode,
+            )
     except Exception as exc:
         failure_stage, failure_reason = classify_profile_failure(
             exc,
@@ -379,6 +415,7 @@ def evaluate_profile(
             "prediction_mode": prediction_mode,
             "failure_stage": failure_stage,
             "failure_reason": failure_reason,
+            "validation_enabled": validation_enabled,
             "validation_mode": validation_mode,
             "error_type": type(exc).__name__,
             "error_message": str(exc),
@@ -419,6 +456,7 @@ def evaluate_profile(
         "patient_exists": routed_result.get("patient_exists"),
         "status": validation_result["status"],
         "validation_mode": validation_result["validation_mode"],
+        "validation_enabled": validation_enabled,
         "reason": validation_result.get("reason"),
         "predicted_game_ids": predicted_game_ids,
         "actual_game_ids": [],
