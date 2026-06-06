@@ -28,6 +28,7 @@ import sys
 import tempfile
 import time
 from dataclasses import asdict, is_dataclass
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -698,7 +699,10 @@ def load_saved_direct_entity_scored_results(
             cache_context = data.get("cache_context")
             if (
                 isinstance(cache_context, dict)
-                and cache_context.get("scored_key") != normalized_scored_key
+                and not _scored_key_matches_reusable(
+                    cache_context.get("scored_key"),
+                    normalized_scored_key,
+                )
             ):
                 continue
             scored_results.append(data)
@@ -729,9 +733,17 @@ def _find_direct_entity_scored_detail_paths(
                     or entry.window_days != query_settings.direct_entity_path.window_days
                 ):
                     continue
-                if not entry.is_valid_for(base_date):
+                lookup_state = _scored_entry_reusable_state(
+                    entry,
+                    request_base_date=base_date,
+                    stale_valid_days=settings.direct_scored_paths_stale_valid_days,
+                )
+                if lookup_state is None:
                     continue
-                if entry.payload.get("scored_key") != direct_scored_key:
+                if not _scored_key_matches_reusable(
+                    entry.payload.get("scored_key"),
+                    direct_scored_key,
+                ):
                     continue
                 if entry.payload.get("pattern") != pattern:
                     continue
@@ -747,6 +759,21 @@ def _find_direct_entity_scored_detail_paths(
                         detail_path,
                     )
                     continue
+                if lookup_state == "stale":
+                    _enqueue_scored_path_refresh_job(
+                        store,
+                        entry,
+                        request_base_date=base_date,
+                        reason="stale_direct_scored_paths_hit",
+                    )
+                    LOGGER.info(
+                        "Using stale direct entity scored paths from user cache: source_id=%s, pattern=%s, cached_base_date=%s, request_base_date=%s, data_path=%s",
+                        source_id,
+                        pattern,
+                        entry.cached_base_date,
+                        base_date,
+                        detail_path,
+                    )
                 paths.append(detail_path)
             paths.sort(
                 key=lambda path: (
@@ -828,7 +855,7 @@ def resolve_scored_key_from_user_cache(
     normalized_base_date = _normalize_required_string(base_date, "base_date")
     query_settings = load_query_settings(config_path)
     store = UserCacheIndexStore(settings.sqlite_path)
-    entry = store.find_latest_valid_source_entry(
+    lookup = store.find_latest_reusable_source_entry(
         cache_type="scored_paths",
         source_type="patient",
         source_id=_normalize_required_string(patient_id, "patient_id"),
@@ -836,7 +863,9 @@ def resolve_scored_key_from_user_cache(
         window_days=query_settings.patient_path.window_days,
         config_hash=_scored_paths_user_cache_config_hash(expected_scored_key),
         request_base_date=normalized_base_date,
+        stale_valid_days=settings.patient_scored_paths_stale_valid_days,
     )
+    entry = lookup.entry if lookup is not None else None
     if entry is None:
         return None
     detail_path = Path(entry.data_path)
@@ -852,9 +881,17 @@ def resolve_scored_key_from_user_cache(
     if not isinstance(scored_key, str) or not scored_key.strip():
         return None
     resolved_scored_key = scored_key.strip()
+    if lookup is not None and lookup.state == "stale":
+        _enqueue_scored_path_refresh_job(
+            store,
+            entry,
+            request_base_date=normalized_base_date,
+            reason="stale_scored_paths_hit",
+        )
     LOGGER.info(
-        "Using scored paths from user cache: patient_id=%s, expected_scored_key=%s, cached_scored_key=%s, cached_base_date=%s, data_path=%s, scored_paths_dir=%s",
+        "Using scored paths from user cache: patient_id=%s, lookup_state=%s, expected_scored_key=%s, cached_scored_key=%s, cached_base_date=%s, data_path=%s, scored_paths_dir=%s",
         patient_id,
+        lookup.state if lookup is not None else None,
         expected_scored_key,
         resolved_scored_key,
         entry.cached_base_date,
@@ -862,6 +899,55 @@ def resolve_scored_key_from_user_cache(
         scored_paths_dir,
     )
     return resolved_scored_key
+
+
+def _scored_entry_reusable_state(
+    entry: UserCacheEntry,
+    *,
+    request_base_date: str,
+    stale_valid_days: int,
+) -> str | None:
+    request_date = date.fromisoformat(
+        _normalize_required_string(request_base_date, "request_base_date")
+    )
+    cached_date = date.fromisoformat(
+        _normalize_required_string(entry.cached_base_date, "cached_base_date")
+    )
+    age = request_date - cached_date
+    if age < timedelta(days=0):
+        return None
+    if age <= timedelta(days=entry.valid_days):
+        return "fresh"
+    if age <= timedelta(days=stale_valid_days):
+        return "stale"
+    return None
+
+
+def _scored_key_matches_reusable(value: object, expected_scored_key: str) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    return _strip_base_date_from_key(value.strip()) == _strip_base_date_from_key(
+        expected_scored_key
+    )
+
+
+def _enqueue_scored_path_refresh_job(
+    store: UserCacheIndexStore,
+    entry: UserCacheEntry,
+    *,
+    request_base_date: str,
+    reason: str,
+) -> None:
+    store.enqueue_refresh_job(
+        cache_type=entry.cache_type,
+        source_type=entry.source_type,
+        source_id=entry.source_id or entry.patient_id,
+        query_family=entry.query_family,
+        window_days=entry.window_days,
+        config_hash=entry.config_hash,
+        request_base_date=request_base_date,
+        reason=reason,
+    )
 
 
 def save_similar_user_candidates_result(
