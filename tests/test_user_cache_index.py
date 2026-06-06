@@ -27,9 +27,7 @@ class UserCacheSettingsTest(unittest.TestCase):
                         "  patient_raw_paths_valid_days: 21",
                         "  direct_raw_paths_valid_days: 60",
                         "  patient_scored_paths_valid_days: 10",
-                        "  patient_scored_paths_stale_valid_days: 15",
                         "  direct_scored_paths_valid_days: 60",
-                        "  direct_scored_paths_stale_valid_days: 90",
                         "  topk_candidates_valid_days: 5",
                         "  topk_candidates_stale_valid_days: 9",
                         "  refresh_candidate_base_date_on_hit: false",
@@ -62,9 +60,7 @@ class UserCacheSettingsTest(unittest.TestCase):
             self.assertEqual(settings.patient_raw_paths_valid_days, 21)
             self.assertEqual(settings.direct_raw_paths_valid_days, 60)
             self.assertEqual(settings.patient_scored_paths_valid_days, 10)
-            self.assertEqual(settings.patient_scored_paths_stale_valid_days, 15)
             self.assertEqual(settings.direct_scored_paths_valid_days, 60)
-            self.assertEqual(settings.direct_scored_paths_stale_valid_days, 90)
             self.assertEqual(settings.topk_candidates_valid_days, 5)
             self.assertEqual(settings.topk_candidates_stale_valid_days, 9)
             self.assertFalse(settings.refresh_candidate_base_date_on_hit)
@@ -129,27 +125,6 @@ class UserCacheSettingsTest(unittest.TestCase):
         self.assertEqual(settings.topk_candidates_valid_days, 6)
         self.assertEqual(settings.topk_candidates_stale_valid_days, 6)
 
-    def test_load_user_cache_settings_defaults_stale_scored_days_to_fresh_days(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "settings.yaml"
-            config_path.write_text(
-                "\n".join(
-                    [
-                        "user_cache:",
-                        "  patient_scored_paths_valid_days: 10",
-                        "  direct_scored_paths_valid_days: 20",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            settings = load_user_cache_settings(config_path)
-
-        self.assertEqual(settings.patient_scored_paths_stale_valid_days, 10)
-        self.assertEqual(settings.direct_scored_paths_stale_valid_days, 20)
-
     def test_load_user_cache_settings_rejects_stale_topk_less_than_fresh(
         self,
     ) -> None:
@@ -171,46 +146,6 @@ class UserCacheSettingsTest(unittest.TestCase):
                 "topk_candidates_stale_valid_days",
             ):
                 load_user_cache_settings(config_path)
-
-    def test_load_user_cache_settings_rejects_stale_scored_less_than_fresh(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "settings.yaml"
-            config_path.write_text(
-                "\n".join(
-                    [
-                        "user_cache:",
-                        "  patient_scored_paths_valid_days: 10",
-                        "  patient_scored_paths_stale_valid_days: 9",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            with self.assertRaisesRegex(
-                ValueError,
-                "patient_scored_paths_stale_valid_days",
-            ):
-                load_user_cache_settings(config_path)
-
-            config_path.write_text(
-                "\n".join(
-                    [
-                        "user_cache:",
-                        "  direct_scored_paths_valid_days: 20",
-                        "  direct_scored_paths_stale_valid_days: 19",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            with self.assertRaisesRegex(
-                ValueError,
-                "direct_scored_paths_stale_valid_days",
-            ):
-                load_user_cache_settings(config_path)
-
 
 class UserCacheIndexStoreTest(unittest.TestCase):
     def test_find_latest_valid_source_entry_migrates_legacy_index_schema(self) -> None:

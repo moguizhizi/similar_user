@@ -107,14 +107,8 @@ user_cache:
   # 患者路径打分结果 scored paths 的可复用天数；过期后需基于 raw paths 重新打分。
   patient_scored_paths_valid_days: 14
 
-  # 患者路径 scored paths 的 stale 可返回天数；超过 fresh 有效期但未超过该值时，可先使用旧打分结果并登记后台刷新。
-  patient_scored_paths_stale_valid_days: 30
-
   # direct entity 路径打分结果 scored paths 的可复用天数。
   direct_scored_paths_valid_days: 60
-
-  # direct entity scored paths 的 stale 可返回天数；超过 fresh 有效期但未超过该值时，可先使用旧打分结果并登记后台刷新。
-  direct_scored_paths_stale_valid_days: 90
 
   # topK 候选用户结果的可复用天数；两条候选链路共用该有效期。
   topk_candidates_valid_days: 7
