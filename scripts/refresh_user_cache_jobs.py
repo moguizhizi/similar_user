@@ -41,6 +41,7 @@ from scripts.build_similar_user_candidates import (
 from scripts.predict_training_tasks_from_direct_entity import (
     _score_direct_entity_paths_with_auto_refresh,
 )
+from scripts.score_pattern_paths import score_and_save_configured_pattern_paths
 from scripts.score_direct_entity_paths import (
     DEFAULT_SCORED_OUTPUT_DIR,
     save_scored_direct_entity_result,
@@ -183,10 +184,8 @@ def _refresh_one_job(
     scored_paths_dir: str | Path,
     candidates_dir: str | Path,
 ) -> bool:
-    """根据 job 的 source_type 刷新对应 topK 缓存。"""
-    if job.cache_type != "topk_candidates":
-        raise ValueError(f"Unsupported refresh cache_type: {job.cache_type}")
-    if job.source_type == "patient":
+    """根据 job 的 cache_type 和 source_type 刷新对应缓存。"""
+    if job.cache_type == "topk_candidates" and job.source_type == "patient":
         _refresh_patient_topk_job(
             job,
             config_path=config_path,
@@ -194,7 +193,10 @@ def _refresh_one_job(
             candidates_dir=candidates_dir,
         )
         return True
-    if job.source_type == "direct_entity_profile":
+    if (
+        job.cache_type == "topk_candidates"
+        and job.source_type == "direct_entity_profile"
+    ):
         _refresh_direct_entity_topk_job(
             job,
             store=store,
@@ -203,7 +205,28 @@ def _refresh_one_job(
             candidates_dir=candidates_dir,
         )
         return True
-    raise ValueError(f"Unsupported refresh source_type: {job.source_type}")
+    if job.cache_type == "scored_paths" and job.source_type == "patient":
+        _refresh_patient_scored_paths_job(
+            job,
+            config_path=config_path,
+            scored_paths_dir=scored_paths_dir,
+        )
+        return True
+    if (
+        job.cache_type == "scored_direct_entity_paths"
+        and job.source_type == "direct_entity_profile"
+    ):
+        _refresh_direct_entity_scored_paths_job(
+            job,
+            store=store,
+            config_path=config_path,
+            scored_paths_dir=scored_paths_dir,
+        )
+        return True
+    raise ValueError(
+        "Unsupported refresh job: "
+        f"cache_type={job.cache_type}, source_type={job.source_type}"
+    )
 
 
 def _refresh_patient_topk_job(
@@ -224,6 +247,22 @@ def _refresh_patient_topk_job(
         skip_topk_user_cache_read=True,
     )
     save_similar_user_candidates_result(result, output_dir=candidates_dir)
+
+
+def _refresh_patient_scored_paths_job(
+    job: UserCacheRefreshJob,
+    *,
+    config_path: str | Path,
+    scored_paths_dir: str | Path,
+) -> None:
+    """刷新 patient path 对应的 scored paths 缓存。"""
+    score_and_save_configured_pattern_paths(
+        job.source_id,
+        config_path=config_path,
+        output_dir=scored_paths_dir,
+        base_date=job.request_base_date,
+        query_family=None if job.query_family == "default" else job.query_family,
+    )
 
 
 def _refresh_direct_entity_topk_job(
@@ -280,6 +319,38 @@ def _refresh_direct_entity_topk_job(
     save_similar_user_candidates_result(candidate_result, output_dir=candidates_dir)
 
 
+def _refresh_direct_entity_scored_paths_job(
+    job: UserCacheRefreshJob,
+    *,
+    store: UserCacheIndexStore,
+    config_path: str | Path,
+    scored_paths_dir: str | Path,
+) -> None:
+    """刷新 direct entity profile 对应的 scored paths 缓存。"""
+    scoring_input = _recover_direct_entity_scoring_input_from_scored_job(
+        job,
+        store=store,
+    )
+    query_settings = load_query_settings(config_path)
+    direct_score_result = _score_direct_entity_paths_with_auto_refresh(
+        config_path=config_path,
+        patient_id=str(scoring_input.get("patient_id") or job.source_id),
+        base_date=job.request_base_date,
+        age=_require_scoring_input_value(scoring_input, "age"),
+        education=_require_scoring_input_value(scoring_input, "education"),
+        gender=_require_scoring_input_value(scoring_input, "gender"),
+        disease_ids=_list_scoring_input_values(scoring_input, "disease_ids"),
+        symptom_ids=_list_scoring_input_values(scoring_input, "symptom_ids"),
+        unknown_ids=_list_scoring_input_values(scoring_input, "unknown_ids"),
+        top_k=query_settings.score_pattern_paths.top_k,
+    )
+    save_scored_direct_entity_result(
+        direct_score_result,
+        scored_paths_dir,
+        config_path=config_path,
+    )
+
+
 def _recover_direct_entity_scoring_input(
     job: UserCacheRefreshJob,
     *,
@@ -310,7 +381,52 @@ def _recover_direct_entity_scoring_input(
     )
 
 
+def _recover_direct_entity_scoring_input_from_scored_job(
+    job: UserCacheRefreshJob,
+    *,
+    store: UserCacheIndexStore,
+) -> dict[str, Any]:
+    """从旧 direct scored detail 中恢复 direct entity 输入画像。"""
+    scored_entry = _find_latest_entry_for_job(store, job)
+    if scored_entry is None:
+        raise ValueError(
+            "Cannot recover direct entity scoring_input: matching scored entry not found."
+        )
+    scored_detail = _read_json_object(Path(scored_entry.data_path))
+    scoring_input = scored_detail.get("scoring_input")
+    if isinstance(scoring_input, dict):
+        return dict(scoring_input)
+    raise ValueError(
+        "Cannot recover direct entity scoring_input: scored detail missing scoring_input."
+    )
+
+
 def _find_latest_topk_entry_for_job(
+    store: UserCacheIndexStore,
+    job: UserCacheRefreshJob,
+) -> UserCacheEntry | None:
+    entries = [
+        entry
+        for entry in store.list_entries()
+        if entry.cache_type == job.cache_type
+        and entry.source_type == job.source_type
+        and entry.source_id == job.source_id
+        and entry.query_family == job.query_family
+        and entry.window_days == job.window_days
+        and entry.config_hash == job.config_hash
+        and entry.cached_base_date <= job.request_base_date
+    ]
+    entries.sort(
+        key=lambda entry: (
+            entry.cached_base_date,
+            entry.updated_at or "",
+        ),
+        reverse=True,
+    )
+    return entries[0] if entries else None
+
+
+def _find_latest_entry_for_job(
     store: UserCacheIndexStore,
     job: UserCacheRefreshJob,
 ) -> UserCacheEntry | None:
