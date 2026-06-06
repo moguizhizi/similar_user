@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 import unittest
 
 from src.similar_user.api.external_task_prediction import (
@@ -31,7 +32,7 @@ class ExternalTaskPredictionAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(result.patient_id, "20123188")
-        self.assertEqual(result.base_date, "2026-05-25")
+        self.assertEqual(result.base_date, date.today().isoformat())
         self.assertEqual(result.age, 84)
         self.assertEqual(result.gender, "女")
         self.assertEqual(result.education, "高中")

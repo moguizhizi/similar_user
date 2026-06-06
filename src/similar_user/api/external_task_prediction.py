@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,6 @@ from ..services.task_prediction import DEFAULT_TASK_TOP_K
 
 
 DEFAULT_OUTPUT_LEVEL = "scores"
-DEFAULT_BASE_DATE = "2026-05-25"
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ def build_unified_prediction_input(
 
     return UnifiedPredictionInput(
         patient_id=patient_id,
-        base_date=DEFAULT_BASE_DATE,
+        base_date=_current_base_date(),
         config_path=config_path,
         age=payload.get("age", behavior.get("age")),
         education=_resolve_education(payload, behavior),
@@ -75,6 +75,10 @@ def build_unified_prediction_input(
         include_prompt=False,
         output_level=DEFAULT_OUTPUT_LEVEL,
     )
+
+
+def _current_base_date() -> str:
+    return date.today().isoformat()
 
 
 def build_external_prediction_response(
