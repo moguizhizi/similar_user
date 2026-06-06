@@ -155,7 +155,9 @@ class UserCacheSettings:
     patient_raw_paths_valid_days: int = 30
     direct_raw_paths_valid_days: int = 60
     patient_scored_paths_valid_days: int = 14
+    patient_scored_paths_stale_valid_days: int = 14
     direct_scored_paths_valid_days: int = 60
+    direct_scored_paths_stale_valid_days: int = 60
     topk_candidates_valid_days: int = 7
     topk_candidates_stale_valid_days: int = 7
     profile_candidate_tasks_valid_days: int = 7
@@ -732,12 +734,32 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         default=14,
         fallback_field_name="scored_paths_valid_days",
     )
+    patient_scored_paths_stale_valid_days = _parse_user_cache_valid_days(
+        data,
+        "patient_scored_paths_stale_valid_days",
+        default=patient_scored_paths_valid_days,
+    )
+    if patient_scored_paths_stale_valid_days < patient_scored_paths_valid_days:
+        raise ValueError(
+            "user_cache patient_scored_paths_stale_valid_days must be greater than "
+            "or equal to patient_scored_paths_valid_days."
+        )
     direct_scored_paths_valid_days = _parse_user_cache_valid_days(
         data,
         "direct_scored_paths_valid_days",
         default=60,
         fallback_field_name="scored_paths_valid_days",
     )
+    direct_scored_paths_stale_valid_days = _parse_user_cache_valid_days(
+        data,
+        "direct_scored_paths_stale_valid_days",
+        default=direct_scored_paths_valid_days,
+    )
+    if direct_scored_paths_stale_valid_days < direct_scored_paths_valid_days:
+        raise ValueError(
+            "user_cache direct_scored_paths_stale_valid_days must be greater than "
+            "or equal to direct_scored_paths_valid_days."
+        )
     topk_candidates_valid_days = _parse_user_cache_valid_days(
         data,
         "topk_candidates_valid_days",
@@ -887,7 +909,11 @@ def load_user_cache_settings(config_path: str | Path) -> UserCacheSettings:
         patient_raw_paths_valid_days=patient_raw_paths_valid_days,
         direct_raw_paths_valid_days=direct_raw_paths_valid_days,
         patient_scored_paths_valid_days=patient_scored_paths_valid_days,
+        patient_scored_paths_stale_valid_days=(
+            patient_scored_paths_stale_valid_days
+        ),
         direct_scored_paths_valid_days=direct_scored_paths_valid_days,
+        direct_scored_paths_stale_valid_days=direct_scored_paths_stale_valid_days,
         topk_candidates_valid_days=topk_candidates_valid_days,
         topk_candidates_stale_valid_days=topk_candidates_stale_valid_days,
         profile_candidate_tasks_valid_days=profile_candidate_tasks_valid_days,
