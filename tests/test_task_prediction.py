@@ -976,6 +976,53 @@ class TaskPredictionTest(unittest.TestCase):
         )
         self.assertEqual(result["candidate_training_tasks"], [{"game_id": "2", "game_name": "任务B"}])
 
+    def test_predict_from_pipeline_result_uses_request_recent_game_ids(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.side_effect = (
+            AssertionError("target history should not be queried")
+        )
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-09", "g": {"id": "1", "name": "任务A"}},
+            {"trainingDate": "2022-05-10", "g": {"id": "2", "name": "任务B"}},
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "1", "name": "任务A"}},
+            {"g": {"id": "2", "name": "任务B"}},
+        ]
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            request_recent_game_ids={"1"},
+        )
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": ["201"]},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=2,
+        )
+
+        user_service.get_patient_training_task_history_by_date_window.assert_not_called()
+        self.assertEqual(
+            result["similar_user_game_counts"],
+            [{"game_id": "2", "game_name": "任务B", "count": 1}],
+        )
+        self.assertEqual(
+            result["similar_user_task_evidence"],
+            [
+                {
+                    "patient_id": "201",
+                    "candidate_score": None,
+                    "tasks": [{"game_id": "2", "game_name": "任务B", "count": 1}],
+                }
+            ],
+        )
+
     def test_predict_from_direct_entity_candidates_keeps_raw_similar_user_counts(
         self,
     ) -> None:

@@ -125,6 +125,7 @@ def predict_training_tasks_unified(
     symptom_ids: list[str] | None = None,
     unknown_ids: list[str] | None = None,
     request_unlock_train: dict[str, int | float] | None = None,
+    request_recent_game_ids: set[str] | frozenset[str] | list[str] | None = None,
     task_top_k: int = DEFAULT_TASK_TOP_K,
     use_llm: bool = True,
     include_prompt: bool = False,
@@ -151,6 +152,7 @@ def predict_training_tasks_unified(
             query_family=query_family,
             task_top_k=task_top_k,
             request_unlock_train=request_unlock_train,
+            request_recent_game_ids=request_recent_game_ids,
             use_llm=use_llm,
             include_prompt=include_prompt,
         )
@@ -184,6 +186,7 @@ def predict_training_tasks_unified(
         symptom_ids=symptom_ids or [],
         unknown_ids=unknown_ids or [],
         request_unlock_train=request_unlock_train,
+        request_recent_game_ids=request_recent_game_ids,
         config_path=resolved_config_path,
         use_llm=use_llm,
         include_prompt=include_prompt,

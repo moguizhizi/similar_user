@@ -22,6 +22,7 @@ class ExternalTaskPredictionAdapterTest(unittest.TestCase):
                 "education": 15,
                 "sicksName": ["良性遗忘"],
                 "unlock_train": {"300": 60, "": 1, "301": 0, "bad": "x"},
+                "pre_tt_list": [[433, "331"], ["433", "", " 312 "]],
                 "use_llm": False,
                 "behavior_data": {
                     "current_day": "2026-05-24",
@@ -38,6 +39,7 @@ class ExternalTaskPredictionAdapterTest(unittest.TestCase):
         self.assertEqual(result.education, "高中")
         self.assertEqual(result.disease_names, ["良性遗忘"])
         self.assertEqual(result.request_unlock_train, {"300": 60, "301": 0})
+        self.assertEqual(result.request_recent_game_ids, frozenset({"433", "331", "312"}))
         self.assertEqual(result.task_top_k, 7)
         self.assertEqual(result.use_llm, True)
         self.assertEqual(result.include_prompt, False)

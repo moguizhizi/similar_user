@@ -29,6 +29,7 @@ class UnifiedPredictionInput:
     symptom_ids: list[str] = field(default_factory=list)
     unknown_ids: list[str] = field(default_factory=list)
     request_unlock_train: dict[str, int | float] = field(default_factory=dict)
+    request_recent_game_ids: frozenset[str] = field(default_factory=frozenset)
     query_family: str | None = None
     task_top_k: int = DEFAULT_TASK_TOP_K
     use_llm: bool = True
@@ -69,6 +70,7 @@ def build_unified_prediction_input(
         symptom_ids=_normalize_text_list(payload.get("symptom_ids")),
         unknown_ids=_normalize_text_list(payload.get("unknown_ids")),
         request_unlock_train=_normalize_unlock_train(payload.get("unlock_train")),
+        request_recent_game_ids=_normalize_pre_tt_list(payload.get("pre_tt_list")),
         query_family=_normalize_optional_text(payload.get("query_family")),
         task_top_k=task_top_k,
         use_llm=use_llm,
@@ -201,6 +203,26 @@ def _normalize_unlock_train(value: object) -> dict[str, int | float]:
             continue
         normalized[key] = raw_value
     return normalized
+
+
+def _normalize_pre_tt_list(value: object) -> frozenset[str]:
+    if not isinstance(value, list):
+        return frozenset()
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_day_items in value:
+        if isinstance(raw_day_items, list):
+            raw_items = raw_day_items
+        else:
+            raw_items = [raw_day_items]
+        for raw_item in raw_items:
+            text = _normalize_optional_text(raw_item)
+            if text is None or text in seen:
+                continue
+            normalized.append(text)
+            seen.add(text)
+    return frozenset(normalized)
 
 
 def _normalize_optional_text(value: object) -> str | None:

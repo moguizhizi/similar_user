@@ -86,6 +86,7 @@ class PredictTrainingTasksScriptTest(unittest.TestCase):
             config_path="config/settings.yaml",
             task_top_k=3,
             request_unlock_train=None,
+            request_recent_game_ids=None,
             use_llm=False,
             include_prompt=True,
         )
