@@ -34,9 +34,11 @@ from scripts.build_similar_user_candidates import (
     DEFAULT_CANDIDATES_DIR,
     build_direct_entity_candidate_cache_context,
     build_direct_entity_topk_candidate_user_cache_context,
-    build_similar_user_candidates,
     load_saved_direct_entity_scored_results,
     save_similar_user_candidates_result,
+)
+from scripts.run_similar_user_pipeline import (
+    build_patient_candidates_with_scored_path_auto_refresh,
 )
 from scripts.predict_training_tasks_from_direct_entity import (
     _score_direct_entity_paths_with_auto_refresh,
@@ -218,7 +220,7 @@ def _refresh_patient_topk_job(
     candidates_dir: str | Path,
 ) -> None:
     """刷新 patient path 对应的 topK candidates 缓存。"""
-    result = build_similar_user_candidates(
+    result, _ = build_patient_candidates_with_scored_path_auto_refresh(
         job.source_id,
         config_path=config_path,
         scored_paths_dir=scored_paths_dir,

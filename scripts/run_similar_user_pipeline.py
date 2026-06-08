@@ -38,6 +38,7 @@ from similar_user.utils.logger import get_logger
 from config.settings import load_query_settings, load_user_cache_settings
 
 from scripts.build_similar_user_candidates import (
+    DEFAULT_CANDIDATES_DIR,
     build_candidate_cache_context,
     build_empty_candidate_result,
     build_expected_scored_key,
@@ -48,6 +49,7 @@ from scripts.build_similar_user_candidates import (
 from scripts.build_pattern_paths import run_configured_pattern_path_flows
 from scripts.score_pattern_paths import (
     DEFAULT_CONFIG_PATH,
+    DEFAULT_SCORED_OUTPUT_DIR,
     score_and_save_configured_pattern_paths,
 )
 from scripts.score_direct_entity_paths import (
@@ -207,6 +209,7 @@ def _score_patient_paths_with_auto_refresh(
     config_path: str | Path,
     base_date: str,
     query_family: str,
+    scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
 ) -> bool:
     """Score patient paths, rebuilding raw paths if needed.
 
@@ -216,6 +219,7 @@ def _score_patient_paths_with_auto_refresh(
         score_and_save_configured_pattern_paths(
             patient_id,
             config_path=config_path,
+            output_dir=scored_paths_dir,
             base_date=base_date,
             query_family=query_family,
         )
@@ -244,6 +248,7 @@ def _score_patient_paths_with_auto_refresh(
         score_and_save_configured_pattern_paths(
             patient_id,
             config_path=config_path,
+            output_dir=scored_paths_dir,
             base_date=base_date,
             query_family=query_family,
         )
@@ -352,6 +357,30 @@ def _build_patient_candidates_with_auto_refresh(
     config_path: str | Path,
     base_date: str,
     query_family: str,
+    scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    candidates_dir: str | Path = DEFAULT_CANDIDATES_DIR,
+    skip_topk_user_cache_read: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    return build_patient_candidates_with_scored_path_auto_refresh(
+        patient_id,
+        config_path=config_path,
+        base_date=base_date,
+        query_family=query_family,
+        scored_paths_dir=scored_paths_dir,
+        candidates_dir=candidates_dir,
+        skip_topk_user_cache_read=skip_topk_user_cache_read,
+    )
+
+
+def build_patient_candidates_with_scored_path_auto_refresh(
+    patient_id: str,
+    *,
+    config_path: str | Path,
+    base_date: str,
+    query_family: str,
+    scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    candidates_dir: str | Path = DEFAULT_CANDIDATES_DIR,
+    skip_topk_user_cache_read: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """构建患者候选用户，并在缓存缺失时自动补齐依赖数据。
 
@@ -366,8 +395,11 @@ def _build_patient_candidates_with_auto_refresh(
         result = build_similar_user_candidates(
             patient_id,
             config_path=config_path,
+            scored_paths_dir=scored_paths_dir,
+            candidates_dir=candidates_dir,
             base_date=base_date,
             query_family=query_family,
+            skip_topk_user_cache_read=skip_topk_user_cache_read,
         )
         if result.get("user_cache_hit"):
             return result, None
@@ -383,8 +415,11 @@ def _build_patient_candidates_with_auto_refresh(
             build_similar_user_candidates(
                 patient_id,
                 config_path=config_path,
+                scored_paths_dir=scored_paths_dir,
+                candidates_dir=candidates_dir,
                 base_date=base_date,
                 query_family=query_family,
+                skip_topk_user_cache_read=skip_topk_user_cache_read,
             ),
             direct_entity_scoring,
         )
@@ -400,6 +435,7 @@ def _build_patient_candidates_with_auto_refresh(
             config_path=config_path,
             base_date=base_date,
             query_family=query_family,
+            scored_paths_dir=scored_paths_dir,
         )
         if raw_paths_empty:
             return (
@@ -420,8 +456,11 @@ def _build_patient_candidates_with_auto_refresh(
             build_similar_user_candidates(
                 patient_id,
                 config_path=config_path,
+                scored_paths_dir=scored_paths_dir,
+                candidates_dir=candidates_dir,
                 base_date=base_date,
                 query_family=query_family,
+                skip_topk_user_cache_read=skip_topk_user_cache_read,
             ),
             direct_entity_scoring,
         )

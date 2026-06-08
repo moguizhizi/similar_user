@@ -2793,6 +2793,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_score_and_save.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
+            output_dir=Path("data/scored_pattern_paths"),
             base_date="2022-01-17",
             query_family="training_order_source_window",
         )

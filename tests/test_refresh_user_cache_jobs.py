@@ -35,8 +35,8 @@ class RefreshUserCacheJobsTest(unittest.TestCase):
 
             with (
                 patch(
-                    "scripts.refresh_user_cache_jobs.build_similar_user_candidates",
-                    return_value={"source_id": "30010096"},
+                    "scripts.refresh_user_cache_jobs.build_patient_candidates_with_scored_path_auto_refresh",
+                    return_value=({"source_id": "30010096"}, None),
                 ) as mock_build,
                 patch(
                     "scripts.refresh_user_cache_jobs.save_similar_user_candidates_result"
