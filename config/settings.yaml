@@ -44,7 +44,7 @@ query:
     disease_course_window_days: 14
     scoring:
       common_game_score_similarity: false
-      game_similarity_with_diversity_score: false
+      game_similarity_with_diversity_score: true
       disease_course_secondary_ability: true
       set_same:
         disease: false
