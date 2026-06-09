@@ -6,9 +6,9 @@ neo4j:
   log_connection_caller: false
 
 llm:
-  base_url: "http://10.30.1.121:7999"
+  base_url: "http://10.30.1.121:18000"
   api_key: ""
-  model: "qwen3_5"
+  model: "qwen3_8B"
   timeout: 60
   max_retries: 3
   backoff_factor: 1.5
@@ -44,7 +44,7 @@ query:
     disease_course_window_days: 14
     scoring:
       common_game_score_similarity: false
-      game_similarity_with_diversity_score: false
+      game_similarity_with_diversity_score: true
       disease_course_secondary_ability: true
       set_same:
         disease: false
@@ -52,22 +52,24 @@ query:
         unknown: false
   training_task_prediction:
     task_top_k: 7
+    use_llm: true
     prompt_candidate_compression_enabled: false
     save_prompt_enabled: false
+    prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_V6"
     profile_candidate_training_window_days: null
-    unlock_train_candidate_tasks_enabled: false
+    unlock_train_candidate_tasks_enabled: true
     similar_user_game_counts_weighting_enabled: false
     similar_user_game_counts_weighted_sort_enabled: false
     fallback_enabled: true
   training_task_evaluation:
-    validation_enabled: true
+    validation_enabled: false
     validation_mode: "score"
     workers: 1
     score_validation_url: "http://172.21.133.142:5008/training_task_score"
     algorithm_request_results_csv: "/home/temp/dataset/20260525_Algorithm_Request_Results/20260525_Algorithm_Request_Results.csv"
     score_validation_timeout: 10
   direct_entity_task_prediction:
-    prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V1"
+    prompt_template_name: "TASK_PREDICTION_PROMPT_TEMPLATE_DIRECT_ENTITY_V6"
   direct_entity_path:
     window_days: 180
     direct_path_limit: 1000
@@ -90,22 +92,83 @@ direct_path_cache:
   overlap_days: 1
 
 user_cache:
+  # 是否启用以 source/patient 为中心的本地缓存索引。
   enabled: true
+
+  # 用户缓存索引 SQLite 路径；缓存文件路径会记录在该索引中。
   sqlite_path: "data/user_cache/cache_index.sqlite"
+
+  # 患者路径 raw paths 的可复用天数；过期后需要重新构建患者路径。
   patient_raw_paths_valid_days: 30
+
+  # direct entity 路径 raw paths 的可复用天数。
   direct_raw_paths_valid_days: 60
+
+  # 患者路径打分结果 scored paths 的可复用天数；过期后需基于 raw paths 重新打分。
   patient_scored_paths_valid_days: 14
+
+  # direct entity 路径打分结果 scored paths 的可复用天数。
   direct_scored_paths_valid_days: 60
+
+  # topK 候选用户结果的可复用天数；两条候选链路共用该有效期。
   topk_candidates_valid_days: 7
+
+  # topK 候选用户结果的 stale 可返回天数；超过 fresh 有效期但未超过该值时，可先返回旧结果并登记后台刷新。
+  topk_candidates_stale_valid_days: 14
+
+  # profile candidate tasks 缓存的可复用天数。
   profile_candidate_tasks_valid_days: 7
+
+  # 命中候选缓存时，是否刷新候选用户 disease-course base date 以适配本次请求日期。
   refresh_candidate_base_date_on_hit: true
+
+  # 构建 raw paths 时的并发 worker 数。
   raw_path_build_workers: 1
+
+  # raw paths 构建失败后的最大重试次数。
   raw_path_build_max_retries: 2
+
+  # raw paths 构建失败后每次重试前的等待秒数。
   raw_path_build_retry_sleep_seconds: 5
+
+  # 刷新成功的 refresh job 记录保留天数；用于短期排查刷新历史。
+  refresh_job_completed_retention_days: 7
+
+  # 刷新失败的 refresh job 记录保留天数；失败记录保留更久便于排查和重试。
+  refresh_job_failed_retention_days: 30
+
+  # 是否启用 FastAPI 后台的 refresh job 每日刷新任务。
+  refresh_jobs_background_enabled: true
+
+  # refresh job 后台任务每天运行的小时，按 cleanup_timezone 解释。
+  refresh_jobs_run_hour: 0
+
+  # refresh job 后台任务每天运行的分钟，按 cleanup_timezone 解释。
+  refresh_jobs_run_minute: 30
+
+  # refresh job 后台任务每轮最多领取并处理的任务数。
+  refresh_jobs_batch_limit: 500
+
+  # refresh job 后台任务锁文件路径，用于避免多个 FastAPI worker 重复执行。
+  refresh_jobs_lock_path: "data/user_cache/refresh_jobs.lock"
+
+  # 清理任务保留缓存的最大天数；应不小于仍可能被读取的缓存有效期。
   cleanup_max_age_days: 30
+
+  # 每个 source/cache/config 组合至少保留的最新缓存版本数。
   keep_latest_per_source: 2
+
+  # 是否启用后台清理任务。
   cleanup_background_enabled: true
+
+  # 后台清理任务每天运行的小时，按 cleanup_timezone 解释。
   cleanup_run_hour: 1
+
+  # 后台清理任务每天运行的分钟，按 cleanup_timezone 解释。
   cleanup_run_minute: 0
+
+  # 后台清理任务使用的时区。
   cleanup_timezone: "Asia/Shanghai"
+
+  # 后台清理任务锁文件路径，用于避免重复清理进程并发运行。
   cleanup_lock_path: "data/user_cache/cleanup.lock"

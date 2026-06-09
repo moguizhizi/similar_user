@@ -191,6 +191,8 @@ def predict_training_tasks_from_direct_entity(
     use_llm: bool = True,
     include_prompt: bool = False,
     task_top_k: int | None = None,
+    request_unlock_train: dict[str, int | float] | None = None,
+    request_recent_game_ids: set[str] | frozenset[str] | list[str] | None = None,
 ) -> dict[str, Any]:
     """Run the direct-entity-only task prediction flow."""
     normalized_patient_id = _normalize_required_text(patient_id, "patient_id")
@@ -335,12 +337,16 @@ def predict_training_tasks_from_direct_entity(
             candidate_user_cache_context,
             candidates_dir=candidates_dir,
             request_base_date=base_date,
+            config_path=resolved_config_path,
         )
         if cached_candidate_result is not None:
             candidate_result = cached_candidate_result
             LOGGER.info(
-                "Direct entity topK candidates cache hit: patient_id=%s, candidate_count=%s, data_path=%s",
+                "Direct entity topK candidates cache hit: patient_id=%s, lookup_state=%s, stale_hit=%s, refresh_job_id=%s, candidate_count=%s, data_path=%s",
                 normalized_patient_id,
+                candidate_result.get("user_cache_lookup_state"),
+                candidate_result.get("user_cache_stale_hit"),
+                candidate_result.get("user_cache_refresh_job_id"),
                 candidate_result.get("candidate_count"),
                 candidate_result.get("user_cache_data_path"),
             )
@@ -526,6 +532,8 @@ def predict_training_tasks_from_direct_entity(
             unlock_train_candidate_tasks_enabled=(
                 query_settings.training_task_prediction.unlock_train_candidate_tasks_enabled
             ),
+            request_unlock_train=request_unlock_train,
+            request_recent_game_ids=request_recent_game_ids,
             algorithm_request_results_csv=(
                 query_settings.training_task_evaluation.algorithm_request_results_csv
             ),

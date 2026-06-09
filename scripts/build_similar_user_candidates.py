@@ -75,6 +75,10 @@ from similar_user.utils.user_cache_paths import (
 
 LOGGER = get_logger(__name__)
 DEFAULT_CANDIDATES_DIR = Path("data/similar_user_candidates")
+# direct entity topK 聚合不使用 disease_course_window_days。历史缓存已经以
+# window_days=14 写入 user_cache_entries，因此固定该缓存键维度以兼容旧缓存，
+# 并避免 candidate_ranking.disease_course_window_days 变化导致 direct topK 误失效。
+DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS = 14
 DIRECT_ENTITY_PATTERNS = (
     DISEASE_TASKSET_PATIENT,
     SYMPTOM_TASKSET_PATIENT,
@@ -142,6 +146,7 @@ def build_similar_user_candidates(
     disease_course_window_days: int | None = None,
     base_date: str | None = None,
     query_family: str | None = None,
+    skip_topk_user_cache_read: bool = False,
 ) -> dict[str, Any]:
     """从 scored paths 聚合并返回 topK 候选用户。
 
@@ -185,11 +190,14 @@ def build_similar_user_candidates(
         scored_key=expected_scored_key,
         candidate_cache_context=candidate_cache_context,
     )
-    cached_result = load_cached_topk_candidate_result(
-        user_cache_context,
-        candidates_dir=candidates_dir,
-        request_base_date=base_date,
-    )
+    cached_result = None
+    if not skip_topk_user_cache_read:
+        cached_result = load_cached_topk_candidate_result(
+            user_cache_context,
+            candidates_dir=candidates_dir,
+            request_base_date=base_date,
+            config_path=resolved_config_path,
+        )
     if cached_result is not None:
         cached_result = refresh_cached_candidate_base_dates_on_hit(
             cached_result,
@@ -197,14 +205,24 @@ def build_similar_user_candidates(
             request_base_date=base_date,
         )
         LOGGER.info(
-            "Loaded topK similar-user candidates from user cache: patient_id=%s, query_family=%s, cached_base_date=%s, request_base_date=%s, data_path=%s",
+            "Loaded topK similar-user candidates from user cache: patient_id=%s, query_family=%s, lookup_state=%s, stale_hit=%s, cached_base_date=%s, request_base_date=%s, refresh_job_id=%s, data_path=%s",
             patient_id,
             user_cache_context.get("query_family"),
+            cached_result.get("user_cache_lookup_state"),
+            cached_result.get("user_cache_stale_hit"),
             user_cache_context.get("cached_base_date"),
             base_date,
+            cached_result.get("user_cache_refresh_job_id"),
             cached_result.get("user_cache_data_path"),
         )
         return cached_result
+    if skip_topk_user_cache_read:
+        LOGGER.info(
+            "Skipping topK similar-user candidates cache read before rebuild: patient_id=%s, query_family=%s, request_base_date=%s",
+            patient_id,
+            user_cache_context.get("query_family"),
+            base_date,
+        )
 
     LOGGER.info(
         "TopK similar-user candidates cache miss: patient_id=%s, query_family=%s, cached_base_date=%s, request_base_date=%s, config_hash=%s, candidate_key=%s",
@@ -601,6 +619,7 @@ def build_empty_candidate_result(
 ) -> dict[str, Any]:
     """Build an empty candidate result when all configured raw patterns are known empty."""
     return {
+        "patient_id": patient_id,
         "source_id": patient_id,
         "source_parameter": "patient_id",
         "pattern": selected_patterns[0] if len(selected_patterns) == 1 else None,
@@ -998,7 +1017,12 @@ def build_direct_entity_candidate_cache_context(
     scored_result: dict[str, Any],
     disease_course_window_days: int | None,
 ) -> dict[str, Any]:
-    """Build cache metadata for direct-entity similar-user candidate results."""
+    """Build cache metadata for direct-entity similar-user candidate results.
+
+    direct entity topK 聚合不使用 disease_course_window_days。这里保留参数是
+    为了兼容调用方签名，但 direct entity 的 candidate cache key 固定使用
+    DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS，避免无关配置变化导致缓存失效。
+    """
     scored_cache_context = scored_result.get("cache_context")
     if not isinstance(scored_cache_context, dict):
         raise ValueError("direct entity candidate cache requires score cache_context.")
@@ -1021,7 +1045,7 @@ def build_direct_entity_candidate_cache_context(
     candidate_context = build_candidate_cache_context(
         config_path,
         scored_key=direct_scored_key,
-        disease_course_window_days=disease_course_window_days,
+        disease_course_window_days=DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS,
     )
     candidate_context["direct_entity_scored_source_hash"] = scored_source_hash
     candidate_context["direct_entity_scored_context"] = {
@@ -1029,6 +1053,9 @@ def build_direct_entity_candidate_cache_context(
         "pattern_source_keys": scored_cache_context.get("pattern_source_keys"),
         "source_entries": scored_cache_context.get("source_entries"),
     }
+    candidate_context["direct_entity_topk_cache_window_days"] = (
+        DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS
+    )
     return candidate_context
 
 
@@ -1093,7 +1120,6 @@ def build_direct_entity_topk_candidate_user_cache_context(
     settings = load_user_cache_settings(config_path)
     if not settings.enabled:
         return {"enabled": False, "cache_type": "topk_candidates"}
-    query_settings = load_query_settings(config_path)
     normalized_source_id = _normalize_required_string(source_id, "source_id")
     normalized_base_date = _normalize_required_string(base_date, "base_date")
     candidate_key = _normalize_required_string(
@@ -1111,11 +1137,6 @@ def build_direct_entity_topk_candidate_user_cache_context(
             "cache_key_without_base_date": _strip_base_date_from_key(candidate_key),
         }
     )
-    window_days = query_settings.candidate_ranking.disease_course_window_days
-    if window_days is None:
-        raise ValueError(
-            "candidate_ranking disease_course_window_days is required for direct entity topK candidate cache."
-        )
     return {
         "enabled": settings.enabled,
         "cache_type": "topk_candidates",
@@ -1124,7 +1145,9 @@ def build_direct_entity_topk_candidate_user_cache_context(
         "source_type": "direct_entity_profile",
         "source_id": normalized_source_id,
         "query_family": "direct_entity",
-        "window_days": window_days,
+        "window_days": DIRECT_ENTITY_TOPK_CACHE_WINDOW_DAYS,
+        "window_days_source": "direct_entity_topk_cache_window_constant",
+        "window_days_semantics": "cache_key_compatibility_only",
         "config_hash": config_hash,
         "cached_base_date": normalized_base_date,
         "valid_days": settings.topk_candidates_valid_days,
@@ -1139,15 +1162,30 @@ def load_cached_topk_candidate_result(
     *,
     candidates_dir: str | Path = DEFAULT_CANDIDATES_DIR,
     request_base_date: str | None,
+    config_path: str | Path | None = None,
 ) -> dict[str, Any] | None:
-    """Load the newest valid topK candidate cache for one patient/config."""
+    """读取最新可复用的 topK 候选用户缓存。
+
+    fresh 命中时直接返回缓存；stale 命中时也返回旧缓存，并登记一条
+    refresh job 供后台刷新。未传 config_path 时，stale 窗口退化为
+    valid_days，以保持旧调用方的行为不变。
+    """
     if not user_cache_context.get("enabled"):
         return None
     request_date = _normalize_required_string(request_base_date, "base_date")
     store = UserCacheIndexStore(
         _normalize_required_string(user_cache_context.get("sqlite_path"), "sqlite_path")
     )
-    entry = store.find_latest_valid_source_entry(
+    context_valid_days = _normalize_non_negative_int(
+        user_cache_context.get("valid_days"),
+        "valid_days",
+    )
+    stale_valid_days = context_valid_days
+    if config_path is not None:
+        stale_valid_days = load_user_cache_settings(
+            config_path
+        ).topk_candidates_stale_valid_days
+    lookup = store.find_latest_reusable_source_entry(
         cache_type="topk_candidates",
         source_type=_normalize_required_string(
             user_cache_context.get("source_type"),
@@ -1170,9 +1208,11 @@ def load_cached_topk_candidate_result(
             "config_hash",
         ),
         request_base_date=request_date,
+        stale_valid_days=stale_valid_days,
     )
-    if entry is None:
+    if lookup is None:
         return None
+    entry = lookup.entry
     detail_path = Path(entry.data_path)
     if not detail_path.exists():
         store.delete_entry(entry)
@@ -1197,12 +1237,28 @@ def load_cached_topk_candidate_result(
     )
     result = dict(data)
     result["user_cache_hit"] = True
+    result["user_cache_stale_hit"] = lookup.state == "stale"
+    result["user_cache_lookup_state"] = lookup.state
     result["user_cache_context"] = {
         **user_cache_context,
         "cached_base_date": entry.cached_base_date,
         "valid_days": entry.valid_days,
+        "stale_valid_days": stale_valid_days,
     }
     result["user_cache_data_path"] = str(detail_path)
+    if lookup.state == "stale":
+        refresh_job = store.enqueue_refresh_job(
+            cache_type="topk_candidates",
+            source_type=entry.source_type,
+            source_id=entry.source_id or entry.patient_id,
+            query_family=entry.query_family,
+            window_days=entry.window_days,
+            config_hash=entry.config_hash,
+            request_base_date=request_date,
+            reason="stale_topk_hit",
+        )
+        result["user_cache_refresh_job_id"] = refresh_job.id
+        result["user_cache_refresh_job_key"] = refresh_job.job_key
     # Keep output path calculation stable even when a custom candidates_dir is supplied.
     result.setdefault("cache_context", data.get("cache_context"))
     return result

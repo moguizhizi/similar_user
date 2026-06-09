@@ -38,12 +38,18 @@ from similar_user.utils.logger import get_logger
 from config.settings import load_query_settings, load_user_cache_settings
 
 from scripts.build_similar_user_candidates import (
+    DEFAULT_CANDIDATES_DIR,
+    build_candidate_cache_context,
+    build_empty_candidate_result,
+    build_expected_scored_key,
     build_similar_user_candidates,
+    build_topk_candidate_user_cache_context,
     save_similar_user_candidates_result,
 )
 from scripts.build_pattern_paths import run_configured_pattern_path_flows
 from scripts.score_pattern_paths import (
     DEFAULT_CONFIG_PATH,
+    DEFAULT_SCORED_OUTPUT_DIR,
     score_and_save_configured_pattern_paths,
 )
 from scripts.score_direct_entity_paths import (
@@ -179,25 +185,16 @@ def _resolve_patient_path_query_family(config_path: str | Path) -> str | None:
     return query_settings.patient_path.query_family
 
 
-def _raise_if_path_results_empty(
+def _path_results_are_empty(
     path_generation: list[dict[str, object]],
-    *,
-    patient_id: str,
-    base_date: str,
-    window_days: int,
-) -> None:
-    """Stop the pipeline when freshly built path data is empty."""
+) -> bool:
+    """Return whether freshly built path data contains no path rows."""
     path_count = sum(
         item.get("path_count")
         for item in path_generation
         if isinstance(item.get("path_count"), int)
     )
-    if path_count > 0:
-        return
-    raise EmptyPathResultsError(
-        "path_result does not contain paths: "
-        f"patient_id={patient_id}, base_date={base_date}, window_days={window_days}."
-    )
+    return path_count == 0
 
 
 def _resolve_patient_path_window_days(
@@ -212,14 +209,21 @@ def _score_patient_paths_with_auto_refresh(
     config_path: str | Path,
     base_date: str,
     query_family: str,
-) -> None:
+    scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+) -> bool:
+    """Score patient paths, rebuilding raw paths if needed.
+
+    Return True when rebuilt raw paths are known to be empty.
+    """
     try:
         score_and_save_configured_pattern_paths(
             patient_id,
             config_path=config_path,
+            output_dir=scored_paths_dir,
             base_date=base_date,
             query_family=query_family,
         )
+        return False
     except FileNotFoundError:
         LOGGER.info(
             "Patient raw paths missing or expired; rebuilding before scoring: patient_id=%s, base_date=%s, query_family=%s",
@@ -233,18 +237,22 @@ def _score_patient_paths_with_auto_refresh(
             base_date=base_date,
             query_family=query_family,
         )
-        _raise_if_path_results_empty(
-            path_generation,
-            patient_id=patient_id,
-            base_date=base_date,
-            window_days=_resolve_patient_path_window_days(config_path),
-        )
+        if _path_results_are_empty(path_generation):
+            LOGGER.info(
+                "Patient raw paths are empty after rebuild; returning empty candidates: patient_id=%s, base_date=%s, query_family=%s",
+                patient_id,
+                base_date,
+                query_family,
+            )
+            return True
         score_and_save_configured_pattern_paths(
             patient_id,
             config_path=config_path,
+            output_dir=scored_paths_dir,
             base_date=base_date,
             query_family=query_family,
         )
+        return False
 
 
 def _build_patient_raw_paths_with_limit(
@@ -349,6 +357,30 @@ def _build_patient_candidates_with_auto_refresh(
     config_path: str | Path,
     base_date: str,
     query_family: str,
+    scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    candidates_dir: str | Path = DEFAULT_CANDIDATES_DIR,
+    skip_topk_user_cache_read: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    return build_patient_candidates_with_scored_path_auto_refresh(
+        patient_id,
+        config_path=config_path,
+        base_date=base_date,
+        query_family=query_family,
+        scored_paths_dir=scored_paths_dir,
+        candidates_dir=candidates_dir,
+        skip_topk_user_cache_read=skip_topk_user_cache_read,
+    )
+
+
+def build_patient_candidates_with_scored_path_auto_refresh(
+    patient_id: str,
+    *,
+    config_path: str | Path,
+    base_date: str,
+    query_family: str,
+    scored_paths_dir: str | Path = DEFAULT_SCORED_OUTPUT_DIR,
+    candidates_dir: str | Path = DEFAULT_CANDIDATES_DIR,
+    skip_topk_user_cache_read: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """构建患者候选用户，并在缓存缺失时自动补齐依赖数据。
 
@@ -363,8 +395,11 @@ def _build_patient_candidates_with_auto_refresh(
         result = build_similar_user_candidates(
             patient_id,
             config_path=config_path,
+            scored_paths_dir=scored_paths_dir,
+            candidates_dir=candidates_dir,
             base_date=base_date,
             query_family=query_family,
+            skip_topk_user_cache_read=skip_topk_user_cache_read,
         )
         if result.get("user_cache_hit"):
             return result, None
@@ -380,8 +415,11 @@ def _build_patient_candidates_with_auto_refresh(
             build_similar_user_candidates(
                 patient_id,
                 config_path=config_path,
+                scored_paths_dir=scored_paths_dir,
+                candidates_dir=candidates_dir,
                 base_date=base_date,
                 query_family=query_family,
+                skip_topk_user_cache_read=skip_topk_user_cache_read,
             ),
             direct_entity_scoring,
         )
@@ -392,12 +430,23 @@ def _build_patient_candidates_with_auto_refresh(
             base_date,
             query_family,
         )
-        _score_patient_paths_with_auto_refresh(
+        raw_paths_empty = _score_patient_paths_with_auto_refresh(
             patient_id,
             config_path=config_path,
             base_date=base_date,
             query_family=query_family,
+            scored_paths_dir=scored_paths_dir,
         )
+        if raw_paths_empty:
+            return (
+                _build_empty_patient_candidate_result(
+                    patient_id,
+                    config_path=config_path,
+                    base_date=base_date,
+                    query_family=query_family,
+                ),
+                None,
+            )
         direct_entity_scoring = _score_direct_entity_paths_if_enabled(
             patient_id,
             config_path=config_path,
@@ -407,11 +456,56 @@ def _build_patient_candidates_with_auto_refresh(
             build_similar_user_candidates(
                 patient_id,
                 config_path=config_path,
+                scored_paths_dir=scored_paths_dir,
+                candidates_dir=candidates_dir,
                 base_date=base_date,
                 query_family=query_family,
+                skip_topk_user_cache_read=skip_topk_user_cache_read,
             ),
             direct_entity_scoring,
         )
+
+
+def _build_empty_patient_candidate_result(
+    patient_id: str,
+    *,
+    config_path: str | Path,
+    base_date: str,
+    query_family: str,
+) -> dict[str, Any]:
+    query_settings = load_query_settings(config_path)
+    disease_course_window_days = (
+        query_settings.candidate_ranking.disease_course_window_days
+    )
+    scored_key = build_expected_scored_key(
+        config_path,
+        base_date=base_date,
+        query_family=query_family,
+    )
+    candidate_cache_context = build_candidate_cache_context(
+        config_path,
+        scored_key=scored_key,
+        disease_course_window_days=disease_course_window_days,
+    )
+    user_cache_context = build_topk_candidate_user_cache_context(
+        config_path,
+        patient_id=patient_id,
+        base_date=base_date,
+        query_family=query_family,
+        scored_key=scored_key,
+        candidate_cache_context=candidate_cache_context,
+    )
+    result = build_empty_candidate_result(
+        patient_id=patient_id,
+        selected_patterns=query_settings.candidate_ranking.patterns,
+        candidate_top_k=query_settings.candidate_ranking.candidate_top_k,
+        base_date=base_date,
+        disease_course_window_days=disease_course_window_days,
+    )
+    result["cache_context"] = candidate_cache_context
+    result["user_cache_context"] = user_cache_context
+    result["user_cache_hit"] = False
+    return result
 
 
 def _score_direct_entity_paths_if_enabled(

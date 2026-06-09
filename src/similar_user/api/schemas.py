@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -28,7 +28,3 @@ class ExternalTrainingTaskPredictRequest(BaseModel):
     disease_ids: list[str] = Field(default_factory=list)
     symptom_ids: list[str] = Field(default_factory=list)
     unknown_ids: list[str] = Field(default_factory=list)
-    task_top_k: int = 7
-    use_llm: bool = True
-    include_prompt: bool = False
-    output_level: Literal["ids", "scores", "full"] = "scores"

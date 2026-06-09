@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from config.settings import DEFAULT_CONFIG_PATH
+from config.settings import DEFAULT_CONFIG_PATH, load_query_settings
 from ..services.task_prediction import DEFAULT_TASK_TOP_K
 
 
 DEFAULT_OUTPUT_LEVEL = "scores"
-DEFAULT_BASE_DATE = "2026-05-25"
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,8 @@ class UnifiedPredictionInput:
     disease_names: list[str] = field(default_factory=list)
     symptom_ids: list[str] = field(default_factory=list)
     unknown_ids: list[str] = field(default_factory=list)
+    request_unlock_train: dict[str, int | float] = field(default_factory=dict)
+    request_recent_game_ids: frozenset[str] = field(default_factory=frozenset)
     query_family: str | None = None
     task_top_k: int = DEFAULT_TASK_TOP_K
     use_llm: bool = True
@@ -52,17 +54,13 @@ def build_unified_prediction_input(
     if not patient_id:
         raise ValueError("Field 'user_id' must be a non-empty value.")
 
-    task_top_k = _normalize_positive_int(
-        payload.get("task_top_k", DEFAULT_TASK_TOP_K),
-        field_name="task_top_k",
-    )
-    output_level = _normalize_output_level(
-        payload.get("output_level", DEFAULT_OUTPUT_LEVEL),
-    )
+    query_settings = load_query_settings(config_path)
+    task_top_k = query_settings.training_task_prediction.task_top_k
+    use_llm = query_settings.training_task_prediction.use_llm
 
     return UnifiedPredictionInput(
         patient_id=patient_id,
-        base_date=DEFAULT_BASE_DATE,
+        base_date=_current_base_date(),
         config_path=config_path,
         age=payload.get("age", behavior.get("age")),
         education=_resolve_education(payload, behavior),
@@ -71,15 +69,18 @@ def build_unified_prediction_input(
         disease_names=_resolve_disease_names(payload, behavior),
         symptom_ids=_normalize_text_list(payload.get("symptom_ids")),
         unknown_ids=_normalize_text_list(payload.get("unknown_ids")),
+        request_unlock_train=_normalize_unlock_train(payload.get("unlock_train")),
+        request_recent_game_ids=_normalize_pre_tt_list(payload.get("pre_tt_list")),
         query_family=_normalize_optional_text(payload.get("query_family")),
         task_top_k=task_top_k,
-        use_llm=_normalize_bool(payload.get("use_llm", True), field_name="use_llm"),
-        include_prompt=_normalize_bool(
-            payload.get("include_prompt", False),
-            field_name="include_prompt",
-        ),
-        output_level=output_level,
+        use_llm=use_llm,
+        include_prompt=False,
+        output_level=DEFAULT_OUTPUT_LEVEL,
     )
+
+
+def _current_base_date() -> str:
+    return date.today().isoformat()
 
 
 def build_external_prediction_response(
@@ -189,30 +190,46 @@ def _normalize_text_list(value: object) -> list[str]:
     return normalized
 
 
+def _normalize_unlock_train(value: object) -> dict[str, int | float]:
+    if not isinstance(value, dict):
+        return {}
+
+    normalized: dict[str, int | float] = {}
+    for raw_key, raw_value in value.items():
+        key = _normalize_optional_text(raw_key)
+        if key is None:
+            continue
+        if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+            continue
+        normalized[key] = raw_value
+    return normalized
+
+
+def _normalize_pre_tt_list(value: object) -> frozenset[str]:
+    if not isinstance(value, list):
+        return frozenset()
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_day_items in value:
+        if isinstance(raw_day_items, list):
+            raw_items = raw_day_items
+        else:
+            raw_items = [raw_day_items]
+        for raw_item in raw_items:
+            text = _normalize_optional_text(raw_item)
+            if text is None or text in seen:
+                continue
+            normalized.append(text)
+            seen.add(text)
+    return frozenset(normalized)
+
+
 def _normalize_optional_text(value: object) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
-
-
-def _normalize_positive_int(value: object, *, field_name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError(f"Field '{field_name}' must be a positive integer.")
-    return value
-
-
-def _normalize_bool(value: object, *, field_name: str) -> bool:
-    if not isinstance(value, bool):
-        raise ValueError(f"Field '{field_name}' must be a boolean.")
-    return value
-
-
-def _normalize_output_level(value: object) -> str:
-    text = _normalize_optional_text(value) or DEFAULT_OUTPUT_LEVEL
-    if text not in {"ids", "scores", "full"}:
-        raise ValueError("Field 'output_level' must be one of: ids, scores, full.")
-    return text
 
 
 def _resolve_ba_dalt_length(payload: dict[str, Any]) -> int:

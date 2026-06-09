@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 import unittest
 
 from src.similar_user.api.external_task_prediction import (
@@ -20,6 +21,9 @@ class ExternalTaskPredictionAdapterTest(unittest.TestCase):
                 "sex": 2,
                 "education": 15,
                 "sicksName": ["良性遗忘"],
+                "unlock_train": {"300": 60, "": 1, "301": 0, "bad": "x"},
+                "pre_tt_list": [[433, "331"], ["433", "", " 312 "]],
+                "use_llm": False,
                 "behavior_data": {
                     "current_day": "2026-05-24",
                     "gender": "女",
@@ -29,12 +33,16 @@ class ExternalTaskPredictionAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(result.patient_id, "20123188")
-        self.assertEqual(result.base_date, "2026-05-25")
+        self.assertEqual(result.base_date, date.today().isoformat())
         self.assertEqual(result.age, 84)
         self.assertEqual(result.gender, "女")
         self.assertEqual(result.education, "高中")
         self.assertEqual(result.disease_names, ["良性遗忘"])
+        self.assertEqual(result.request_unlock_train, {"300": 60, "301": 0})
+        self.assertEqual(result.request_recent_game_ids, frozenset({"433", "331", "312"}))
         self.assertEqual(result.task_top_k, 7)
+        self.assertEqual(result.use_llm, True)
+        self.assertEqual(result.include_prompt, False)
         self.assertEqual(result.output_level, "scores")
 
     def test_normalize_user_id_only_removes_old_suffix(self) -> None:

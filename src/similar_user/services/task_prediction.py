@@ -216,6 +216,8 @@ class TrainingTaskPredictionService:
     prompt_template_name: str = CURRENT_TASK_PREDICTION_PROMPT_TEMPLATE_NAME
     profile_candidate_training_window_days: int | None = None
     unlock_train_candidate_tasks_enabled: bool = False
+    request_unlock_train: dict[str, int | float] | None = None
+    request_recent_game_ids: set[str] | frozenset[str] | list[str] | None = None
     algorithm_request_results_csv: str | None = None
     similar_user_game_counts_weighting_enabled: bool = False
     similar_user_game_counts_weighted_sort_enabled: bool = False
@@ -249,14 +251,23 @@ class TrainingTaskPredictionService:
             return self._predict_patient_empty_candidates_fallback(
                 patient_id=resolved_patient_id,
                 base_date=base_date,
+                unlock_train_candidate_tasks=self._build_unlock_train_candidate_tasks(
+                    resolved_patient_id
+                ),
                 task_top_k=task_top_k,
             )
 
-        target_history = self.user_service.get_patient_training_task_history_by_date_window(
-            resolved_patient_id,
-            target_task_window["start_date"],
-            target_task_window["end_date"],
-        )
+        request_recent_game_ids = self._build_request_recent_game_ids()
+        if request_recent_game_ids:
+            target_history = []
+            repeated_target_game_ids = request_recent_game_ids
+        else:
+            target_history = self.user_service.get_patient_training_task_history_by_date_window(
+                resolved_patient_id,
+                target_task_window["start_date"],
+                target_task_window["end_date"],
+            )
+            repeated_target_game_ids = find_consecutive_target_game_ids(target_history)
         candidate_task_windows = {
             candidate.patient_id: build_candidate_task_window(
                 candidate.candidate_base_date or base_date,
@@ -301,7 +312,6 @@ class TrainingTaskPredictionService:
                 profile_candidate_game_rows
             )
 
-        repeated_target_game_ids = find_consecutive_target_game_ids(target_history)
         allowed_candidate_game_ids = _extract_candidate_task_game_ids(candidate_tasks)
         raw_similar_user_game_counts = build_similar_user_game_counts(
             candidates,
@@ -418,6 +428,9 @@ class TrainingTaskPredictionService:
             fallback_result = build_candidate_task_fallback_prediction(
                 patient_id=resolved_patient_id,
                 candidate_training_tasks=prompt_candidate_tasks,
+                unlock_train_candidate_tasks=self._build_unlock_train_candidate_tasks(
+                    resolved_patient_id
+                ),
                 task_top_k=task_top_k,
                 reason=fallback_reason,
                 failure_stage="llm" if use_llm else "prediction",
@@ -496,9 +509,11 @@ class TrainingTaskPredictionService:
         return result
 
     def _build_unlock_train_candidate_tasks(self, patient_id: str) -> list[dict[str, Any]]:
-        """Build candidate tasks from algorithm CSV unlock_train keys when enabled."""
+        """Build candidate tasks from request unlock_train or CSV when enabled."""
         if not self.unlock_train_candidate_tasks_enabled:
             return []
+        if self.request_unlock_train is not None:
+            return build_candidate_tasks_from_unlock_train(self.request_unlock_train)
         csv_path = (
             self.algorithm_request_results_csv.strip()
             if isinstance(self.algorithm_request_results_csv, str)
@@ -521,11 +536,15 @@ class TrainingTaskPredictionService:
             )
             return []
 
+    def _build_request_recent_game_ids(self) -> set[str]:
+        return _normalize_game_id_set(self.request_recent_game_ids)
+
     def _predict_patient_empty_candidates_fallback(
         self,
         *,
         patient_id: str,
         base_date: str,
+        unlock_train_candidate_tasks: list[dict[str, Any]] | None = None,
         task_top_k: int,
     ) -> dict[str, Any]:
         profile = _load_patient_fallback_profile(
@@ -539,6 +558,7 @@ class TrainingTaskPredictionService:
             age=profile.get("age"),
             education=profile.get("education"),
             gender=profile.get("gender"),
+            unlock_train_candidate_tasks=unlock_train_candidate_tasks,
             task_top_k=task_top_k,
             reason="empty_candidates",
         )
@@ -610,19 +630,25 @@ class TrainingTaskPredictionService:
             candidate_task_source,
         )
         allowed_candidate_game_ids = _extract_candidate_task_game_ids(candidate_tasks)
+        repeated_target_game_ids = self._build_request_recent_game_ids()
         raw_similar_user_game_counts = build_similar_user_game_counts(
             candidates,
             similar_user_histories,
             weighting_enabled=self.similar_user_game_counts_weighting_enabled,
             weighted_sort_enabled=self.similar_user_game_counts_weighted_sort_enabled,
         )
-        similar_user_game_counts = filter_game_counts_to_ids(
+        similar_user_game_counts = filter_game_counts_by_ids(
             raw_similar_user_game_counts,
+            repeated_target_game_ids,
+        )
+        similar_user_game_counts = filter_game_counts_to_ids(
+            similar_user_game_counts,
             allowed_candidate_game_ids,
         )
         similar_user_task_evidence = build_similar_user_task_evidence(
             candidates,
             similar_user_histories,
+            excluded_game_ids=repeated_target_game_ids,
         )
         similar_user_task_evidence = filter_task_evidence_to_ids(
             similar_user_task_evidence,
@@ -706,6 +732,9 @@ class TrainingTaskPredictionService:
             fallback_result = build_candidate_task_fallback_prediction(
                 patient_id=resolved_patient_id,
                 candidate_training_tasks=prompt_candidate_tasks,
+                unlock_train_candidate_tasks=self._build_unlock_train_candidate_tasks(
+                    resolved_patient_id
+                ),
                 task_top_k=task_top_k,
                 reason=fallback_reason,
                 failure_stage="llm" if use_llm else "prediction",
@@ -1082,6 +1111,13 @@ def load_unlock_train_candidate_tasks(
         _normalize_csv_patient_id(patient_id),
         {},
     )
+    return build_candidate_tasks_from_unlock_train(unlock_train)
+
+
+def build_candidate_tasks_from_unlock_train(
+    unlock_train: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build candidate task rows from unlock_train keys."""
     tasks: list[dict[str, Any]] = []
     seen_game_ids: set[str] = set()
     for raw_task_id in unlock_train:
@@ -2170,6 +2206,25 @@ def _normalize_text(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _normalize_game_id_set(value: Any) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, (str, int, float)):
+        values = [value]
+    else:
+        try:
+            values = list(value)
+        except TypeError:
+            return set()
+
+    normalized: set[str] = set()
+    for item in values:
+        text = _normalize_text(item)
+        if text is not None:
+            normalized.add(text)
+    return normalized
 
 
 def _normalize_float(value: Any) -> float | None:

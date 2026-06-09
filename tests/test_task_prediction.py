@@ -38,6 +38,9 @@ from src.similar_user.services.task_prediction import (
     select_prompt_candidate_game_ids,
     summarize_training_history,
 )
+from src.similar_user.services.task_prediction_fallback import (
+    build_candidate_task_fallback_prediction,
+)
 
 
 class TaskPredictionTest(unittest.TestCase):
@@ -158,6 +161,41 @@ class TaskPredictionTest(unittest.TestCase):
                 {"game_id": "301", "game_name": None},
             ],
         )
+
+    def test_request_unlock_train_is_used_when_enabled(self) -> None:
+        service = TrainingTaskPredictionService(
+            user_service=Mock(),
+            unlock_train_candidate_tasks_enabled=True,
+            request_unlock_train={"300": 60, "301": 0},
+            algorithm_request_results_csv="/path/that/should/not/be/read.csv",
+        )
+
+        self.assertEqual(
+            service._build_unlock_train_candidate_tasks("40"),
+            [
+                {"game_id": "300", "game_name": None},
+                {"game_id": "301", "game_name": None},
+            ],
+        )
+
+    def test_request_unlock_train_is_ignored_when_disabled(self) -> None:
+        service = TrainingTaskPredictionService(
+            user_service=Mock(),
+            unlock_train_candidate_tasks_enabled=False,
+            request_unlock_train={"300": 60},
+        )
+
+        self.assertEqual(service._build_unlock_train_candidate_tasks("40"), [])
+
+    def test_empty_request_unlock_train_does_not_fall_back_to_csv(self) -> None:
+        service = TrainingTaskPredictionService(
+            user_service=Mock(),
+            unlock_train_candidate_tasks_enabled=True,
+            request_unlock_train={},
+            algorithm_request_results_csv="/path/that/should/not/be/read.csv",
+        )
+
+        self.assertEqual(service._build_unlock_train_candidate_tasks("40"), [])
 
     def test_build_task_prediction_prompt_v2_includes_task_evidence(self) -> None:
         prompt = build_task_prediction_prompt(
@@ -938,6 +976,53 @@ class TaskPredictionTest(unittest.TestCase):
         )
         self.assertEqual(result["candidate_training_tasks"], [{"game_id": "2", "game_name": "任务B"}])
 
+    def test_predict_from_pipeline_result_uses_request_recent_game_ids(
+        self,
+    ) -> None:
+        user_service = Mock()
+        user_service.get_patient_training_task_history_by_date_window.side_effect = (
+            AssertionError("target history should not be queried")
+        )
+        user_service.get_patient_exclusive_training_task_history_by_date_window.return_value = [
+            {"trainingDate": "2022-05-09", "g": {"id": "1", "name": "任务A"}},
+            {"trainingDate": "2022-05-10", "g": {"id": "2", "name": "任务B"}},
+        ]
+        user_service.get_patient_profile_candidate_training_games.return_value = [
+            {"g": {"id": "1", "name": "任务A"}},
+            {"g": {"id": "2", "name": "任务B"}},
+        ]
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            request_recent_game_ids={"1"},
+        )
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": ["201"]},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=2,
+        )
+
+        user_service.get_patient_training_task_history_by_date_window.assert_not_called()
+        self.assertEqual(
+            result["similar_user_game_counts"],
+            [{"game_id": "2", "game_name": "任务B", "count": 1}],
+        )
+        self.assertEqual(
+            result["similar_user_task_evidence"],
+            [
+                {
+                    "patient_id": "201",
+                    "candidate_score": None,
+                    "tasks": [{"game_id": "2", "game_name": "任务B", "count": 1}],
+                }
+            ],
+        )
+
     def test_predict_from_direct_entity_candidates_keeps_raw_similar_user_counts(
         self,
     ) -> None:
@@ -1354,6 +1439,87 @@ class TaskPredictionTest(unittest.TestCase):
         self.assertEqual(result["prediction_failure_stage"], "candidate")
         self.assertEqual(result["predicted_training_tasks"][0]["game_id"], "G1")
         self.assertTrue(result["candidate_source"]["patient_profile_loaded"])
+
+    def test_empty_candidate_fallback_is_limited_to_unlock_train(self) -> None:
+        user_service = Mock()
+        user_service.get_patient_direct_entity_scoring_profile.return_value = [
+            {
+                "age_at_base_date": 66,
+                "education": "本科",
+                "gender": "男",
+            }
+        ]
+        user_service.get_profile_matched_exclusive_tasks.return_value = [
+            {
+                "g": {"id": "G1", "name": "非解锁高频任务", "任务类型": "专属"},
+                "support_count": 100,
+            },
+            {
+                "g": {"id": "G2", "name": "解锁画像任务", "任务类型": "专属"},
+                "support_count": 10,
+            },
+        ]
+        user_service.get_global_popular_exclusive_tasks.return_value = [
+            {
+                "g": {"id": "G4", "name": "解锁全局任务", "任务类型": "专属"},
+                "support_count": 20,
+            }
+        ]
+        user_service.get_distinct_training_games.return_value = [
+            {"g": {"id": "G1", "name": "非解锁任务"}},
+        ]
+        service = TrainingTaskPredictionService(
+            user_service=user_service,
+            unlock_train_candidate_tasks_enabled=True,
+            request_unlock_train={"G2": 1, "G3": 1, "G4": 1},
+        )
+
+        result = service.predict_from_pipeline_result(
+            {
+                "patient_id": "40",
+                "candidate_summary": {"candidate_ids": []},
+            },
+            base_date="2022-05-22",
+            window_days=14,
+            use_llm=False,
+            task_top_k=3,
+        )
+
+        self.assertEqual(
+            [task["game_id"] for task in result["predicted_training_tasks"]],
+            ["G2", "G4", "G3"],
+        )
+        self.assertTrue(result["candidate_source"]["unlock_train_limited"])
+        self.assertNotIn(
+            "G1",
+            {task["game_id"] for task in result["predicted_training_tasks"]},
+        )
+
+    def test_candidate_task_fallback_deduplicates_unlock_train_limited_tasks(
+        self,
+    ) -> None:
+        result = build_candidate_task_fallback_prediction(
+            patient_id="40",
+            candidate_training_tasks=[
+                {"game_id": "G1", "weighted_score": 10.0},
+                {"game_id": "G1", "weighted_score": 9.0},
+                {"game_id": "G2", "weighted_score": 8.0},
+                {"game_id": "G9", "weighted_score": 7.0},
+            ],
+            unlock_train_candidate_tasks=[
+                {"game_id": "G1"},
+                {"game_id": "G2"},
+                {"game_id": "G3"},
+            ],
+            task_top_k=3,
+            reason="llm_failed",
+            failure_stage="llm",
+        )
+
+        game_ids = [task["game_id"] for task in result["predicted_training_tasks"]]
+        self.assertEqual(game_ids, ["G1", "G2", "G3"])
+        self.assertEqual(len(game_ids), len(set(game_ids)))
+        self.assertTrue(result["candidate_source"]["unlock_train_limited"])
 
     def test_predict_from_pipeline_result_falls_back_on_llm_errors(self) -> None:
         user_service = Mock()

@@ -87,6 +87,7 @@ class LlmClient:
             "messages": messages,
             "temperature": temperature,
             "stream": False,
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         data = self._post(payload)
         return self._extract_content(data)

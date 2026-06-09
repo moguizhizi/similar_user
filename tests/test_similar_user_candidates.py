@@ -23,6 +23,7 @@ from scripts.build_similar_user_candidates import (
     build_similar_user_candidates as _build_similar_user_candidates,
     classify_skipped_scored_patterns,
     load_cached_topk_candidate_result,
+    load_saved_direct_entity_scored_results,
     load_saved_scored_pattern_result,
     main,
     save_similar_user_candidates_result,
@@ -40,7 +41,7 @@ from scripts.run_similar_user_pipeline import (
     run_similar_user_pipeline,
     summarize_pipeline_result,
 )
-from similar_user.data_access.user_cache_index import UserCacheIndexStore
+from similar_user.data_access.user_cache_index import UserCacheEntry, UserCacheIndexStore
 from similar_user.services.similarity import SimilarUserCandidateService
 from similar_user.utils.pattern_storage import build_path_key, save_pattern_result
 
@@ -2015,7 +2016,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
             cache_context = build_direct_entity_candidate_cache_context(
                 config_path,
                 scored_result=scored_result,
-                disease_course_window_days=14,
+                disease_course_window_days=21,
             )
             user_cache_context = build_direct_entity_topk_candidate_user_cache_context(
                 config_path,
@@ -2071,6 +2072,14 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         assert found is not None
         self.assertEqual(found.data_path, str(output_paths["detail"]))
         self.assertEqual(found.source_type, "direct_entity_profile")
+        self.assertEqual(found.window_days, 14)
+        self.assertEqual(cache_context["candidate_config"]["disease_course_window_days"], 14)
+        self.assertEqual(cache_context["direct_entity_topk_cache_window_days"], 14)
+        self.assertEqual(user_cache_context["window_days"], 14)
+        self.assertEqual(
+            user_cache_context["window_days_source"],
+            "direct_entity_topk_cache_window_constant",
+        )
         self.assertIn(
             str(root / "user_cache" / "files" / "patient" / "20" / "201231885555"),
             str(output_paths["detail"]),
@@ -2134,6 +2143,80 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         self.assertTrue(result["user_cache_hit"])
         self.assertEqual(result["candidate_count"], 1)
         self.assertEqual(result["candidates"][0]["patient_id"], "20113562")
+
+    def test_load_cached_topk_candidate_result_uses_stale_cache_and_enqueues_refresh_job(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = _write_user_cache_config(
+                root,
+                refresh_candidate_base_date_on_hit=False,
+                topk_candidates_stale_valid_days=14,
+            )
+            output_dir = root / "similar_user_candidates"
+            scored_key = build_scored_key(
+                build_path_key(
+                    config_path,
+                    base_date="2024-01-31",
+                    query_family="training_order_source_window",
+                ),
+                150,
+            )
+            cache_context = build_candidate_cache_context(
+                config_path,
+                scored_key=scored_key,
+                disease_course_window_days=14,
+            )
+            user_cache_context = build_topk_candidate_user_cache_context(
+                config_path,
+                patient_id="30010096",
+                base_date="2024-01-31",
+                query_family="training_order_source_window",
+                scored_key=scored_key,
+                candidate_cache_context=cache_context,
+            )
+            save_similar_user_candidates_result(
+                _candidate_result(
+                    cache_context=cache_context,
+                    user_cache_context=user_cache_context,
+                ),
+                output_dir,
+            )
+
+            cached = load_cached_topk_candidate_result(
+                user_cache_context,
+                candidates_dir=output_dir,
+                request_base_date="2024-02-10",
+                config_path=config_path,
+            )
+            cached_again = load_cached_topk_candidate_result(
+                user_cache_context,
+                candidates_dir=output_dir,
+                request_base_date="2024-02-10",
+                config_path=config_path,
+            )
+            store = UserCacheIndexStore(root / "user_cache" / "cache_index.sqlite")
+            jobs = store.claim_pending_refresh_jobs(limit=10)
+
+        self.assertIsNotNone(cached)
+        assert cached is not None
+        self.assertTrue(cached["user_cache_hit"])
+        self.assertTrue(cached["user_cache_stale_hit"])
+        self.assertEqual(cached["user_cache_lookup_state"], "stale")
+        self.assertEqual(cached["user_cache_context"]["cached_base_date"], "2024-01-31")
+        self.assertEqual(cached["user_cache_context"]["stale_valid_days"], 14)
+        self.assertIsNotNone(cached.get("user_cache_refresh_job_id"))
+        self.assertEqual(
+            cached.get("user_cache_refresh_job_key"),
+            cached_again.get("user_cache_refresh_job_key") if cached_again else None,
+        )
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0].status, "running")
+        self.assertEqual(jobs[0].cache_type, "topk_candidates")
+        self.assertEqual(jobs[0].source_type, "patient")
+        self.assertEqual(jobs[0].source_id, "30010096")
+        self.assertEqual(jobs[0].request_base_date, "2024-02-10")
 
     def test_topk_user_cache_hit_refreshes_candidate_base_date(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2529,7 +2612,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
     @patch("scripts.run_similar_user_pipeline.score_and_save_configured_pattern_paths")
     @patch("scripts.run_similar_user_pipeline.run_configured_pattern_path_flows")
-    def test_run_similar_user_pipeline_rejects_empty_path_result(
+    def test_run_similar_user_pipeline_returns_empty_candidates_for_empty_path_result(
         self,
         mock_run_path_flows: Mock,
         mock_score_and_save: Mock,
@@ -2554,20 +2637,31 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         ]
         mock_build_candidates.side_effect = FileNotFoundError("missing scored paths")
         mock_score_and_save.side_effect = FileNotFoundError("missing raw paths")
+        mock_save_candidates.return_value = {
+            "detail": Path("data/similar_user_candidates/30/30010096.detail.json"),
+            "summary": Path("data/similar_user_candidates/30/30010096.summary.json"),
+        }
 
-        with self.assertRaisesRegex(
-            EmptyPathResultsError,
-            "path_result does not contain paths: patient_id=30010096, base_date=2022-01-17, window_days=14.",
-        ):
-            run_similar_user_pipeline(
-                "30010096",
-                base_date="2022-01-17",
-                config_path="config/settings.yaml",
-            )
+        result = run_similar_user_pipeline(
+            "30010096",
+            base_date="2022-01-17",
+            config_path="config/settings.yaml",
+        )
 
         mock_build_candidates.assert_called_once()
         mock_score_and_save.assert_called_once()
-        mock_save_candidates.assert_not_called()
+        self.assertEqual(result["candidate_result"]["candidate_count"], 0)
+        self.assertEqual(result["candidate_result"]["candidates"], [])
+        self.assertEqual(result["candidate_result"]["patient_id"], "30010096")
+        self.assertEqual(result["candidate_result"]["source_id"], "30010096")
+        self.assertEqual(result["candidate_result"]["source_parameter"], "patient_id")
+        self.assertIn("candidate_key", result["candidate_result"]["cache_context"])
+        self.assertEqual(
+            result["candidate_result"]["user_cache_context"]["patient_id"],
+            "30010096",
+        )
+        self.assertFalse(result["candidate_result"]["user_cache_hit"])
+        mock_save_candidates.assert_called_once_with(result["candidate_result"])
 
     @patch("scripts.run_similar_user_pipeline.save_similar_user_candidates_result")
     @patch("scripts.run_similar_user_pipeline.build_similar_user_candidates")
@@ -2699,6 +2793,7 @@ class SimilarUserCandidatesTest(unittest.TestCase):
         mock_score_and_save.assert_called_once_with(
             "30010096",
             config_path="config/settings.yaml",
+            output_dir=Path("data/scored_pattern_paths"),
             base_date="2022-01-17",
             query_family="training_order_source_window",
         )
@@ -3016,6 +3111,9 @@ def _write_user_cache_config(
     root: Path,
     *,
     refresh_candidate_base_date_on_hit: bool = True,
+    patient_scored_paths_valid_days: int | None = None,
+    direct_scored_paths_valid_days: int | None = None,
+    topk_candidates_stale_valid_days: int | None = None,
 ) -> Path:
     config_path = root / "settings.yaml"
     config_path.write_text(
@@ -3045,7 +3143,25 @@ def _write_user_cache_config(
                 "user_cache:",
                 "  enabled: true",
                 f'  sqlite_path: "{root / "user_cache" / "cache_index.sqlite"}"',
+                *(
+                    [f"  patient_scored_paths_valid_days: {patient_scored_paths_valid_days}"]
+                    if patient_scored_paths_valid_days is not None
+                    else []
+                ),
+                *(
+                    [f"  direct_scored_paths_valid_days: {direct_scored_paths_valid_days}"]
+                    if direct_scored_paths_valid_days is not None
+                    else []
+                ),
                 "  topk_candidates_valid_days: 7",
+                *(
+                    [
+                        "  topk_candidates_stale_valid_days: "
+                        f"{topk_candidates_stale_valid_days}"
+                    ]
+                    if topk_candidates_stale_valid_days is not None
+                    else []
+                ),
                 "  refresh_candidate_base_date_on_hit: "
                 f"{str(refresh_candidate_base_date_on_hit).lower()}",
             ]

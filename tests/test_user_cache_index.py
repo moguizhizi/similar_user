@@ -29,10 +29,18 @@ class UserCacheSettingsTest(unittest.TestCase):
                         "  patient_scored_paths_valid_days: 10",
                         "  direct_scored_paths_valid_days: 60",
                         "  topk_candidates_valid_days: 5",
+                        "  topk_candidates_stale_valid_days: 9",
                         "  refresh_candidate_base_date_on_hit: false",
                         "  raw_path_build_workers: 2",
                         "  raw_path_build_max_retries: 4",
                         "  raw_path_build_retry_sleep_seconds: 1.5",
+                        "  refresh_job_completed_retention_days: 8",
+                        "  refresh_job_failed_retention_days: 31",
+                        "  refresh_jobs_background_enabled: true",
+                        "  refresh_jobs_run_hour: 0",
+                        "  refresh_jobs_run_minute: 30",
+                        "  refresh_jobs_batch_limit: 500",
+                        f'  refresh_jobs_lock_path: "{Path(temp_dir) / "refresh_jobs.lock"}"',
                         "  cleanup_max_age_days: 21",
                         "  keep_latest_per_source: 3",
                         "  cleanup_background_enabled: true",
@@ -54,10 +62,21 @@ class UserCacheSettingsTest(unittest.TestCase):
             self.assertEqual(settings.patient_scored_paths_valid_days, 10)
             self.assertEqual(settings.direct_scored_paths_valid_days, 60)
             self.assertEqual(settings.topk_candidates_valid_days, 5)
+            self.assertEqual(settings.topk_candidates_stale_valid_days, 9)
             self.assertFalse(settings.refresh_candidate_base_date_on_hit)
             self.assertEqual(settings.raw_path_build_workers, 2)
             self.assertEqual(settings.raw_path_build_max_retries, 4)
             self.assertEqual(settings.raw_path_build_retry_sleep_seconds, 1.5)
+            self.assertEqual(settings.refresh_job_completed_retention_days, 8)
+            self.assertEqual(settings.refresh_job_failed_retention_days, 31)
+            self.assertTrue(settings.refresh_jobs_background_enabled)
+            self.assertEqual(settings.refresh_jobs_run_hour, 0)
+            self.assertEqual(settings.refresh_jobs_run_minute, 30)
+            self.assertEqual(settings.refresh_jobs_batch_limit, 500)
+            self.assertEqual(
+                settings.refresh_jobs_lock_path,
+                str(Path(temp_dir) / "refresh_jobs.lock"),
+            )
             self.assertEqual(settings.cleanup_max_age_days, 21)
             self.assertEqual(settings.keep_latest_per_source, 3)
             self.assertEqual(settings.keep_latest_per_user, 3)
@@ -86,6 +105,47 @@ class UserCacheSettingsTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "topk_candidates_valid_days"):
                 load_user_cache_settings(config_path)
 
+    def test_load_user_cache_settings_defaults_stale_topk_days_to_fresh_days(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "user_cache:",
+                        "  topk_candidates_valid_days: 6",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            settings = load_user_cache_settings(config_path)
+
+        self.assertEqual(settings.topk_candidates_valid_days, 6)
+        self.assertEqual(settings.topk_candidates_stale_valid_days, 6)
+
+    def test_load_user_cache_settings_rejects_stale_topk_less_than_fresh(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "user_cache:",
+                        "  topk_candidates_valid_days: 7",
+                        "  topk_candidates_stale_valid_days: 6",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "topk_candidates_stale_valid_days",
+            ):
+                load_user_cache_settings(config_path)
 
 class UserCacheIndexStoreTest(unittest.TestCase):
     def test_find_latest_valid_source_entry_migrates_legacy_index_schema(self) -> None:
@@ -253,6 +313,103 @@ class UserCacheIndexStoreTest(unittest.TestCase):
 
             self.assertIsNone(found)
 
+    def test_find_latest_reusable_source_entry_returns_fresh_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.upsert_entry(_entry(cached_base_date="2026-05-25", valid_days=7))
+
+            found = store.find_latest_reusable_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-05-29",
+                stale_valid_days=14,
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.state, "fresh")
+        self.assertEqual(found.entry.cached_base_date, "2026-05-25")
+
+    def test_find_latest_reusable_source_entry_returns_stale_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.upsert_entry(_entry(cached_base_date="2026-05-25", valid_days=7))
+
+            found = store.find_latest_reusable_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                stale_valid_days=14,
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.state, "stale")
+        self.assertEqual(found.entry.cached_base_date, "2026-05-25")
+
+    def test_find_latest_reusable_source_entry_ignores_expired_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.upsert_entry(_entry(cached_base_date="2026-05-20", valid_days=7))
+
+            found = store.find_latest_reusable_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                stale_valid_days=14,
+            )
+
+        self.assertIsNone(found)
+
+    def test_find_latest_reusable_source_entry_prefers_newer_fresh_over_stale(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.upsert_entry(
+                _entry(
+                    cached_base_date="2026-05-25",
+                    valid_days=7,
+                    data_path="data/user_cache/30012345/stale.json",
+                )
+            )
+            store.upsert_entry(
+                _entry(
+                    cached_base_date="2026-06-03",
+                    valid_days=7,
+                    data_path="data/user_cache/30012345/fresh.json",
+                )
+            )
+
+            found = store.find_latest_reusable_source_entry(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                stale_valid_days=14,
+            )
+
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.state, "fresh")
+        self.assertEqual(found.entry.cached_base_date, "2026-06-03")
+        self.assertEqual(found.entry.data_path, "data/user_cache/30012345/fresh.json")
+
     def test_find_latest_valid_source_entry_requires_matching_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
@@ -287,6 +444,153 @@ class UserCacheIndexStoreTest(unittest.TestCase):
                     request_base_date="2026-05-26",
                 )
             )
+
+    def test_enqueue_refresh_job_deduplicates_by_job_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+
+            first = store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            second = store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            with store._connect() as connection:
+                count = connection.execute(
+                    "SELECT COUNT(*) FROM user_cache_refresh_jobs"
+                ).fetchone()[0]
+
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(first.job_key, second.job_key)
+        self.assertEqual(count, 1)
+        self.assertEqual(second.status, "pending")
+
+    def test_claim_pending_refresh_jobs_marks_jobs_running(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+
+            claimed = store.claim_pending_refresh_jobs(limit=1)
+            second_claim = store.claim_pending_refresh_jobs(limit=1)
+
+        self.assertEqual(len(claimed), 1)
+        self.assertEqual(claimed[0].status, "running")
+        self.assertEqual(claimed[0].attempt_count, 1)
+        self.assertIsNotNone(claimed[0].claimed_at)
+        self.assertEqual(second_claim, [])
+
+    def test_mark_refresh_job_completed_updates_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            claimed = store.claim_pending_refresh_jobs(limit=1)
+            assert claimed[0].id is not None
+
+            completed = store.mark_refresh_job_completed(claimed[0].id)
+
+        self.assertIsNotNone(completed)
+        assert completed is not None
+        self.assertEqual(completed.status, "completed")
+        self.assertIsNone(completed.error_message)
+        self.assertIsNotNone(completed.completed_at)
+
+    def test_mark_refresh_job_failed_updates_status_and_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            claimed = store.claim_pending_refresh_jobs(limit=1)
+            assert claimed[0].id is not None
+
+            failed = store.mark_refresh_job_failed(
+                claimed[0].id,
+                error_message="refresh failed",
+            )
+
+        self.assertIsNotNone(failed)
+        assert failed is not None
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(failed.error_message, "refresh failed")
+
+    def test_cleanup_refresh_jobs_removes_old_completed_and_failed_jobs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = UserCacheIndexStore(Path(temp_dir) / "cache.sqlite")
+            first = store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30012345",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            second = store.enqueue_refresh_job(
+                cache_type="topk_candidates",
+                source_type="patient",
+                source_id="30067890",
+                query_family="training_order_dual_window",
+                window_days=90,
+                config_hash="abc12345",
+                request_base_date="2026-06-04",
+                reason="stale_topk_hit",
+            )
+            assert first.id is not None
+            assert second.id is not None
+            store.mark_refresh_job_completed(first.id)
+            store.mark_refresh_job_failed(second.id, error_message="refresh failed")
+
+            deleted = store.cleanup_refresh_jobs(
+                completed_before="9999-12-31T23:59:59+00:00",
+                failed_before="9999-12-31T23:59:59+00:00",
+            )
+            with store._connect() as connection:
+                count = connection.execute(
+                    "SELECT COUNT(*) FROM user_cache_refresh_jobs"
+                ).fetchone()[0]
+
+        self.assertEqual(deleted, 2)
+        self.assertEqual(count, 0)
 
 
 def _entry(
