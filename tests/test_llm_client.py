@@ -71,6 +71,7 @@ class LlmClientTest(unittest.TestCase):
                 ],
                 "temperature": 0.2,
                 "stream": False,
+                "chat_template_kwargs": {"enable_thinking": False},
             },
             timeout=60,
         )
